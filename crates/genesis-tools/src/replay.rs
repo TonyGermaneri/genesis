@@ -798,6 +798,144 @@ impl ReplayPlayer {
     pub fn into_replay(self) -> Replay {
         self.replay
     }
+
+    /// Steps forward one frame regardless of timing.
+    ///
+    /// Returns the frame if available, or `None` if at end.
+    pub fn step_forward(&mut self) -> Option<&InputFrame> {
+        if self.index < self.replay.frames.len() {
+            let frame = &self.replay.frames[self.index];
+            self.index += 1;
+            self.accumulated_time_us = 0;
+            Some(frame)
+        } else {
+            None
+        }
+    }
+
+    /// Steps backward one frame.
+    ///
+    /// Returns the frame if available, or `None` if at start.
+    pub fn step_backward(&mut self) -> Option<&InputFrame> {
+        if self.index > 0 {
+            self.index -= 1;
+            self.accumulated_time_us = 0;
+            self.replay.frames.get(self.index)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the progress as a fraction (0.0 to 1.0).
+    #[must_use]
+    pub fn progress(&self) -> f64 {
+        if self.replay.frames.is_empty() {
+            return 0.0;
+        }
+        self.index as f64 / self.replay.frames.len() as f64
+    }
+
+    /// Returns the elapsed time in microseconds (based on frame deltas up to current position).
+    #[must_use]
+    pub fn elapsed_time_us(&self) -> u64 {
+        self.replay.frames[..self.index]
+            .iter()
+            .map(|f| f.delta_time_us)
+            .sum()
+    }
+
+    /// Returns the remaining time in microseconds.
+    #[must_use]
+    pub fn remaining_time_us(&self) -> u64 {
+        self.replay.frames[self.index..]
+            .iter()
+            .map(|f| f.delta_time_us)
+            .sum()
+    }
+}
+
+/// Playback session that handles verification during playback.
+#[derive(Debug)]
+pub struct VerifiedPlaybackSession {
+    /// The player
+    player: ReplayPlayer,
+    /// Verification errors encountered
+    verification_errors: Vec<ReplayError>,
+    /// Whether to stop on first verification error
+    stop_on_error: bool,
+}
+
+impl VerifiedPlaybackSession {
+    /// Creates a new verified playback session.
+    #[must_use]
+    pub fn new(replay: Replay) -> Self {
+        Self {
+            player: ReplayPlayer::new(replay),
+            verification_errors: Vec::new(),
+            stop_on_error: false,
+        }
+    }
+
+    /// Sets whether to stop on first verification error.
+    pub fn set_stop_on_error(&mut self, stop: bool) {
+        self.stop_on_error = stop;
+    }
+
+    /// Returns the underlying player.
+    #[must_use]
+    pub fn player(&self) -> &ReplayPlayer {
+        &self.player
+    }
+
+    /// Returns a mutable reference to the underlying player.
+    pub fn player_mut(&mut self) -> &mut ReplayPlayer {
+        &mut self.player
+    }
+
+    /// Advances to next frame and verifies state if hash is available.
+    ///
+    /// Returns `Ok(Some(frame))` if frame was retrieved and verification passed,
+    /// `Ok(None)` if playback is complete,
+    /// `Err` if verification failed and `stop_on_error` is true.
+    pub fn next_frame_verified(
+        &mut self,
+        world_hash: u64,
+        entity_hash: u64,
+    ) -> Result<Option<&InputFrame>, &ReplayError> {
+        // Get current frame index before advancing
+        let current_frame = self.player.index as u64;
+
+        // Verify state at current position if hash exists
+        if let Err(e) = self
+            .player
+            .verify_state(current_frame, world_hash, entity_hash)
+        {
+            self.verification_errors.push(e);
+            if self.stop_on_error {
+                return Err(self.verification_errors.last().expect("just pushed"));
+            }
+        }
+
+        Ok(self.player.next_frame())
+    }
+
+    /// Returns all verification errors encountered.
+    #[must_use]
+    pub fn verification_errors(&self) -> &[ReplayError] {
+        &self.verification_errors
+    }
+
+    /// Returns whether playback had any verification errors.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.verification_errors.is_empty()
+    }
+
+    /// Consumes the session and returns the results.
+    #[must_use]
+    pub fn finish(self) -> (Replay, Vec<ReplayError>) {
+        (self.player.into_replay(), self.verification_errors)
+    }
 }
 
 #[cfg(test)]
@@ -1126,5 +1264,279 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("100"));
         assert!(msg.contains("Determinism"));
+    }
+
+    #[test]
+    fn test_record_1000_frames_playback_identical() {
+        // ACCEPTANCE CRITERIA: Record 1000 frames, play back identically
+        let config = RecordingConfig {
+            hash_interval: 100, // Hash every 100 frames
+            capture_mouse: true,
+            capture_timing: false, // Use fixed timing for determinism
+            max_frames: 0,
+        };
+
+        let mut recorder = ReplayRecorder::with_config(config);
+        recorder.set_seed(42);
+        recorder.set_metadata("1000 Frame Test", "Acceptance criteria test");
+        recorder.start();
+
+        // Define a deterministic sequence of inputs
+        let input_sequence = [
+            Input::MoveRight,
+            Input::MoveRight,
+            Input::Jump,
+            Input::MoveLeft,
+            Input::Primary,
+            Input::MoveUp,
+            Input::MoveDown,
+            Input::Secondary,
+            Input::Inventory,
+            Input::Map,
+        ];
+
+        // Record 1000 frames with varying inputs
+        for i in 0..1000u64 {
+            // Add inputs based on frame number for variety
+            let input_idx = (i % input_sequence.len() as u64) as usize;
+            recorder.record_input_action(input_sequence[input_idx]);
+
+            // Add mouse movement on some frames
+            if i % 3 == 0 {
+                recorder.record_mouse(MouseInput {
+                    x: (i as f32) % 1920.0,
+                    y: ((i * 2) as f32) % 1080.0,
+                    button: if i % 7 == 0 {
+                        Some(MouseButton::Left)
+                    } else {
+                        None
+                    },
+                    pressed: i % 7 == 0,
+                    scroll_delta: if i % 11 == 0 { 1.0 } else { 0.0 },
+                });
+            }
+
+            // Record deterministic state hash
+            let world_hash = i.wrapping_mul(0x517cc1b727220a95);
+            let entity_hash = i.wrapping_mul(0x2545f4914f6cdd1d);
+            recorder.record_state_hash(world_hash, entity_hash);
+
+            recorder.end_frame();
+        }
+
+        let replay = recorder.finish();
+
+        // Verify recording
+        assert_eq!(replay.frames.len(), 1000);
+        assert_eq!(replay.metadata.frame_count, 1000);
+        assert_eq!(replay.seed, 42);
+        assert_eq!(replay.state_hashes.len(), 10); // 0, 100, 200, ... 900
+
+        // Test save/load roundtrip
+        let mut buffer = Vec::new();
+        replay.save(&mut buffer).expect("save failed");
+
+        let loaded = Replay::load(Cursor::new(&buffer)).expect("load failed");
+        assert_eq!(loaded.frames.len(), 1000);
+        assert_eq!(loaded.seed, 42);
+
+        // Play back and verify EVERY frame matches exactly
+        let mut player = ReplayPlayer::new(loaded);
+        assert_eq!(player.frame_count(), 1000);
+        assert_eq!(player.seed(), 42);
+
+        for i in 0..1000u64 {
+            let frame = player.next_frame();
+            assert!(frame.is_some(), "Frame {i} should exist");
+            let frame = frame.expect("frame exists");
+
+            // Verify frame number
+            assert_eq!(frame.frame, i, "Frame number mismatch at {i}");
+
+            // Verify input matches
+            let input_idx = (i % input_sequence.len() as u64) as usize;
+            assert_eq!(
+                frame.inputs.len(),
+                1,
+                "Should have exactly 1 input at frame {i}"
+            );
+            assert_eq!(
+                frame.inputs[0], input_sequence[input_idx],
+                "Input mismatch at frame {i}"
+            );
+
+            // Verify mouse on frames that had it
+            if i % 3 == 0 {
+                assert!(frame.mouse.is_some(), "Mouse should exist at frame {i}");
+                let mouse = frame.mouse.as_ref().expect("mouse exists");
+                assert!(
+                    (mouse.x - (i as f32) % 1920.0).abs() < 0.001,
+                    "Mouse X mismatch at frame {i}"
+                );
+            }
+        }
+
+        assert!(player.is_complete());
+        assert!(player.next_frame().is_none());
+    }
+
+    #[test]
+    fn test_player_step_forward_backward() {
+        let mut replay = Replay::new();
+        for i in 0..5 {
+            replay.frames.push(InputFrame {
+                frame: i,
+                inputs: vec![],
+                mouse: None,
+                delta_time_us: 16667,
+            });
+        }
+
+        let mut player = ReplayPlayer::new(replay);
+
+        // Step forward
+        assert_eq!(player.step_forward().map(|f| f.frame), Some(0));
+        assert_eq!(player.step_forward().map(|f| f.frame), Some(1));
+        assert_eq!(player.current_index(), 2);
+
+        // Step backward
+        assert_eq!(player.step_backward().map(|f| f.frame), Some(1));
+        assert_eq!(player.current_index(), 1);
+        assert_eq!(player.step_backward().map(|f| f.frame), Some(0));
+        assert_eq!(player.current_index(), 0);
+
+        // Can't step backward at start
+        assert!(player.step_backward().is_none());
+        assert_eq!(player.current_index(), 0);
+    }
+
+    #[test]
+    fn test_player_progress_and_time() {
+        let mut replay = Replay::new();
+        for i in 0..4 {
+            replay.frames.push(InputFrame {
+                frame: i,
+                inputs: vec![],
+                mouse: None,
+                delta_time_us: 10000, // 10ms each
+            });
+        }
+
+        let mut player = ReplayPlayer::new(replay);
+        assert!((player.progress() - 0.0).abs() < 0.001);
+        assert_eq!(player.elapsed_time_us(), 0);
+        assert_eq!(player.remaining_time_us(), 40000);
+
+        player.seek(2);
+        assert!((player.progress() - 0.5).abs() < 0.001);
+        assert_eq!(player.elapsed_time_us(), 20000);
+        assert_eq!(player.remaining_time_us(), 20000);
+
+        player.seek_end();
+        assert!((player.progress() - 1.0).abs() < 0.001);
+        assert_eq!(player.elapsed_time_us(), 40000);
+        assert_eq!(player.remaining_time_us(), 0);
+    }
+
+    #[test]
+    fn test_verified_playback_session() {
+        let mut replay = Replay::new();
+        replay.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::Jump],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay.frames.push(InputFrame {
+            frame: 1,
+            inputs: vec![Input::MoveRight],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay.state_hashes.push(StateHash::new(0, 100, 200));
+
+        let mut session = VerifiedPlaybackSession::new(replay);
+
+        // First frame with correct hash
+        let result = session.next_frame_verified(100, 200);
+        assert!(result.is_ok());
+        assert!(result.expect("ok").is_some());
+
+        // Second frame (no hash to verify)
+        let result = session.next_frame_verified(999, 999);
+        assert!(result.is_ok());
+
+        assert!(!session.has_errors());
+    }
+
+    #[test]
+    fn test_verified_playback_session_error() {
+        let mut replay = Replay::new();
+        replay.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay.state_hashes.push(StateHash::new(0, 100, 200));
+
+        let mut session = VerifiedPlaybackSession::new(replay);
+        session.set_stop_on_error(false);
+
+        // Wrong hash - should record error but continue
+        let _ = session.next_frame_verified(999, 999);
+        assert!(session.has_errors());
+        assert_eq!(session.verification_errors().len(), 1);
+    }
+
+    #[test]
+    fn test_timed_playback() {
+        let mut replay = Replay::new();
+        replay.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::Jump],
+            mouse: None,
+            delta_time_us: 10000, // 10ms
+        });
+        replay.frames.push(InputFrame {
+            frame: 1,
+            inputs: vec![Input::MoveRight],
+            mouse: None,
+            delta_time_us: 10000, // 10ms
+        });
+
+        let mut player = ReplayPlayer::new(replay);
+
+        // Not enough time elapsed - should return None
+        assert!(player.next_frame_timed(5000).is_none());
+
+        // Now enough time - should return frame 0
+        let frame = player.next_frame_timed(6000);
+        assert!(frame.is_some());
+        assert_eq!(frame.map(|f| f.frame), Some(0));
+
+        // Need more time for frame 1
+        assert!(player.next_frame_timed(5000).is_none());
+        let frame = player.next_frame_timed(10000);
+        assert!(frame.is_some());
+        assert_eq!(frame.map(|f| f.frame), Some(1));
+    }
+
+    #[test]
+    fn test_playback_speed() {
+        let mut replay = Replay::new();
+        replay.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 10000, // 10ms
+        });
+
+        let mut player = ReplayPlayer::new(replay);
+        player.set_speed(2.0); // 2x speed
+
+        // At 2x speed, 5000us of real time = 10000us of replay time
+        let frame = player.next_frame_timed(5000);
+        assert!(frame.is_some());
     }
 }
