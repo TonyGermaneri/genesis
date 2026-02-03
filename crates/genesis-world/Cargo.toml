@@ -1,0 +1,29 @@
+[package]
+name = "genesis-world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "World management: chunks, streaming, persistence"
+
+[dependencies]
+genesis-common = { path = "../genesis-common" }
+genesis-kernel = { path = "../genesis-kernel" }
+
+serde = { workspace = true }
+bincode = { workspace = true }
+bytemuck = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+lz4_flex = { workspace = true }
+noise = { workspace = true }
+fastrand = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3.10"
+
+[lints]
+workspace = true

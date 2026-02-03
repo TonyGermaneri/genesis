@@ -1,0 +1,43 @@
+# Project Genesis - Rust Formatting Configuration
+# Enforced by CI and agent validation loops
+# Note: Only stable features enabled for compatibility with stable Rust
+
+edition = "2021"
+
+# Line width
+max_width = 100
+use_small_heuristics = "Default"
+
+# Imports (stable options only)
+reorder_imports = true
+reorder_modules = true
+
+# Formatting
+newline_style = "Unix"
+hard_tabs = false
+tab_spaces = 4
+
+# Functions
+fn_params_layout = "Tall"
+
+# Match
+match_block_trailing_comma = true
+
+# Unstable features (enable when using nightly)
+# unstable_features = true
+# imports_granularity = "Module"
+# group_imports = "StdExternalCrate"
+# normalize_comments = true
+# wrap_comments = true
+# comment_width = 80
+# indent_style = "Block"
+# fn_single_line = false
+# struct_lit_single_line = true
+# enum_discrim_align_threshold = 20
+# match_arm_blocks = true
+# force_multiline_blocks = false
+# format_macro_matchers = true
+# format_macro_bodies = true
+# format_strings = false
+# doc_comment_code_block_width = 80
+# format_code_in_doc_comments = true

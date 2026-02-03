@@ -1,0 +1,51 @@
+// For format details, see https://aka.ms/devcontainer.json.
+{
+    "name": "Project Genesis",
+    "image": "mcr.microsoft.com/devcontainers/rust:1-1-bullseye",
+    
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {},
+        "ghcr.io/devcontainers/features/git:1": {}
+    },
+    
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates",
+                "vadimcn.vscode-lldb",
+                "usernamehw.errorlens"
+            ],
+            "settings": {
+                "rust-analyzer.check.command": "clippy",
+                "rust-analyzer.check.extraArgs": ["--", "-D", "warnings"],
+                "editor.formatOnSave": true,
+                "[rust]": {
+                    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+                }
+            }
+        }
+    },
+    
+    "postCreateCommand": "cargo fetch && cargo build",
+    
+    "remoteUser": "vscode",
+    
+    // GPU passthrough for wgpu (requires host configuration)
+    "runArgs": [
+        "--gpus", "all"
+    ],
+    
+    // Environment
+    "containerEnv": {
+        "RUST_LOG": "info",
+        "WGPU_BACKEND": "vulkan"
+    },
+    
+    // Forward ports for potential future web preview
+    "forwardPorts": [8080],
+    
+    // Install additional tools
+    "onCreateCommand": "rustup component add clippy rustfmt && cargo install just cargo-watch"
+}

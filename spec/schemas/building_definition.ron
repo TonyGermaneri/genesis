@@ -1,0 +1,192 @@
+// Building Definition Schema v1.0.0
+// Defines placeable buildings/structures
+
+BuildingDefinition(
+    version: "1.0.0",
+    
+    // Building structure
+    structure: (
+        id: (
+            type: "u32",
+            description: "Unique building identifier",
+        ),
+        name: (
+            type: "string",
+            description: "Display name",
+        ),
+        description: (
+            type: "string",
+            description: "Building description",
+        ),
+        category: (
+            type: "string",
+            description: "Building category",
+            examples: ["storage", "production", "power", "defense", "decoration", "infrastructure"],
+        ),
+        
+        // Dimensions
+        width: (
+            type: "u32",
+            description: "Width in cells/pixels",
+        ),
+        height: (
+            type: "u32",
+            description: "Height in cells/pixels",
+        ),
+        footprint: (
+            type: "[[bool]]",
+            description: "Which cells are occupied (for non-rectangular buildings)",
+        ),
+        
+        // Construction
+        components: (
+            type: "[Component]",
+            description: "Required components to build",
+            item_structure: (
+                item_id: "u32",
+                quantity: "u32",
+            ),
+        ),
+        build_time_ticks: (
+            type: "u32",
+            description: "Time to construct",
+        ),
+        skill_required: (
+            type: "u32",
+            description: "Construction skill required",
+        ),
+        
+        // Placement rules
+        placement: (
+            terrain_types: "[u16]",      // Allowed terrain materials
+            requires_foundation: "bool",
+            water_allowed: "bool",
+            min_clearance: "u32",        // Minimum distance to other buildings
+        ),
+        
+        // Properties
+        properties: (
+            blocks_movement: "bool",
+            blocks_projectiles: "bool",
+            destructible: "bool",
+            health: "i32",
+            repair_materials: "[Component]",
+        ),
+        
+        // Effects on world
+        effects: (
+            // Power system
+            power_generation: "i32",     // Watts generated (positive)
+            power_consumption: "i32",    // Watts consumed (positive)
+            power_storage: "i32",        // Watt-hours capacity
+            
+            // Storage
+            storage_capacity: "u32",     // Item slots
+            storage_filter: "[u32]",     // Allowed item types (empty = all)
+            
+            // Production
+            production_recipes: "[u32]", // Recipes this building enables
+            production_speed: "f32",     // Multiplier (1.0 = normal)
+            
+            // Defense
+            turret_slots: "u32",
+            armor_rating: "i32",
+            
+            // Environment
+            light_radius: "u32",
+            heat_output: "i32",
+            
+            // NPC interaction
+            shop_enabled: "bool",
+            shop_inventory_size: "u32",
+            attracts_npcs: "bool",
+        ),
+        
+        // Degradation
+        degradation: (
+            enabled: "bool",
+            rate_per_day: "f32",         // Percentage per game day
+            weather_multiplier: "f32",   // Extra degradation in bad weather
+            repair_threshold: "f32",     // Auto-repair below this %
+        ),
+        
+        // Visuals (references to asset system)
+        visuals: (
+            sprite_sheet: "string",
+            animation_idle: "string",
+            animation_active: "string",
+            damage_stages: "u32",        // Visual damage levels
+        ),
+        
+        // Mod support
+        mod_id: (
+            type: "Option<string>",
+            description: "Mod that added this building",
+        ),
+    ),
+    
+    // Example buildings
+    examples: [
+        (
+            id: 1,
+            name: "Storage Crate",
+            category: "storage",
+            width: 32,
+            height: 32,
+            components: [
+                (item_id: 108, quantity: 4), // Wood planks
+            ],
+            build_time_ticks: 180,
+            skill_required: 0,
+            effects: (
+                storage_capacity: 20,
+                storage_filter: [],
+            ),
+            degradation: (
+                enabled: true,
+                rate_per_day: 0.1,
+            ),
+        ),
+        (
+            id: 2,
+            name: "Solar Panel",
+            category: "power",
+            width: 64,
+            height: 32,
+            components: [
+                (item_id: 102, quantity: 10), // Electronics
+                (item_id: 109, quantity: 4),  // Glass
+                (item_id: 103, quantity: 8),  // Refined metal
+            ],
+            build_time_ticks: 600,
+            skill_required: 15,
+            effects: (
+                power_generation: 100, // 100W during day
+            ),
+            degradation: (
+                enabled: true,
+                rate_per_day: 0.05,
+                weather_multiplier: 2.0,
+            ),
+        ),
+        (
+            id: 3,
+            name: "Electronics Workbench",
+            category: "production",
+            width: 96,
+            height: 64,
+            components: [
+                (item_id: 102, quantity: 20),
+                (item_id: 103, quantity: 15),
+                (item_id: 110, quantity: 5), // Workstation frame
+            ],
+            build_time_ticks: 1200,
+            skill_required: 20,
+            effects: (
+                power_consumption: 50,
+                production_recipes: [2, 10, 11, 12], // Unlocks these recipes
+                production_speed: 1.5,
+            ),
+        ),
+    ],
+)

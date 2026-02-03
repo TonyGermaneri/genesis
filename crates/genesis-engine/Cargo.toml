@@ -1,0 +1,37 @@
+[package]
+name = "genesis-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Main engine binary for Project Genesis"
+
+[[bin]]
+name = "genesis"
+path = "src/main.rs"
+
+[dependencies]
+genesis-common = { path = "../genesis-common" }
+genesis-kernel = { path = "../genesis-kernel" }
+genesis-gameplay = { path = "../genesis-gameplay" }
+genesis-world = { path = "../genesis-world" }
+
+wgpu = { workspace = true }
+winit = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+bytemuck = { workspace = true }
+pollster = { workspace = true }
+
+# UI library (per UI RULE - use existing libraries)
+egui = { workspace = true }
+egui-wgpu = { workspace = true }
+egui-winit = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true

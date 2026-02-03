@@ -1,0 +1,82 @@
+// Chunk Header Schema v1.0.0
+// Header for serialized chunk files
+
+ChunkHeader(
+    version: "1.0.0",
+    
+    // File format
+    magic_bytes: [0x47, 0x4E, 0x43, 0x48], // "GNCH"
+    
+    // Header structure
+    structure: (
+        magic: (
+            type: "[u8; 4]",
+            offset: 0,
+            description: "Magic bytes for format identification",
+        ),
+        version_major: (
+            type: "u16",
+            offset: 4,
+            description: "Schema major version",
+        ),
+        version_minor: (
+            type: "u16",
+            offset: 6,
+            description: "Schema minor version",
+        ),
+        version_patch: (
+            type: "u16",
+            offset: 8,
+            description: "Schema patch version",
+        ),
+        chunk_x: (
+            type: "i32",
+            offset: 10,
+            description: "Chunk X coordinate",
+        ),
+        chunk_y: (
+            type: "i32",
+            offset: 14,
+            description: "Chunk Y coordinate",
+        ),
+        chunk_size: (
+            type: "u32",
+            offset: 18,
+            description: "Chunk size in pixels (width = height)",
+        ),
+        compression: (
+            type: "u8",
+            offset: 22,
+            description: "Compression type (0=none, 1=lz4, 2=zstd)",
+        ),
+        layer: (
+            type: "u8",
+            offset: 23,
+            description: "World layer (0=overworld, 1+=interiors)",
+        ),
+        timestamp: (
+            type: "u64",
+            offset: 24,
+            description: "Last modification timestamp (unix millis)",
+        ),
+        checksum: (
+            type: "u32",
+            offset: 32,
+            description: "CRC32 checksum of cell data",
+        ),
+        reserved: (
+            type: "[u8; 28]",
+            offset: 36,
+            description: "Reserved for future use",
+        ),
+    ),
+    
+    // Total header size: 64 bytes (cache-line aligned)
+    header_size: 64,
+    
+    // Compression settings
+    compression_options: (
+        lz4_level: 4,
+        zstd_level: 3,
+    ),
+)

@@ -1,0 +1,106 @@
+// Event Bus Schema v1.0.0
+// Inter-system communication protocol
+
+EventBus(
+    version: "1.0.0",
+    
+    // Bus configuration
+    config: (
+        default_capacity: 1024,
+        high_priority_capacity: 256,
+        max_payload_size: 256,
+    ),
+    
+    // Event categories
+    categories: [
+        (
+            name: "entity",
+            id: 0,
+            events: [
+                (name: "spawned", id: 0),
+                (name: "destroyed", id: 1),
+                (name: "damaged", id: 2),
+                (name: "healed", id: 3),
+                (name: "moved", id: 4),
+                (name: "state_changed", id: 5),
+            ],
+        ),
+        (
+            name: "inventory",
+            id: 1,
+            events: [
+                (name: "item_added", id: 0),
+                (name: "item_removed", id: 1),
+                (name: "item_used", id: 2),
+                (name: "item_equipped", id: 3),
+                (name: "item_dropped", id: 4),
+            ],
+        ),
+        (
+            name: "crafting",
+            id: 2,
+            events: [
+                (name: "craft_started", id: 0),
+                (name: "craft_completed", id: 1),
+                (name: "craft_failed", id: 2),
+                (name: "building_placed", id: 3),
+                (name: "building_destroyed", id: 4),
+            ],
+        ),
+        (
+            name: "economy",
+            id: 3,
+            events: [
+                (name: "transaction", id: 0),
+                (name: "price_changed", id: 1),
+            ],
+        ),
+        (
+            name: "faction",
+            id: 4,
+            events: [
+                (name: "reputation_changed", id: 0),
+                (name: "faction_war_started", id: 1),
+                (name: "faction_peace", id: 2),
+            ],
+        ),
+        (
+            name: "world",
+            id: 5,
+            events: [
+                (name: "chunk_loaded", id: 0),
+                (name: "chunk_unloaded", id: 1),
+                (name: "cell_changed", id: 2),
+                (name: "weather_changed", id: 3),
+                (name: "time_changed", id: 4),
+            ],
+        ),
+        (
+            name: "input",
+            id: 6,
+            events: [
+                (name: "key_pressed", id: 0),
+                (name: "key_released", id: 1),
+                (name: "mouse_clicked", id: 2),
+                (name: "mouse_moved", id: 3),
+            ],
+        ),
+        (
+            name: "mod",
+            id: 7,
+            events: [
+                (name: "custom", id: 0), // Payload contains mod event data
+            ],
+        ),
+    ],
+    
+    // Event structure
+    event_structure: (
+        category: "u8",
+        event_type: "u8",
+        timestamp: "u64",
+        source_entity: "u64", // EntityId, 0 = system
+        payload_length: "u16",
+        payload: "[u8; N]", // Variable length, max 256
+    ),
+)

@@ -1,0 +1,136 @@
+// Crafting Recipe Schema v1.0.0
+// Defines item crafting recipes
+
+CraftingRecipe(
+    version: "1.0.0",
+    
+    // Recipe structure
+    structure: (
+        id: (
+            type: "u32",
+            description: "Unique recipe identifier",
+        ),
+        name: (
+            type: "string",
+            description: "Display name",
+        ),
+        description: (
+            type: "string",
+            description: "Recipe description",
+        ),
+        category: (
+            type: "string",
+            description: "Recipe category for UI grouping",
+            examples: ["weapons", "armor", "tools", "consumables", "materials", "building_components"],
+        ),
+        
+        // Requirements
+        ingredients: (
+            type: "[Ingredient]",
+            description: "Required ingredients (consumed)",
+            item_structure: (
+                item_id: "u32",
+                quantity: "u32",
+            ),
+        ),
+        tools: (
+            type: "[u32]",
+            description: "Required tools (not consumed)",
+        ),
+        workstation: (
+            type: "Option<u32>",
+            description: "Required workstation building ID (None = handcraft)",
+        ),
+        skill_required: (
+            type: "u32",
+            description: "Minimum skill level required",
+        ),
+        skill_type: (
+            type: "string",
+            description: "Skill category",
+            examples: ["crafting", "smithing", "electronics", "chemistry"],
+        ),
+        
+        // Output
+        output: (
+            type: "Output",
+            description: "What the recipe produces",
+            structure: (
+                item_id: "u32",
+                quantity: "u32",
+                quality_variance: "f32", // 0.0-1.0, affects output quality
+            ),
+        ),
+        byproducts: (
+            type: "[Output]",
+            description: "Optional secondary outputs",
+        ),
+        
+        // Timing
+        craft_time_ticks: (
+            type: "u32",
+            description: "Time to craft in game ticks (60 ticks = 1 second)",
+        ),
+        
+        // Progression
+        skill_gain: (
+            type: "u32",
+            description: "Skill XP gained on successful craft",
+        ),
+        unlock_requirements: (
+            type: "[UnlockRequirement]",
+            description: "Requirements to learn this recipe",
+        ),
+        
+        // Mod support
+        mod_id: (
+            type: "Option<string>",
+            description: "Mod that added this recipe (None = core)",
+        ),
+    ),
+    
+    // Example recipes
+    examples: [
+        (
+            id: 1,
+            name: "Basic Repair Kit",
+            category: "tools",
+            ingredients: [
+                (item_id: 100, quantity: 2), // Scrap metal
+                (item_id: 101, quantity: 1), // Cloth
+            ],
+            tools: [200], // Basic toolkit
+            workstation: None,
+            skill_required: 0,
+            skill_type: "crafting",
+            output: (item_id: 300, quantity: 1, quality_variance: 0.2),
+            byproducts: [],
+            craft_time_ticks: 300, // 5 seconds
+            skill_gain: 10,
+            unlock_requirements: [],
+        ),
+        (
+            id: 2,
+            name: "Vehicle Fuel Cell",
+            category: "vehicle_parts",
+            ingredients: [
+                (item_id: 102, quantity: 5), // Electronics
+                (item_id: 103, quantity: 3), // Refined metal
+                (item_id: 104, quantity: 1), // Power core
+            ],
+            tools: [201, 202], // Electronics kit, Welder
+            workstation: Some(400), // Electronics workbench
+            skill_required: 25,
+            skill_type: "electronics",
+            output: (item_id: 500, quantity: 1, quality_variance: 0.1),
+            byproducts: [
+                (item_id: 100, quantity: 1, quality_variance: 0.0), // Scrap
+            ],
+            craft_time_ticks: 1800, // 30 seconds
+            skill_gain: 50,
+            unlock_requirements: [
+                (type: "skill", skill: "electronics", level: 20),
+            ],
+        ),
+    ],
+)

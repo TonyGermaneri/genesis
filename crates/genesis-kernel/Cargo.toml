@@ -1,0 +1,22 @@
+[package]
+name = "genesis-kernel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "GPU compute kernel for pixel-cell simulation"
+
+[dependencies]
+genesis-common = { path = "../genesis-common" }
+
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

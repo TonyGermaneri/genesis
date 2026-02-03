@@ -1,0 +1,69 @@
+// Module Graph Schema v1.0.0
+// Defines module/mod loading and dependencies
+
+ModuleGraph(
+    version: "1.0.0",
+    
+    // Module manifest structure
+    manifest: (
+        // Required fields
+        id: "string",           // Unique mod identifier (e.g., "core.crafting")
+        name: "string",         // Display name
+        version: "semver",      // Semantic version
+        
+        // Optional fields
+        description: "string",
+        authors: "[string]",
+        license: "string",
+        homepage: "string",
+        
+        // Dependencies
+        dependencies: [{
+            id: "string",
+            version_req: "string", // Semver requirement (e.g., "^1.0")
+            optional: "bool",
+        }],
+        
+        // Incompatibilities
+        conflicts: ["string"],  // Mod IDs that conflict
+        
+        // Capabilities requested
+        capabilities: ["string"], // See capability list below
+    ),
+    
+    // Available capabilities
+    capabilities: [
+        // Content capabilities
+        "recipes",      // Add/modify crafting recipes
+        "items",        // Add item definitions
+        "entities",     // Add entity templates
+        "materials",    // Add cell materials
+        "buildings",    // Add building definitions
+        "factions",     // Add faction definitions
+        
+        // System capabilities
+        "events",       // Subscribe to event bus
+        "commands",     // Register console commands
+        "keybinds",     // Register keybindings
+        
+        // Advanced capabilities (require approval)
+        "gpu_shaders",  // Custom GPU shaders
+        "world_gen",    // Custom world generation
+    ],
+    
+    // Module load order
+    load_order: [
+        "core.*",       // Engine core modules first
+        "official.*",   // Official content modules
+        "*",            // User mods (alphabetical)
+    ],
+    
+    // Module file structure
+    file_structure: (
+        root: "{mod_id}/",
+        manifest: "mod.ron",
+        assets: "assets/",
+        data: "data/",
+        scripts: "scripts/", // Future Lua/Rhai support
+    ),
+)

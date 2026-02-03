@@ -1,0 +1,68 @@
+// Cell Format Schema v1.0.0
+// Each pixel in the world is a simulated cell
+
+CellFormat(
+    version: "1.0.0",
+    
+    // Cell structure (8 bytes, GPU-aligned)
+    structure: (
+        material: (
+            type: "u16",
+            offset: 0,
+            description: "Material type ID (0 = air/void)",
+        ),
+        flags: (
+            type: "u8",
+            offset: 2,
+            description: "Cell state flags",
+            bits: {
+                0: "solid",      // Blocks movement
+                1: "liquid",     // Flows
+                2: "burning",    // On fire
+                3: "electric",   // Electrified
+                4: "updated",    // Modified this frame
+                5: "reserved1",
+                6: "reserved2",
+                7: "reserved3",
+            },
+        ),
+        temperature: (
+            type: "u8",
+            offset: 3,
+            description: "Temperature (0-255 mapped to -50°C to 200°C)",
+        ),
+        velocity_x: (
+            type: "i8",
+            offset: 4,
+            description: "X velocity component",
+        ),
+        velocity_y: (
+            type: "i8",
+            offset: 5,
+            description: "Y velocity component",
+        ),
+        data: (
+            type: "u16",
+            offset: 6,
+            description: "Material-specific data",
+        ),
+    ),
+    
+    // Common materials (reserved IDs 0-999)
+    builtin_materials: [
+        (id: 0, name: "air", density: 0, solid: false),
+        (id: 1, name: "water", density: 1000, solid: false),
+        (id: 2, name: "sand", density: 1600, solid: false),
+        (id: 3, name: "grass", density: 1200, solid: true),
+        (id: 4, name: "dirt", density: 1500, solid: true),
+        (id: 5, name: "stone", density: 2600, solid: true),
+        (id: 6, name: "snow", density: 300, solid: false),
+        (id: 7, name: "metal", density: 7800, solid: true),
+        (id: 8, name: "wood", density: 600, solid: true),
+        (id: 9, name: "glass", density: 2500, solid: true),
+        (id: 10, name: "concrete", density: 2400, solid: true),
+    ],
+    
+    // Mod materials start at ID 1000
+    mod_material_start: 1000,
+)

@@ -1,0 +1,44 @@
+# Project Genesis - Clippy Configuration
+# All warnings treated as errors in CI
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 25
+
+# Too many arguments threshold
+too-many-arguments-threshold = 7
+
+# Type complexity threshold
+type-complexity-threshold = 250
+
+# Trivial copy size limit (bytes)
+trivial-copy-size-limit = 16
+
+# Pass by value size limit (bytes)
+pass-by-value-size-limit = 256
+
+# Vec box size threshold
+vec-box-size-threshold = 4096
+
+# Literal representation threshold
+literal-representation-threshold = 16384
+
+# Single char binding names allowed
+allowed-idents-below-min-chars = ["i", "j", "k", "x", "y", "z", "w", "id", "dt"]
+
+# Allowed wildcard imports (for prelude patterns)
+allowed-wildcard-imports = ["crate::prelude"]
+
+# Documentation
+missing-docs-in-crate-items = true
+
+# Large error threshold
+large-error-threshold = 128
+
+# Enum variant size threshold
+enum-variant-size-threshold = 200
+
+# Future size threshold
+future-size-threshold = 16384
+
+# Stack size threshold for infinite recursion check
+stack-size-threshold = 512000
