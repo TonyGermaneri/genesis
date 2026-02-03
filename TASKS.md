@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-03
-> Sprint: Day 1 — Bootstrap
+> Sprint: Iteration 3 — Playable Prototype
 
 ## Legend
 
@@ -12,111 +12,102 @@
 
 ---
 
-## Day 1 Objectives
+## Completed — Iteration 1 & 2
 
-### Orchestrator Tasks
+### Kernel Agent
+| ID | Task | Status |
+|----|------|--------|
+| K-1 | Cell simulation shader | 🟢 |
+| K-2 | Double-buffered cell storage | 🟢 |
+| K-3 | Intent buffer upload | 🟢 |
+| K-4 | Event buffer readback | 🟢 |
+| K-5 | Material property LUT | 🟢 |
+| K-6 | GPU validation layer | 🟢 |
+| K-7 | Benchmark compute dispatch | 🟢 |
+| K-8 | Compute+render integration | 🟢 |
+| K-9 | Cell rendering pipeline | 🟢 |
+| K-10 | Multi-chunk management | 🟢 |
+| K-11 | Edge cell sharing | 🟢 |
 
-| ID | Task | Status | Assignee |
-|----|------|--------|----------|
-| O-1 | Create workspace structure | 🟢 | Orchestrator |
-| O-2 | Define contracts and schemas | 🟢 | Orchestrator |
-| O-3 | Set up build tooling (just) | 🟢 | Orchestrator |
-| O-4 | Create Nix flake | 🟢 | Orchestrator |
-| O-5 | Write agent prompts | 🟢 | Orchestrator |
-| O-6 | First commit | 🟡 | Orchestrator |
+### Gameplay Agent
+| ID | Task | Status |
+|----|------|--------|
+| G-1 | Entity storage (arena) | 🟢 |
+| G-2 | Inventory with stacking | 🟢 |
+| G-3 | Crafting recipe execution | 🟢 |
+| G-4 | Building placement | 🟢 |
+| G-5 | Economy: wallet/prices | 🟢 |
+| G-6 | Faction reputation | 🟢 |
+| G-7 | Needs system | 🟢 |
+| G-10 | Player controller | 🟢 |
+| G-11 | Input handling | 🟢 |
+| G-12 | World interaction (dig/place) | 🟢 |
 
----
+### Tools Agent
+| ID | Task | Status |
+|----|------|--------|
+| T-1 | Replay recording | 🟢 |
+| T-2 | Replay playback | 🟢 |
+| T-3 | Determinism verification | 🟢 |
+| T-4 | Chunk viewer (egui) | 🟢 |
+| T-5 | Cell inspector probe | 🟢 |
+| T-6 | Performance HUD | 🟢 |
+| T-7 | Event log viewer | 🟢 |
+| T-8 | Test harness | 🟢 |
+| T-9 | Screenshot tests | 🟢 |
+| T-10 | Memory profiler | 🟢 |
+| T-11 | Hot reload | 🟢 |
 
-## Agent Assignments
-
-### Kernel Agent (Branch: `kernel/main`)
-
-**Scope**: GPU compute pipeline, cell simulation, buffer management
-
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| K-1 | Implement cell simulation shader | ⚪ | P0 |
-| K-2 | Create double-buffered cell storage | ⚪ | P0 |
-| K-3 | Implement intent buffer upload | ⚪ | P1 |
-| K-4 | Implement event buffer readback | ⚪ | P1 |
-| K-5 | Add material property LUT | ⚪ | P1 |
-| K-6 | GPU validation layer integration | ⚪ | P2 |
-| K-7 | Benchmark compute dispatch | ⚪ | P2 |
-
-**Acceptance Criteria**:
-- Compute shader compiles and dispatches
-- Cell state persists across frames
-- Intent → cell modification works
-- All tests pass
-
----
-
-### Gameplay Agent (Branch: `gameplay/main`)
-
-**Scope**: Entity system, inventory, crafting, economy, factions
-
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| G-1 | Entity storage (arena allocator) | ⚪ | P0 |
-| G-2 | Inventory system with stacking | ⚪ | P0 |
-| G-3 | Crafting recipe execution | ⚪ | P0 |
-| G-4 | Building placement system | ⚪ | P0 |
-| G-5 | Economy: wallet and prices | ⚪ | P1 |
-| G-6 | Faction reputation tracking | ⚪ | P1 |
-| G-7 | Needs system (hunger/thirst) | ⚪ | P1 |
-| G-8 | Vehicle entity type | ⚪ | P2 |
-| G-9 | NPC traffic simulation | ⚪ | P2 |
-
-**Acceptance Criteria**:
-- Entity CRUD operations work
-- Inventory add/remove/transfer work
-- Crafting consumes ingredients, produces output
-- Buildings modify world via intents
-- All tests pass
+### Infra Agent
+| ID | Task | Status |
+|----|------|--------|
+| I-1 | GitHub Actions workflow | 🟢 |
+| I-2 | Clippy + rustfmt in CI | 🟢 |
+| I-3 | Test runner in CI | 🟢 |
+| I-4 | Nix build in CI | 🟢 |
+| I-5 | Release artifact packaging | 🟢 |
+| I-6 | Mod package format | 🟢 |
+| I-7 | Cross-platform builds | 🟢 |
 
 ---
 
-### Tools Agent (Branch: `tools/main`)
+## Iteration 3 — Active
 
-**Scope**: Development tools, replay system, inspectors
-
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| T-1 | Replay recording | ⚪ | P0 |
-| T-2 | Replay playback | ⚪ | P0 |
-| T-3 | Determinism verification | ⚪ | P1 |
-| T-4 | Chunk viewer (egui) | ⚪ | P1 |
-| T-5 | Cell inspector probe | ⚪ | P1 |
-| T-6 | Performance HUD | ⚪ | P2 |
-| T-7 | Event log viewer | ⚪ | P2 |
-
-**Acceptance Criteria**:
-- Record 1000 frames, play back identically
-- Inspector shows cell properties
-- Perf HUD shows FPS, frame time
-- All tests pass
-
----
-
-### Infra Agent (Branch: `infra/main`)
-
-**Scope**: CI/CD, toolchains, mod packaging
+### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| I-1 | GitHub Actions workflow | 🟢 | P0 |
-| I-2 | Clippy + rustfmt in CI | 🟢 | P0 |
-| I-3 | Test runner in CI | 🟢 | P0 |
-| I-4 | Nix build in CI | 🟢 | P1 |
-| I-5 | Release artifact packaging | 🟢 | P2 |
-| I-6 | Mod package format | 🟢 | P2 |
-| I-7 | Cross-platform builds | 🟢 | P1 |
+| K-12 | Chunk streaming system | ⚪ | P0 |
+| K-13 | Collision query system | ⚪ | P0 |
+| K-14 | Biome material assignment | ⚪ | P1 |
+| K-15 | GPU readback optimization | ⚪ | P1 |
 
-**Acceptance Criteria**:
-- CI runs on every PR
-- CI fails on lint/test failures
-- CI passes currently
-- All tests pass
+### Gameplay Agent (Branch: `gameplay-agent`)
+
+| ID | Task | Status | Priority |
+|----|------|--------|----------|
+| G-13 | Player physics integration | ⚪ | P0 |
+| G-14 | Inventory UI model | ⚪ | P0 |
+| G-15 | Crafting UI model | ⚪ | P0 |
+| G-16 | Save/load game state | ⚪ | P1 |
+
+### Tools Agent (Branch: `tools-agent`)
+
+| ID | Task | Status | Priority |
+|----|------|--------|----------|
+| T-12 | Inventory UI renderer | ⚪ | P0 |
+| T-13 | Crafting UI renderer | ⚪ | P0 |
+| T-14 | Minimap renderer | ⚪ | P1 |
+| T-15 | Debug console | ⚪ | P1 |
+
+### Infra Agent (Branch: `infra-agent`)
+
+| ID | Task | Status | Priority |
+|----|------|--------|----------|
+| I-8 | Performance regression CI | ⚪ | P0 |
+| I-9 | Documentation site (mdBook) | ⚪ | P1 |
+| I-10 | Build telemetry | ⚪ | P1 |
+| I-11 | Docker development image | ⚪ | P2 |
 
 ---
 
@@ -135,24 +126,26 @@ Before merging any agent branch:
 
 ## Milestones
 
-### Milestone 1: Bootstrap (Day 1)
+### Milestone 1: Bootstrap (Day 1) ✅
 - [x] Repo structure
 - [x] Contracts defined
 - [x] Build tooling
-- [ ] First commit (in progress)
+- [x] First commit
 
-### Milestone 2: Minimal Viable Kernel (Day 2-3)
-- [ ] Cell simulation working
-- [ ] Chunk load/save working
-- [ ] Basic rendering
+### Milestone 2: Minimal Viable Kernel ✅
+- [x] Cell simulation working
+- [x] Multi-chunk management
+- [x] Cell rendering pipeline
+- [x] Edge sharing between chunks
 
-### Milestone 3: Playable Prototype (Week 1)
-- [ ] Player movement
-- [ ] Basic crafting
+### Milestone 3: Playable Prototype (In Progress)
+- [ ] Player movement with physics
 - [ ] Inventory UI
-- [ ] One biome generated
+- [ ] Crafting UI
+- [ ] Biome generation
+- [ ] Save/Load system
 
-### Milestone 4: Core Loop (Week 2)
+### Milestone 4: Core Loop (Upcoming)
 - [ ] Combat system
 - [ ] NPC spawning
 - [ ] Economy active
