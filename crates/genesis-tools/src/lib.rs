@@ -20,6 +20,7 @@ pub mod inspector;
 pub mod perf;
 pub mod perf_hud;
 pub mod replay;
+pub mod screenshot;
 pub mod test_harness;
 
 /// Prelude for convenient imports
@@ -31,6 +32,7 @@ pub mod prelude {
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
     pub use crate::replay::*;
+    pub use crate::screenshot::*;
     pub use crate::test_harness::*;
 }
 
