@@ -45,6 +45,7 @@ pub mod cell;
 pub mod compute;
 pub mod event;
 pub mod intent;
+pub mod render;
 pub mod validation;
 
 /// Prelude for convenient imports
@@ -55,6 +56,7 @@ pub mod prelude {
     pub use crate::compute::*;
     pub use crate::event::*;
     pub use crate::intent::*;
+    pub use crate::render::*;
     pub use crate::validation::*;
 }
 
