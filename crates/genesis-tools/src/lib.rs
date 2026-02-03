@@ -32,22 +32,27 @@ mod tests {
     #[test]
     fn test_replay_record_playback() {
         let mut recorder = ReplayRecorder::new();
-        recorder.record_input(InputFrame {
-            frame: 0,
-            inputs: vec![Input::MoveRight],
-        });
-        recorder.record_input(InputFrame {
-            frame: 1,
-            inputs: vec![Input::Jump],
-        });
+        recorder.set_seed(42);
+        recorder.start();
+
+        recorder.record_input_action(Input::MoveRight);
+        recorder.end_frame();
+
+        recorder.record_input_action(Input::Jump);
+        recorder.end_frame();
 
         let replay = recorder.finish();
         assert_eq!(replay.frames.len(), 2);
+        assert_eq!(replay.seed, 42);
 
         let mut player = ReplayPlayer::new(replay);
         let frame0 = player.next_frame();
         assert!(frame0.is_some());
-        assert_eq!(frame0.as_ref().map(|f| f.frame), Some(0));
+        assert_eq!(frame0.map(|f| f.frame), Some(0));
+        assert_eq!(
+            frame0.map(|f| f.inputs.first().copied()),
+            Some(Some(Input::MoveRight))
+        );
     }
 
     #[test]
