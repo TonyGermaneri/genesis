@@ -44,6 +44,7 @@ pub mod buffer;
 pub mod cell;
 pub mod chunk;
 pub mod compute;
+pub mod edge;
 pub mod event;
 pub mod intent;
 pub mod render;
@@ -56,6 +57,7 @@ pub mod prelude {
     pub use crate::cell::*;
     pub use crate::chunk::*;
     pub use crate::compute::*;
+    pub use crate::edge::*;
     pub use crate::event::*;
     pub use crate::intent::*;
     pub use crate::render::*;
