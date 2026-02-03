@@ -1,6 +1,6 @@
 # Project Genesis — Task Board
 
-> Last Updated: 2026-02-03  
+> Last Updated: 2026-02-03
 > Sprint: Day 1 — Bootstrap
 
 ## Legend
