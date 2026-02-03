@@ -16,6 +16,7 @@ pub mod cell_inspector;
 pub mod chunk_viewer;
 pub mod inspector;
 pub mod perf;
+pub mod perf_hud;
 pub mod replay;
 
 /// Prelude for convenient imports
@@ -24,6 +25,7 @@ pub mod prelude {
     pub use crate::chunk_viewer::*;
     pub use crate::inspector::*;
     pub use crate::perf::*;
+    pub use crate::perf_hud::*;
     pub use crate::replay::*;
 }
 
