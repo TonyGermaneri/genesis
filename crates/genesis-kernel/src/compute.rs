@@ -143,54 +143,54 @@ fn simulate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let x = global_id.x;
     let y = global_id.y;
     let size = params.chunk_size;
-    
+
     // Bounds check
     if x >= size || y >= size {
         return;
     }
-    
+
     let idx = coord_to_idx(x, y, size);
     let cell = cells_in[idx];
-    
+
     let material = get_material(cell);
     let flags = get_flags(cell);
     let temp = get_temperature(cell);
     var vel_x = get_velocity_x(cell);
     var vel_y = get_velocity_y(cell);
     let data = get_data(cell);
-    
+
     // Air cells don't simulate
     if material == 0u {
         cells_out[idx] = cell;
         return;
     }
-    
+
     let density = get_density(material);
     let is_solid_cell = is_solid(flags);
     let is_liquid_cell = is_liquid(flags);
-    
+
     // Solid cells don't move (but can be modified by intents)
     if is_solid_cell {
         cells_out[idx] = cell;
         return;
     }
-    
+
     // Gravity simulation for non-solid cells
     let below = get_cell(i32(x), i32(y) + 1, size);
     let below_material = get_material(below);
     let below_flags = get_flags(below);
     let below_density = get_density(below_material);
-    
+
     // Check if we can fall down
     if below_material == 0u || (!is_solid(below_flags) && below_density < density) {
         // Swap with cell below - output this cell's position as the cell below
         // The cell below us will write itself here
         // For simplicity, we mark for swap by clearing this cell
         cells_out[idx] = pack_cell(0u, 0u, 20u, 0, 0, 0u);
-        
+
         // Apply gravity to velocity
         vel_y = min(vel_y + 1, 127);
-        
+
         // Write ourselves to position below (if in bounds)
         if in_bounds(i32(x), i32(y) + 1, size) {
             let below_idx = coord_to_idx(x, y + 1u, size);
@@ -198,20 +198,20 @@ fn simulate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
         return;
     }
-    
+
     // Liquid spreading simulation
     if is_liquid_cell {
         // Try to spread horizontally with some randomness based on frame and position
         let rand_seed = params.frame + x * 31u + y * 17u;
         let try_left_first = (rand_seed % 2u) == 0u;
-        
+
         let left = get_cell(i32(x) - 1, i32(y), size);
         let right = get_cell(i32(x) + 1, i32(y), size);
         let left_material = get_material(left);
         let right_material = get_material(right);
-        
+
         var moved = false;
-        
+
         if try_left_first {
             if left_material == 0u && in_bounds(i32(x) - 1, i32(y), size) {
                 cells_out[idx] = pack_cell(0u, 0u, 20u, 0, 0, 0u);
@@ -237,12 +237,12 @@ fn simulate(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 moved = true;
             }
         }
-        
+
         if moved {
             return;
         }
     }
-    
+
     // Cell didn't move, copy to output
     cells_out[idx] = pack_cell(material, flags & ~FLAG_UPDATED, temp, vel_x, vel_y, data);
 }
