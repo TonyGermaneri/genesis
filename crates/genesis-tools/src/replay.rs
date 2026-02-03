@@ -938,6 +938,378 @@ impl VerifiedPlaybackSession {
     }
 }
 
+// ============================================================================
+// Determinism Verification System (T-3)
+// ============================================================================
+
+/// Result of comparing two replays for determinism.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeterminismResult {
+    /// Both replays are identical
+    Identical,
+    /// Replays have different seeds
+    SeedMismatch {
+        /// Expected seed
+        expected: u32,
+        /// Actual seed
+        actual: u32,
+    },
+    /// Replays have different frame counts
+    FrameCountMismatch {
+        /// Expected frame count
+        expected: u64,
+        /// Actual frame count
+        actual: u64,
+    },
+    /// Input diverged at a specific frame
+    InputDiverged {
+        /// Frame where divergence occurred
+        frame: u64,
+        /// Expected inputs
+        expected_inputs: Vec<Input>,
+        /// Actual inputs
+        actual_inputs: Vec<Input>,
+    },
+    /// State hash diverged at a specific frame
+    StateDiverged {
+        /// Frame where divergence occurred
+        frame: u64,
+        /// Expected state hash
+        expected: StateHash,
+        /// Actual state hash
+        actual: StateHash,
+    },
+    /// Mouse input diverged at a specific frame
+    MouseDiverged {
+        /// Frame where divergence occurred
+        frame: u64,
+        /// Expected mouse state
+        expected: Option<MouseInput>,
+        /// Actual mouse state
+        actual: Option<MouseInput>,
+    },
+}
+
+impl std::fmt::Display for DeterminismResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Identical => write!(f, "Replays are identical"),
+            Self::SeedMismatch { expected, actual } => {
+                write!(f, "Seed mismatch: expected {expected}, got {actual}")
+            },
+            Self::FrameCountMismatch { expected, actual } => {
+                write!(f, "Frame count mismatch: expected {expected}, got {actual}")
+            },
+            Self::InputDiverged {
+                frame,
+                expected_inputs,
+                actual_inputs,
+            } => {
+                write!(
+                    f,
+                    "Input divergence at frame {frame}: expected {expected_inputs:?}, got {actual_inputs:?}"
+                )
+            },
+            Self::StateDiverged {
+                frame,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "State divergence at frame {frame}: world hash {:#x} vs {:#x}, entity hash {:#x} vs {:#x}",
+                    expected.world_hash, actual.world_hash, expected.entity_hash, actual.entity_hash
+                )
+            },
+            Self::MouseDiverged {
+                frame,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Mouse divergence at frame {frame}: expected {expected:?}, got {actual:?}"
+                )
+            },
+        }
+    }
+}
+
+/// Detailed divergence information for debugging.
+#[derive(Debug, Clone)]
+pub struct DivergenceReport {
+    /// The result type
+    pub result: DeterminismResult,
+    /// Frame number where first divergence occurred
+    pub frame: u64,
+    /// Additional context messages
+    pub context: Vec<String>,
+}
+
+impl DivergenceReport {
+    /// Creates a new divergence report.
+    #[must_use]
+    pub fn new(result: DeterminismResult, frame: u64) -> Self {
+        Self {
+            result,
+            frame,
+            context: Vec::new(),
+        }
+    }
+
+    /// Adds context information.
+    pub fn add_context(&mut self, msg: impl Into<String>) {
+        self.context.push(msg.into());
+    }
+
+    /// Creates a report with context.
+    #[must_use]
+    pub fn with_context(mut self, msg: impl Into<String>) -> Self {
+        self.add_context(msg);
+        self
+    }
+}
+
+/// Checker for verifying determinism between replays.
+#[derive(Debug, Default)]
+pub struct DeterminismChecker {
+    /// Whether to check mouse input
+    check_mouse: bool,
+    /// Whether to check timing
+    check_timing: bool,
+    /// Tolerance for timing differences in microseconds
+    timing_tolerance_us: u64,
+}
+
+impl DeterminismChecker {
+    /// Creates a new determinism checker with default settings.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            check_mouse: true,
+            check_timing: false,
+            timing_tolerance_us: 1000, // 1ms tolerance
+        }
+    }
+
+    /// Sets whether to check mouse input.
+    pub fn set_check_mouse(&mut self, check: bool) {
+        self.check_mouse = check;
+    }
+
+    /// Sets whether to check timing.
+    pub fn set_check_timing(&mut self, check: bool) {
+        self.check_timing = check;
+    }
+
+    /// Sets timing tolerance in microseconds.
+    pub fn set_timing_tolerance(&mut self, tolerance_us: u64) {
+        self.timing_tolerance_us = tolerance_us;
+    }
+
+    /// Compares two replays and returns the result.
+    ///
+    /// Returns `DeterminismResult::Identical` if replays match,
+    /// or a specific divergence type if they differ.
+    #[must_use]
+    pub fn compare_replays(&self, expected: &Replay, actual: &Replay) -> DeterminismResult {
+        // Check seeds match
+        if expected.seed != actual.seed {
+            return DeterminismResult::SeedMismatch {
+                expected: expected.seed,
+                actual: actual.seed,
+            };
+        }
+
+        // Check frame counts match
+        if expected.frames.len() != actual.frames.len() {
+            return DeterminismResult::FrameCountMismatch {
+                expected: expected.frames.len() as u64,
+                actual: actual.frames.len() as u64,
+            };
+        }
+
+        // Compare frame by frame
+        for (exp_frame, act_frame) in expected.frames.iter().zip(actual.frames.iter()) {
+            // Compare inputs
+            if exp_frame.inputs != act_frame.inputs {
+                return DeterminismResult::InputDiverged {
+                    frame: exp_frame.frame,
+                    expected_inputs: exp_frame.inputs.clone(),
+                    actual_inputs: act_frame.inputs.clone(),
+                };
+            }
+
+            // Compare mouse if enabled
+            if self.check_mouse && !Self::mouse_inputs_match(exp_frame.mouse, act_frame.mouse) {
+                return DeterminismResult::MouseDiverged {
+                    frame: exp_frame.frame,
+                    expected: exp_frame.mouse,
+                    actual: act_frame.mouse,
+                };
+            }
+        }
+
+        // Compare state hashes
+        if let Some(divergence) = Self::compare_state_hashes(expected, actual) {
+            return divergence;
+        }
+
+        DeterminismResult::Identical
+    }
+
+    /// Compares two replays and returns a detailed report.
+    ///
+    /// Returns `None` if replays are identical, or a detailed report if they differ.
+    #[must_use]
+    pub fn compare_replays_detailed(
+        &self,
+        expected: &Replay,
+        actual: &Replay,
+    ) -> Option<DivergenceReport> {
+        let result = self.compare_replays(expected, actual);
+
+        if result == DeterminismResult::Identical {
+            return None;
+        }
+
+        let frame = match &result {
+            DeterminismResult::Identical | DeterminismResult::SeedMismatch { .. } => 0,
+            DeterminismResult::FrameCountMismatch { .. } => {
+                expected.frames.len().min(actual.frames.len()) as u64
+            },
+            DeterminismResult::InputDiverged { frame, .. }
+            | DeterminismResult::StateDiverged { frame, .. }
+            | DeterminismResult::MouseDiverged { frame, .. } => *frame,
+        };
+
+        let mut report = DivergenceReport::new(result, frame);
+
+        // Add context
+        report.add_context(format!("Expected replay: {} frames", expected.frames.len()));
+        report.add_context(format!("Actual replay: {} frames", actual.frames.len()));
+        report.add_context(format!(
+            "Expected seed: {}, Actual seed: {}",
+            expected.seed, actual.seed
+        ));
+        report.add_context(format!(
+            "State hashes: {} expected, {} actual",
+            expected.state_hashes.len(),
+            actual.state_hashes.len()
+        ));
+
+        Some(report)
+    }
+
+    /// Compares mouse inputs with tolerance for floating point.
+    fn mouse_inputs_match(a: Option<MouseInput>, b: Option<MouseInput>) -> bool {
+        match (a, b) {
+            (None, None) => true,
+            (Some(_), None) | (None, Some(_)) => false,
+            (Some(ma), Some(mb)) => {
+                const EPSILON: f32 = 0.001;
+                (ma.x - mb.x).abs() < EPSILON
+                    && (ma.y - mb.y).abs() < EPSILON
+                    && ma.button == mb.button
+                    && ma.pressed == mb.pressed
+                    && (ma.scroll_delta - mb.scroll_delta).abs() < EPSILON
+            },
+        }
+    }
+
+    /// Compares state hashes between replays.
+    fn compare_state_hashes(expected: &Replay, actual: &Replay) -> Option<DeterminismResult> {
+        // Find common frames with hashes
+        for exp_hash in &expected.state_hashes {
+            if let Some(act_hash) = actual.find_hash_at(exp_hash.frame) {
+                if exp_hash.world_hash != act_hash.world_hash
+                    || exp_hash.entity_hash != act_hash.entity_hash
+                {
+                    return Some(DeterminismResult::StateDiverged {
+                        frame: exp_hash.frame,
+                        expected: *exp_hash,
+                        actual: *act_hash,
+                    });
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Runs a determinism test by recording two sessions and comparing.
+///
+/// This is the high-level API for verifying determinism.
+#[derive(Debug)]
+pub struct DeterminismTest {
+    /// The seed to use for both runs
+    seed: u32,
+    /// First replay (reference)
+    reference: Option<Replay>,
+    /// Second replay (test)
+    test: Option<Replay>,
+    /// The checker configuration
+    checker: DeterminismChecker,
+}
+
+impl DeterminismTest {
+    /// Creates a new determinism test with a seed.
+    #[must_use]
+    pub fn new(seed: u32) -> Self {
+        Self {
+            seed,
+            reference: None,
+            test: None,
+            checker: DeterminismChecker::new(),
+        }
+    }
+
+    /// Returns the seed for this test.
+    #[must_use]
+    pub fn seed(&self) -> u32 {
+        self.seed
+    }
+
+    /// Sets the reference replay.
+    pub fn set_reference(&mut self, replay: Replay) {
+        self.reference = Some(replay);
+    }
+
+    /// Sets the test replay.
+    pub fn set_test(&mut self, replay: Replay) {
+        self.test = Some(replay);
+    }
+
+    /// Returns the checker for configuration.
+    pub fn checker_mut(&mut self) -> &mut DeterminismChecker {
+        &mut self.checker
+    }
+
+    /// Runs the determinism comparison.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either replay is missing.
+    pub fn run(&self) -> Result<DeterminismResult, &'static str> {
+        let reference = self.reference.as_ref().ok_or("Reference replay not set")?;
+        let test = self.test.as_ref().ok_or("Test replay not set")?;
+
+        Ok(self.checker.compare_replays(reference, test))
+    }
+
+    /// Runs the determinism comparison with detailed report.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either replay is missing.
+    pub fn run_detailed(&self) -> Result<Option<DivergenceReport>, &'static str> {
+        let reference = self.reference.as_ref().ok_or("Reference replay not set")?;
+        let test = self.test.as_ref().ok_or("Test replay not set")?;
+
+        Ok(self.checker.compare_replays_detailed(reference, test))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1538,5 +1910,295 @@ mod tests {
         // At 2x speed, 5000us of real time = 10000us of replay time
         let frame = player.next_frame_timed(5000);
         assert!(frame.is_some());
+    }
+
+    // ========================================================================
+    // T-3: Determinism Verification Tests
+    // ========================================================================
+
+    #[test]
+    fn test_determinism_identical_replays() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::MoveRight],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay1.frames.push(InputFrame {
+            frame: 1,
+            inputs: vec![Input::Jump],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay1.state_hashes.push(StateHash::new(0, 100, 200));
+
+        let replay2 = replay1.clone();
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+        assert_eq!(result, DeterminismResult::Identical);
+    }
+
+    #[test]
+    fn test_determinism_seed_mismatch() {
+        let replay1 = Replay::with_seed(42);
+        let replay2 = Replay::with_seed(99);
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+
+        assert!(matches!(
+            result,
+            DeterminismResult::SeedMismatch {
+                expected: 42,
+                actual: 99
+            }
+        ));
+    }
+
+    #[test]
+    fn test_determinism_frame_count_mismatch() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay1.frames.push(InputFrame {
+            frame: 1,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+
+        assert!(matches!(
+            result,
+            DeterminismResult::FrameCountMismatch {
+                expected: 2,
+                actual: 1
+            }
+        ));
+    }
+
+    #[test]
+    fn test_determinism_input_divergence() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::MoveRight],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::MoveLeft],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+
+        match result {
+            DeterminismResult::InputDiverged {
+                frame,
+                expected_inputs,
+                actual_inputs,
+            } => {
+                assert_eq!(frame, 0);
+                assert_eq!(expected_inputs, vec![Input::MoveRight]);
+                assert_eq!(actual_inputs, vec![Input::MoveLeft]);
+            },
+            _ => panic!("Expected InputDiverged"),
+        }
+    }
+
+    #[test]
+    fn test_determinism_state_hash_divergence() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay1.state_hashes.push(StateHash::new(0, 100, 200));
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+        replay2.state_hashes.push(StateHash::new(0, 100, 201)); // Different entity hash
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+
+        match result {
+            DeterminismResult::StateDiverged {
+                frame,
+                expected,
+                actual,
+            } => {
+                assert_eq!(frame, 0);
+                assert_eq!(expected.entity_hash, 200);
+                assert_eq!(actual.entity_hash, 201);
+            },
+            _ => panic!("Expected StateDiverged"),
+        }
+    }
+
+    #[test]
+    fn test_determinism_mouse_divergence() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: Some(MouseInput {
+                x: 100.0,
+                y: 200.0,
+                button: Some(MouseButton::Left),
+                pressed: true,
+                scroll_delta: 0.0,
+            }),
+            delta_time_us: 16667,
+        });
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: Some(MouseInput {
+                x: 150.0, // Different position
+                y: 200.0,
+                button: Some(MouseButton::Left),
+                pressed: true,
+                scroll_delta: 0.0,
+            }),
+            delta_time_us: 16667,
+        });
+
+        let checker = DeterminismChecker::new();
+        let result = checker.compare_replays(&replay1, &replay2);
+
+        assert!(matches!(
+            result,
+            DeterminismResult::MouseDiverged { frame: 0, .. }
+        ));
+    }
+
+    #[test]
+    fn test_determinism_detailed_report() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::Jump],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::Primary],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let checker = DeterminismChecker::new();
+        let report = checker.compare_replays_detailed(&replay1, &replay2);
+
+        assert!(report.is_some());
+        let report = report.expect("report exists");
+        assert_eq!(report.frame, 0);
+        assert!(!report.context.is_empty());
+    }
+
+    #[test]
+    fn test_determinism_test_runner() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![Input::MoveRight],
+            mouse: None,
+            delta_time_us: 16667,
+        });
+
+        let replay2 = replay1.clone();
+
+        let mut test = DeterminismTest::new(42);
+        test.set_reference(replay1);
+        test.set_test(replay2);
+
+        let result = test.run();
+        assert!(result.is_ok());
+        assert_eq!(result.expect("ok"), DeterminismResult::Identical);
+    }
+
+    #[test]
+    fn test_determinism_result_display() {
+        let result = DeterminismResult::StateDiverged {
+            frame: 100,
+            expected: StateHash::new(100, 0xAABB, 0xCCDD),
+            actual: StateHash::new(100, 0xAABB, 0xEEFF),
+        };
+
+        let display = result.to_string();
+        assert!(display.contains("100"));
+        assert!(display.contains("State divergence"));
+    }
+
+    #[test]
+    fn test_determinism_ignore_mouse_when_disabled() {
+        let mut replay1 = Replay::with_seed(42);
+        replay1.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: Some(MouseInput {
+                x: 100.0,
+                y: 200.0,
+                button: None,
+                pressed: false,
+                scroll_delta: 0.0,
+            }),
+            delta_time_us: 16667,
+        });
+
+        let mut replay2 = Replay::with_seed(42);
+        replay2.frames.push(InputFrame {
+            frame: 0,
+            inputs: vec![],
+            mouse: Some(MouseInput {
+                x: 999.0, // Very different
+                y: 999.0,
+                button: None,
+                pressed: false,
+                scroll_delta: 0.0,
+            }),
+            delta_time_us: 16667,
+        });
+
+        let mut checker = DeterminismChecker::new();
+        checker.set_check_mouse(false);
+
+        let result = checker.compare_replays(&replay1, &replay2);
+        assert_eq!(result, DeterminismResult::Identical);
     }
 }
