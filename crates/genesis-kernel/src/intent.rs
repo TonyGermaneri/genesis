@@ -357,8 +357,11 @@ mod tests {
         assert_eq!(intent.x, 50);
         assert_eq!(intent.y, 75);
         assert_eq!(intent.action_type(), IntentAction::ApplyForce);
-        assert_eq!(intent.payload[0] as i8, -10);
-        assert_eq!(intent.payload[1] as i8, 20);
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            assert_eq!(intent.payload[0] as i8, -10);
+            assert_eq!(intent.payload[1] as i8, 20);
+        }
     }
 
     #[test]

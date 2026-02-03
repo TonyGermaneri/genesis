@@ -427,6 +427,6 @@ mod tests {
         let buffer_size = cell_count * std::mem::size_of::<Cell>();
 
         // 256 * 256 * 8 = 524288 bytes = 512 KB
-        assert_eq!(buffer_size, 524288);
+        assert_eq!(buffer_size, 524_288);
     }
 }
