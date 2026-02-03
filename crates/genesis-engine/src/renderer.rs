@@ -116,7 +116,8 @@ impl Renderer {
         // Create cell buffer with initial test data
         let chunk_size = DEFAULT_CHUNK_SIZE;
         let initial_cells = create_test_pattern(chunk_size as usize);
-        let cell_buffer = CellBuffer::with_cells(&device, &compute_pipeline, chunk_size, &initial_cells);
+        let cell_buffer =
+            CellBuffer::with_cells(&device, &compute_pipeline, chunk_size, &initial_cells);
 
         // Create render bind group
         let render_bind_group =
@@ -212,7 +213,8 @@ impl Renderer {
     /// Runs one simulation step on the GPU.
     fn step_simulation(&mut self) {
         // CellBuffer::step() handles params update, dispatch, and buffer swap internally
-        self.cell_buffer.step(&self.device, &self.queue, &self.compute_pipeline);
+        self.cell_buffer
+            .step(&self.device, &self.queue, &self.compute_pipeline);
 
         // Update render bind group to point to new current buffer
         self.render_bind_group = self

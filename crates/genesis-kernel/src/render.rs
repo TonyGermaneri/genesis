@@ -405,7 +405,11 @@ impl CellRenderPipeline {
 
     /// Creates a bind group for rendering.
     #[must_use]
-    pub fn create_bind_group(&self, device: &Device, cell_buffer: &wgpu::Buffer) -> wgpu::BindGroup {
+    pub fn create_bind_group(
+        &self,
+        device: &Device,
+        cell_buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Cell Render Bind Group"),
             layout: &self.bind_group_layout,
@@ -427,7 +431,11 @@ impl CellRenderPipeline {
     }
 
     /// Renders cells to the given render pass.
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, bind_group: &'a wgpu::BindGroup) {
+    pub fn render<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        bind_group: &'a wgpu::BindGroup,
+    ) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, bind_group, &[]);
         render_pass.draw(0..3, 0..1); // Fullscreen triangle
@@ -471,11 +479,11 @@ mod tests {
     fn test_default_colors() {
         let colors = create_default_colors();
         assert_eq!(colors.len(), 16);
-        
+
         // Air should be dark
         assert!(colors[0].r < 0.2);
         assert!(colors[0].g < 0.2);
-        
+
         // Water should be blue
         assert!(colors[1].b > colors[1].r);
     }

@@ -153,7 +153,7 @@ impl EdgeApplicator {
     pub fn apply(&self, cells: &mut [Cell], edge: &EdgeData) {
         // The edge came from the neighbor's side, apply to opposite side of our chunk
         let target_direction = edge.direction.opposite();
-        
+
         match target_direction {
             Direction::Bottom => self.apply_row(cells, 0, &edge.cells),
             Direction::Top => self.apply_row(cells, self.chunk_size - 1, &edge.cells),
@@ -234,14 +234,14 @@ impl EdgeSharingManager {
     ) {
         // Extract A's edge facing B
         let edge_from_a = self.extractor.extract(chunk_a_cells, direction, chunk_a_id);
-        
+
         // Extract B's edge facing A
         let opposite = direction.opposite();
         let edge_from_b = self.extractor.extract(chunk_b_cells, opposite, chunk_b_id);
-        
+
         // Apply B's edge to A's ghost region
         self.applicator.apply(chunk_a_cells, &edge_from_b);
-        
+
         // Apply A's edge to B's ghost region
         self.applicator.apply(chunk_b_cells, &edge_from_a);
     }
@@ -252,7 +252,7 @@ impl EdgeSharingManager {
 pub fn get_shared_direction(from: ChunkId, to: ChunkId) -> Option<Direction> {
     let dx = to.x - from.x;
     let dy = to.y - from.y;
-    
+
     match (dx, dy) {
         (0, -1) => Some(Direction::Bottom),
         (0, 1) => Some(Direction::Top),
@@ -284,7 +284,7 @@ mod tests {
         let chunk_id = ChunkId::new(0, 0);
 
         let edge = extractor.extract(&cells, Direction::Bottom, chunk_id);
-        
+
         assert_eq!(edge.cells.len(), 4);
         assert_eq!(edge.cells[0].material, 0);
         assert_eq!(edge.cells[1].material, 1);
@@ -300,7 +300,7 @@ mod tests {
         let chunk_id = ChunkId::new(0, 0);
 
         let edge = extractor.extract(&cells, Direction::Top, chunk_id);
-        
+
         assert_eq!(edge.cells.len(), 4);
         // Top row: indices 12, 13, 14, 15
         assert_eq!(edge.cells[0].material, 12);
@@ -317,7 +317,7 @@ mod tests {
         let chunk_id = ChunkId::new(0, 0);
 
         let edge = extractor.extract(&cells, Direction::Left, chunk_id);
-        
+
         assert_eq!(edge.cells.len(), 4);
         // Left column: indices 0, 4, 8, 12
         assert_eq!(edge.cells[0].material, 0);
@@ -334,7 +334,7 @@ mod tests {
         let chunk_id = ChunkId::new(0, 0);
 
         let edge = extractor.extract(&cells, Direction::Right, chunk_id);
-        
+
         assert_eq!(edge.cells.len(), 4);
         // Right column: indices 3, 7, 11, 15
         assert_eq!(edge.cells[0].material, 3);
@@ -348,14 +348,14 @@ mod tests {
         let size = 4;
         let mut cells = create_test_cells(size, 0);
         let applicator = EdgeApplicator::new(size);
-        
+
         // Create edge data as if from neighbor's TOP edge
         // Should be applied to our BOTTOM row
         let edge_cells: Vec<Cell> = (100..104).map(Cell::new).collect();
         let edge = EdgeData::new(edge_cells, Direction::Top, ChunkId::new(0, 1));
-        
+
         applicator.apply(&mut cells, &edge);
-        
+
         // Check bottom row was updated
         assert_eq!(cells[0].material, 100);
         assert_eq!(cells[1].material, 101);
@@ -367,36 +367,48 @@ mod tests {
     fn test_edge_sharing_manager() {
         let size = 4;
         let manager = EdgeSharingManager::new(size);
-        
+
         // Create two chunks: A at (0,0), B at (1,0) (B is to the right of A)
         let mut chunk_a = create_test_cells(size, 1);
         let mut chunk_b = create_test_cells(size, 2);
-        
+
         let id_a = ChunkId::new(0, 0);
         let id_b = ChunkId::new(1, 0);
-        
+
         // Share edges (B is to the RIGHT of A)
         manager.share_edges(&mut chunk_a, id_a, &mut chunk_b, id_b, Direction::Right);
-        
+
         // A's right edge should now have B's values (from B's left edge)
-        assert_eq!(chunk_a[3].material, 2);  // Right column of A
-        
+        assert_eq!(chunk_a[3].material, 2); // Right column of A
+
         // B's left edge should now have A's values (from A's right edge)
-        assert_eq!(chunk_b[0].material, 1);  // Left column of B
+        assert_eq!(chunk_b[0].material, 1); // Left column of B
     }
 
     #[test]
     fn test_get_shared_direction() {
         let center = ChunkId::new(0, 0);
-        
-        assert_eq!(get_shared_direction(center, ChunkId::new(1, 0)), Some(Direction::Right));
-        assert_eq!(get_shared_direction(center, ChunkId::new(-1, 0)), Some(Direction::Left));
-        assert_eq!(get_shared_direction(center, ChunkId::new(0, 1)), Some(Direction::Top));
-        assert_eq!(get_shared_direction(center, ChunkId::new(0, -1)), Some(Direction::Bottom));
-        
+
+        assert_eq!(
+            get_shared_direction(center, ChunkId::new(1, 0)),
+            Some(Direction::Right)
+        );
+        assert_eq!(
+            get_shared_direction(center, ChunkId::new(-1, 0)),
+            Some(Direction::Left)
+        );
+        assert_eq!(
+            get_shared_direction(center, ChunkId::new(0, 1)),
+            Some(Direction::Top)
+        );
+        assert_eq!(
+            get_shared_direction(center, ChunkId::new(0, -1)),
+            Some(Direction::Bottom)
+        );
+
         // Non-adjacent
         assert_eq!(get_shared_direction(center, ChunkId::new(2, 0)), None);
-        
+
         // Diagonal (not supported for edge sharing)
         assert_eq!(get_shared_direction(center, ChunkId::new(1, 1)), None);
     }

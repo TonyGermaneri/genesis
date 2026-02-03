@@ -97,7 +97,12 @@ pub struct ChunkState {
 
 impl ChunkState {
     /// Creates a new chunk state.
-    pub fn new(id: ChunkId, device: &Device, pipeline: &CellComputePipeline, chunk_size: u32) -> Self {
+    pub fn new(
+        id: ChunkId,
+        device: &Device,
+        pipeline: &CellComputePipeline,
+        chunk_size: u32,
+    ) -> Self {
         info!("Loading chunk {}", id);
         Self {
             id,
@@ -148,7 +153,12 @@ impl Direction {
     /// Returns all cardinal directions.
     #[must_use]
     pub const fn all() -> [Direction; 4] {
-        [Direction::Bottom, Direction::Top, Direction::Left, Direction::Right]
+        [
+            Direction::Bottom,
+            Direction::Top,
+            Direction::Left,
+            Direction::Right,
+        ]
     }
 }
 
@@ -192,7 +202,7 @@ impl ChunkManager {
     #[must_use]
     pub fn compute_active_chunks(&self) -> Vec<ChunkId> {
         let center = ChunkId::from_world_pos(self.camera_x, self.camera_y, self.chunk_size);
-        
+
         let mut active = Vec::with_capacity(9);
         for dy in -1..=1 {
             for dx in -1..=1 {
@@ -203,15 +213,11 @@ impl ChunkManager {
     }
 
     /// Ensures chunks are loaded and marks them for simulation.
-    pub fn prepare_simulation(
-        &mut self,
-        device: &Device,
-        pipeline: &CellComputePipeline,
-    ) {
+    pub fn prepare_simulation(&mut self, device: &Device, pipeline: &CellComputePipeline) {
         use std::collections::hash_map::Entry;
 
         let active_ids = self.compute_active_chunks();
-        
+
         // Mark current active set
         self.active_chunks.clear();
         for id in &active_ids {
@@ -224,10 +230,10 @@ impl ChunkManager {
                 Entry::Vacant(entry) => {
                     let state = ChunkState::new(id, device, pipeline, self.chunk_size);
                     entry.insert(state);
-                }
+                },
                 Entry::Occupied(mut entry) => {
                     entry.get_mut().mark_active();
-                }
+                },
             }
         }
 
@@ -384,7 +390,7 @@ mod tests {
     fn test_chunk_id_neighbors() {
         let id = ChunkId::new(0, 0);
         let neighbors = id.neighbors();
-        
+
         assert_eq!(neighbors.len(), 8);
         assert!(neighbors.contains(&ChunkId::new(-1, -1)));
         assert!(neighbors.contains(&ChunkId::new(0, -1)));
@@ -400,7 +406,7 @@ mod tests {
     fn test_chunk_manager_compute_active() {
         let manager = ChunkManager::new(256);
         let active = manager.compute_active_chunks();
-        
+
         assert_eq!(active.len(), 9);
         assert!(active.contains(&ChunkId::new(0, 0)));
         assert!(active.contains(&ChunkId::new(-1, -1)));
