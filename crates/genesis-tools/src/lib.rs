@@ -5,13 +5,14 @@
 //! This crate provides:
 //! - Replay/determinism harness
 //! - Chunk viewer (egui)
-//! - Cell inspector
+//! - Cell inspector probe
 //! - Performance HUD
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod cell_inspector;
 pub mod chunk_viewer;
 pub mod inspector;
 pub mod perf;
@@ -19,6 +20,7 @@ pub mod replay;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
     pub use crate::inspector::*;
     pub use crate::perf::*;
