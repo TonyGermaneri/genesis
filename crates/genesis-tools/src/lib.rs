@@ -7,6 +7,7 @@
 //! - Chunk viewer (egui)
 //! - Cell inspector probe
 //! - Performance HUD
+//! - Event log viewer
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
@@ -14,6 +15,7 @@
 
 pub mod cell_inspector;
 pub mod chunk_viewer;
+pub mod event_log;
 pub mod inspector;
 pub mod perf;
 pub mod perf_hud;
@@ -23,6 +25,7 @@ pub mod replay;
 pub mod prelude {
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
+    pub use crate::event_log::*;
     pub use crate::inspector::*;
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
