@@ -4,6 +4,9 @@
 //!
 //! This crate provides the CPU-side entity layer and all RPG systems:
 //! - Entities (player, NPCs, vehicles)
+//! - Player controller with movement and physics
+//! - Input handling system
+//! - World interaction (dig/place)
 //! - Inventory system
 //! - Item crafting system
 //! - Building crafting system
@@ -21,8 +24,11 @@ pub mod economy;
 pub mod entity;
 pub mod events;
 pub mod faction;
+pub mod input;
+pub mod interaction;
 pub mod inventory;
 pub mod needs;
+pub mod player;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -31,8 +37,11 @@ pub mod prelude {
     pub use crate::entity::*;
     pub use crate::events::*;
     pub use crate::faction::*;
+    pub use crate::input::*;
+    pub use crate::interaction::*;
     pub use crate::inventory::*;
     pub use crate::needs::*;
+    pub use crate::player::*;
 }
 
 pub use prelude::*;
