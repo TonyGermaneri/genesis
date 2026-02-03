@@ -16,5 +16,8 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 
+# UI for debug tools
+egui = { workspace = true }
+
 [lints]
 workspace = true
