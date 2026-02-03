@@ -1,62 +1,78 @@
 # Tools Agent — Current Prompt
 
-> Updated: 2026-02-03 15:08 by Orchestrator
+> Updated: 2026-02-03 — Iteration 2 by Orchestrator
 
 ## Status
 
-✅ **Excellent work!** You completed T-1 through T-4:
-- T-1: Replay recording ✅
-- T-2: Replay playback ✅
-- T-3: Determinism verification ✅
-- T-4: Chunk viewer (egui) ✅
+✅ **Iteration 1 Complete!** T-1 through T-7 merged to main.
 
-**Note:** You have an uncommitted `Cargo.lock` change. Commit it with your next change or discard if unneeded.
+Branch synced with main. Ready for Iteration 2.
 
 ## Next Priority Tasks
 
 | ID | Task | Priority |
 |----|------|----------|
-| T-5 | Cell inspector probe | P1 |
-| T-6 | Performance HUD | P2 |
-| T-7 | Event log viewer | P2 |
+| T-8 | Integration test harness | P0 |
+| T-9 | Automated screenshot tests | P1 |
+| T-10 | Memory profiler integration | P1 |
+| T-11 | Hot reload support | P2 |
 
-### T-5: Cell Inspector Probe
+### T-8: Integration Test Harness
 
-Create an interactive cell inspector:
-- Click on any cell to select it
-- Display all cell properties (material, state, temperature, etc.)
-- Show material properties from LUT
-- Show neighboring cell info
-- Real-time update as simulation runs
+Create a harness for end-to-end testing:
+- Headless mode (no window, software renderer)
+- Simulate N frames with scripted inputs
+- Assert on world state after simulation
+- Compare against golden files
 
 ```rust
-pub struct CellInspector {
-    selected_pos: Option<(u32, u32)>,
+pub struct TestHarness {
+    world: World,
+    kernel: Kernel,
+    gameplay: Gameplay,
 }
 
-impl CellInspector {
-    pub fn select(&mut self, x: u32, y: u32);
-    pub fn render_ui(&self, ui: &mut egui::Ui, chunk: &Chunk);
+impl TestHarness {
+    pub fn new_headless() -> Self;
+    pub fn load_scenario(&mut self, path: &Path);
+    pub fn simulate(&mut self, frames: u32, inputs: &[Input]);
+    pub fn assert_cell(&self, pos: (u32, u32), expected: Cell);
+    pub fn assert_entity_exists(&self, id: EntityId);
+    pub fn snapshot(&self) -> WorldSnapshot;
 }
 ```
 
-### T-6: Performance HUD
+### T-9: Automated Screenshot Tests
 
-Create an in-game performance overlay:
-- FPS counter (current, avg, min, max)
-- Frame time graph (last 100 frames)
-- GPU dispatch time
-- Memory usage (chunks loaded, entities active)
-- Toggle with F3 or similar
+Visual regression testing:
+- Render frame to image buffer
+- Compare against golden screenshot
+- Report pixel differences
+- Store golden images in `tests/golden/`
 
-### T-7: Event Log Viewer
+```rust
+pub fn screenshot_test(name: &str, harness: &TestHarness) -> TestResult {
+    let actual = harness.render_to_image();
+    let golden = load_golden(name)?;
+    compare_images(&actual, &golden, threshold: 0.01)
+}
+```
 
-Create a scrollable event log:
-- Display kernel events (cell changes, physics events)
-- Display gameplay events (entity spawns, item pickups)
-- Filter by event type
-- Search functionality
-- Timestamp display
+### T-10: Memory Profiler Integration
+
+Track memory usage:
+- Allocator wrapper that counts allocations
+- Per-system memory tracking (kernel, gameplay, world)
+- Memory usage in perf HUD
+- Detect memory leaks in tests
+
+### T-11: Hot Reload Support (stretch)
+
+Reload assets without restart:
+- Watch material definitions
+- Watch shader files
+- Reload on file change
+- Useful for rapid iteration
 
 ## Rules
 
