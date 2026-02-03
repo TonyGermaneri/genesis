@@ -905,6 +905,8 @@ dependencies = [
 name = "genesis-tools"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "egui",
  "genesis-common",
  "genesis-kernel",
  "genesis-world",
