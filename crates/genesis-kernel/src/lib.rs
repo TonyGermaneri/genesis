@@ -42,6 +42,7 @@
 pub mod benchmark;
 pub mod buffer;
 pub mod cell;
+pub mod chunk;
 pub mod compute;
 pub mod event;
 pub mod intent;
@@ -53,6 +54,7 @@ pub mod prelude {
     pub use crate::benchmark::*;
     pub use crate::buffer::*;
     pub use crate::cell::*;
+    pub use crate::chunk::*;
     pub use crate::compute::*;
     pub use crate::event::*;
     pub use crate::intent::*;
