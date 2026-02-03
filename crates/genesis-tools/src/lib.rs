@@ -16,6 +16,7 @@
 pub mod cell_inspector;
 pub mod chunk_viewer;
 pub mod event_log;
+pub mod hot_reload;
 pub mod inspector;
 pub mod memory_profiler;
 pub mod perf;
@@ -29,6 +30,7 @@ pub mod prelude {
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
     pub use crate::event_log::*;
+    pub use crate::hot_reload::*;
     pub use crate::inspector::*;
     pub use crate::memory_profiler::*;
     pub use crate::perf::*;
