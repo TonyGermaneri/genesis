@@ -5,6 +5,7 @@
 //! This crate provides the core GPU-accelerated simulation:
 //! - Pixel-cell simulation (each pixel is a simulated cell)
 //! - Buffer layouts for GPU compute
+//! - Double-buffered cell storage for efficient GPU simulation
 //! - GPU validation harness
 //!
 //! ## Architecture
@@ -12,17 +13,26 @@
 //! The kernel runs on the GPU and is the physical authority for the world.
 //! The CPU entity layer (gameplay crate) submits intents which the kernel
 //! executes as part of the simulation step.
+//!
+//! ## Double Buffering
+//!
+//! The simulation uses double-buffering to ensure correct GPU execution:
+//! - Two cell buffers alternate between input (read) and output (write)
+//! - Each simulation step reads from one buffer and writes to the other
+//! - Buffers are swapped after each step
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod buffer;
 pub mod cell;
 pub mod compute;
 pub mod validation;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::buffer::*;
     pub use crate::cell::*;
     pub use crate::compute::*;
     pub use crate::validation::*;
