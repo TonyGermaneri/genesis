@@ -70,7 +70,41 @@ impl Cell {
     /// Checks if this cell is solid.
     #[must_use]
     pub const fn is_solid(&self) -> bool {
-        self.flags & CellFlags::SOLID.bits() != 0
+        self.flags & CellFlags::SOLID != 0
+    }
+
+    /// Checks if this cell is liquid.
+    #[must_use]
+    pub const fn is_liquid(&self) -> bool {
+        self.flags & CellFlags::LIQUID != 0
+    }
+
+    /// Checks if this cell is burning.
+    #[must_use]
+    pub const fn is_burning(&self) -> bool {
+        self.flags & CellFlags::BURNING != 0
+    }
+
+    /// Returns the cell with a flag set.
+    #[must_use]
+    pub const fn with_flag(mut self, flag: u8) -> Self {
+        self.flags |= flag;
+        self
+    }
+
+    /// Returns the cell with temperature set.
+    #[must_use]
+    pub const fn with_temperature(mut self, temp: u8) -> Self {
+        self.temperature = temp;
+        self
+    }
+
+    /// Returns the cell with velocity set.
+    #[must_use]
+    pub const fn with_velocity(mut self, vx: i8, vy: i8) -> Self {
+        self.velocity_x = vx;
+        self.velocity_y = vy;
+        self
     }
 }
 
@@ -78,22 +112,16 @@ impl Cell {
 pub struct CellFlags;
 
 impl CellFlags {
-    /// Cell is solid (blocks movement)
-    pub const SOLID: CellFlags = CellFlags;
-    /// Cell is liquid (flows)
-    pub const LIQUID: CellFlags = CellFlags;
-    /// Cell is on fire
-    pub const BURNING: CellFlags = CellFlags;
-    /// Cell is electrified
-    pub const ELECTRIC: CellFlags = CellFlags;
-    /// Cell was updated this frame
-    pub const UPDATED: CellFlags = CellFlags;
-
-    /// Returns the bit value for this flag.
-    #[must_use]
-    pub const fn bits(&self) -> u8 {
-        1
-    }
+    /// Cell is solid (blocks movement) - bit 0
+    pub const SOLID: u8 = 1 << 0;
+    /// Cell is liquid (flows) - bit 1
+    pub const LIQUID: u8 = 1 << 1;
+    /// Cell is on fire - bit 2
+    pub const BURNING: u8 = 1 << 2;
+    /// Cell is electrified - bit 3
+    pub const ELECTRIC: u8 = 1 << 3;
+    /// Cell was updated this frame - bit 4
+    pub const UPDATED: u8 = 1 << 4;
 }
 
 /// Material properties lookup table entry.
@@ -112,6 +140,6 @@ pub struct MaterialProperties {
     pub hardness: u8,
     /// Flags for material behavior
     pub flags: u8,
-    /// Reserved for alignment
-    reserved: u8,
+    /// Reserved for alignment (must be public for bytemuck)
+    pub reserved: u8,
 }
