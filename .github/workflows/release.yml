@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================
+  # Build Release Binaries (I-5 + I-7)
+  # ============================================
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          # macOS Intel
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # macOS Apple Silicon
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # Windows x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --package genesis-engine
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target }}/release/genesis staging/
+          cp README.md staging/ || true
+          cp -r docs staging/ || true
+          cd staging
+          tar czvf ../genesis-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path staging
+          Copy-Item "target/${{ matrix.target }}/release/genesis.exe" -Destination staging/
+          Copy-Item "README.md" -Destination staging/ -ErrorAction SilentlyContinue
+          Copy-Item -Recurse "docs" -Destination staging/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path staging/* -DestinationPath genesis-${{ github.ref_name }}-${{ matrix.target }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-${{ matrix.target }}
+          path: genesis-${{ github.ref_name }}-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  # ============================================
+  # Create GitHub Release
+  # ============================================
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          echo "## What's Changed" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "Release ${{ github.ref_name }}" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "### Downloads" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "| Platform | Architecture | Download |" >> RELEASE_NOTES.md
+          echo "|----------|--------------|----------|" >> RELEASE_NOTES.md
+          echo "| Linux | x86_64 | \`genesis-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz\` |" >> RELEASE_NOTES.md
+          echo "| macOS | Intel (x86_64) | \`genesis-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz\` |" >> RELEASE_NOTES.md
+          echo "| macOS | Apple Silicon | \`genesis-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz\` |" >> RELEASE_NOTES.md
+          echo "| Windows | x86_64 | \`genesis-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip\` |" >> RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: artifacts/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

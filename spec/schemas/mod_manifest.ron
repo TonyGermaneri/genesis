@@ -1,0 +1,62 @@
+// Mod Manifest Schema — mod.ron
+// This defines the structure of a Genesis mod manifest file.
+// Place this file at the root of your mod's .genesismod package.
+
+Mod(
+    // Required: Unique mod identifier (lowercase, alphanumeric, hyphens only)
+    id: "example-mod",
+
+    // Required: Human-readable mod name
+    name: "Example Mod",
+
+    // Required: Semantic version (MAJOR.MINOR.PATCH)
+    version: "1.0.0",
+
+    // Required: Minimum Genesis version this mod supports
+    genesis_version: "0.1.0",
+
+    // Optional: Mod author(s)
+    author: "Genesis Team",
+
+    // Optional: Mod description
+    description: "An example mod demonstrating the mod format",
+
+    // Optional: URL for more information
+    homepage: "https://github.com/tonygermaneri/genesis",
+
+    // Optional: License identifier (SPDX)
+    license: "MIT",
+
+    // Optional: Mod dependencies (list of mod IDs with version requirements)
+    dependencies: [
+        // ("other-mod", ">=1.0.0"),
+    ],
+
+    // Optional: Mods that conflict with this one
+    conflicts: [],
+
+    // Optional: Load order priority (higher loads later, default: 0)
+    priority: 0,
+
+    // Optional: Asset directories to load
+    assets: [
+        "textures/",
+        "sounds/",
+        "models/",
+    ],
+
+    // Optional: Data files to load
+    data: [
+        "recipes/",
+        "items/",
+        "entities/",
+    ],
+
+    // Optional: Lua scripts to execute
+    scripts: [
+        "scripts/init.lua",
+    ],
+
+    // Optional: Tags for categorization
+    tags: ["example", "tutorial"],
+)

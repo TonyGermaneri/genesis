@@ -108,8 +108,9 @@
 | I-2 | Clippy + rustfmt in CI | 🟢 | P0 |
 | I-3 | Test runner in CI | 🟢 | P0 |
 | I-4 | Nix build in CI | 🟢 | P1 |
-| I-5 | Release artifact packaging | ⚪ | P2 |
-| I-6 | Mod package format | ⚪ | P2 |
+| I-5 | Release artifact packaging | 🟢 | P2 |
+| I-6 | Mod package format | 🟢 | P2 |
+| I-7 | Cross-platform builds | 🟢 | P1 |
 
 **Acceptance Criteria**:
 - CI runs on every PR
