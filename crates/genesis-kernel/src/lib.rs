@@ -6,6 +6,8 @@
 //! - Pixel-cell simulation (each pixel is a simulated cell)
 //! - Buffer layouts for GPU compute
 //! - Double-buffered cell storage for efficient GPU simulation
+//! - Intent buffer for CPU → GPU communication
+//! - Event buffer for GPU → CPU communication
 //! - GPU validation harness
 //!
 //! ## Architecture
@@ -20,6 +22,12 @@
 //! - Two cell buffers alternate between input (read) and output (write)
 //! - Each simulation step reads from one buffer and writes to the other
 //! - Buffers are swapped after each step
+//!
+//! ## Intent/Event System
+//!
+//! Communication between CPU and GPU uses bounded queues:
+//! - **Intents** (CPU → GPU): Actions to apply to cells (place material, ignite, etc.)
+//! - **Events** (GPU → CPU): Notifications about cell state changes
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
@@ -28,6 +36,8 @@
 pub mod buffer;
 pub mod cell;
 pub mod compute;
+pub mod event;
+pub mod intent;
 pub mod validation;
 
 /// Prelude for convenient imports
@@ -35,6 +45,8 @@ pub mod prelude {
     pub use crate::buffer::*;
     pub use crate::cell::*;
     pub use crate::compute::*;
+    pub use crate::event::*;
+    pub use crate::intent::*;
     pub use crate::validation::*;
 }
 
