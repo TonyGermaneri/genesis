@@ -9,6 +9,7 @@
 //! - Intent buffer for CPU → GPU communication
 //! - Event buffer for GPU → CPU communication
 //! - GPU validation harness
+//! - Performance benchmarking utilities
 //!
 //! ## Architecture
 //!
@@ -28,11 +29,17 @@
 //! Communication between CPU and GPU uses bounded queues:
 //! - **Intents** (CPU → GPU): Actions to apply to cells (place material, ignite, etc.)
 //! - **Events** (GPU → CPU): Notifications about cell state changes
+//!
+//! ## Validation
+//!
+//! In debug builds, wgpu validation is enabled to catch GPU errors early.
+//! Use `create_validated_instance()` to create a wgpu instance with appropriate settings.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod benchmark;
 pub mod buffer;
 pub mod cell;
 pub mod compute;
@@ -42,6 +49,7 @@ pub mod validation;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::benchmark::*;
     pub use crate::buffer::*;
     pub use crate::cell::*;
     pub use crate::compute::*;

@@ -1,6 +1,50 @@
 //! GPU validation harness.
+//!
+//! This module provides validation infrastructure for GPU compute operations:
+//! - Runtime validation checks for cell state
+//! - wgpu validation layer integration (debug builds only)
+//! - Error callback handling and logging
 
 use tracing::{error, info, warn};
+
+/// Returns wgpu instance flags with validation enabled for debug builds.
+///
+/// In debug mode, this enables:
+/// - `VALIDATION`: GPU API validation to catch errors early
+/// - `DEBUG`: Additional debug info
+///
+/// In release mode, validation is disabled for performance.
+#[must_use]
+pub fn gpu_instance_flags() -> wgpu::InstanceFlags {
+    if cfg!(debug_assertions) {
+        info!("GPU validation layer enabled (debug build)");
+        wgpu::InstanceFlags::VALIDATION | wgpu::InstanceFlags::DEBUG
+    } else {
+        info!("GPU validation layer disabled (release build)");
+        wgpu::InstanceFlags::empty()
+    }
+}
+
+/// Creates a wgpu instance with appropriate validation settings.
+///
+/// In debug builds, validation is enabled to catch GPU errors early.
+/// In release builds, validation is disabled for maximum performance.
+#[must_use]
+pub fn create_validated_instance() -> wgpu::Instance {
+    wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        flags: gpu_instance_flags(),
+        ..Default::default()
+    })
+}
+
+/// Handles wgpu device errors by logging them.
+///
+/// This callback is invoked when the GPU device encounters an error.
+/// Use this with `device.on_uncaptured_error()`.
+pub fn handle_device_error(error: &wgpu::Error) {
+    error!("GPU device error: {error}");
+}
 
 /// GPU validation result.
 #[derive(Debug, Clone)]
