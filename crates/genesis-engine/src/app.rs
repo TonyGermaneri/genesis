@@ -17,6 +17,8 @@ use genesis_gameplay::input::KeyCode;
 use genesis_gameplay::GameState as GameplayState;
 use genesis_kernel::Camera;
 
+use crate::audio_assets::AudioCategory;
+use crate::audio_integration::{AudioIntegration, SoundEvent};
 use crate::config::EngineConfig;
 use crate::environment::EnvironmentState;
 use crate::input::InputHandler;
@@ -24,12 +26,6 @@ use crate::perf::PerfMetrics;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
-use crate::audio_integration::{AudioIntegration, SoundEvent};
-use crate::audio_assets::AudioCategory;
-use crate::crafting_events::CraftingEventHandler;
-use crate::crafting_save::CraftingPersistence;
-use crate::crafting_profile::CraftingProfiler;
-use crate::recipe_loader::RecipeLoader;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -89,18 +85,6 @@ struct GenesisApp {
     /// Audio integration system
     audio: AudioIntegration,
 
-    // === Crafting ===
-    /// Recipe loader for loading recipes from assets
-    recipe_loader: RecipeLoader,
-    /// Crafting event handler
-    crafting_events: CraftingEventHandler,
-    /// Crafting persistence (learned recipes, workbenches)
-    crafting_persistence: CraftingPersistence,
-    /// Crafting profiler for performance tracking
-    crafting_profiler: CraftingProfiler,
-    /// Whether crafting UI is open
-    show_crafting: bool,
-
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -152,18 +136,6 @@ impl GenesisApp {
             warn!("Audio system not available - continuing without audio");
         }
 
-        // Initialize crafting system
-        let mut recipe_loader = RecipeLoader::with_default_path();
-        if let Err(e) = recipe_loader.load_all() {
-            warn!("Failed to load recipes: {}", e);
-        } else {
-            info!("Loaded {} recipes", recipe_loader.registry().len());
-        }
-        let crafting_events = CraftingEventHandler::new();
-        // Starter recipes that all players know (basic tools)
-        let crafting_persistence = CraftingPersistence::with_starter_recipes([1, 2, 3, 4, 5]);
-        let crafting_profiler = CraftingProfiler::new();
-
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
@@ -195,11 +167,6 @@ impl GenesisApp {
             npc_spawner,
             last_player_chunk: initial_chunk,
             audio,
-            recipe_loader,
-            crafting_events,
-            crafting_persistence,
-            crafting_profiler,
-            show_crafting: false,
 
             gameplay,
             camera,
@@ -240,19 +207,6 @@ impl GenesisApp {
             info!(
                 "Inventory: {}",
                 if self.show_inventory {
-                    "OPEN"
-                } else {
-                    "CLOSED"
-                }
-            );
-        }
-
-        // Handle crafting toggle (C key)
-        if self.input.is_key_just_pressed(KeyCode::C) {
-            self.show_crafting = !self.show_crafting;
-            info!(
-                "Crafting: {}",
-                if self.show_crafting {
                     "OPEN"
                 } else {
                     "CLOSED"
@@ -357,9 +311,6 @@ impl GenesisApp {
         // Update audio system
         self.update_audio(dt, player_pos.x, player_pos.y);
 
-        // Update crafting system (check hot-reload, process events)
-        self.update_crafting(dt);
-
         // Check for chunk changes and spawn/despawn NPCs
         self.update_npc_chunks();
 
@@ -425,7 +376,8 @@ impl GenesisApp {
             for dy in -render_distance..=render_distance {
                 let old_visible_chunk = (old_chunk.0 + dx, old_chunk.1 + dy);
                 // Check if this chunk is still visible from new position
-                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs() <= render_distance
+                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs()
+                    <= render_distance
                     && (old_visible_chunk.1 - current_chunk.1).abs() <= render_distance;
 
                 if !still_visible && self.npc_spawner.get_chunk_npcs(old_visible_chunk).is_some() {
@@ -436,10 +388,9 @@ impl GenesisApp {
 
         // Load new chunks
         for chunk_pos in chunks_to_load {
-            let count = self.npc_spawner.on_chunk_loaded(
-                chunk_pos,
-                self.gameplay.npc_manager_mut(),
-            );
+            let count = self
+                .npc_spawner
+                .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
             if count > 0 {
                 debug!("Spawned {} NPCs in chunk {:?}", count, chunk_pos);
             }
@@ -447,10 +398,9 @@ impl GenesisApp {
 
         // Unload old chunks
         for chunk_pos in chunks_to_unload {
-            let count = self.npc_spawner.on_chunk_unloaded(
-                chunk_pos,
-                self.gameplay.npc_manager_mut(),
-            );
+            let count = self
+                .npc_spawner
+                .on_chunk_unloaded(chunk_pos, self.gameplay.npc_manager_mut());
             if count > 0 {
                 debug!("Despawned {} NPCs from chunk {:?}", count, chunk_pos);
             }
@@ -474,10 +424,9 @@ impl GenesisApp {
         for dx in -render_distance..=render_distance {
             for dy in -render_distance..=render_distance {
                 let chunk_pos = (current_chunk.0 + dx, current_chunk.1 + dy);
-                let count = self.npc_spawner.on_chunk_loaded(
-                    chunk_pos,
-                    self.gameplay.npc_manager_mut(),
-                );
+                let count = self
+                    .npc_spawner
+                    .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
                 total_spawned += count;
             }
         }
@@ -506,7 +455,9 @@ impl GenesisApp {
     fn update_biome_music(&mut self) {
         // Get current biome from player position
         let player_pos = self.gameplay.player_position();
-        let biome = self.terrain_service.get_biome_at(player_pos.0, player_pos.1);
+        let biome = self
+            .terrain_service
+            .get_biome_at(player_pos.0, player_pos.1);
 
         // Map biome to music track (if different from current)
         #[allow(clippy::match_same_arms)]
@@ -540,12 +491,14 @@ impl GenesisApp {
 
         // Day/night ambient layers
         if is_night {
-            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
+            self.audio
+                .fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
             self.audio.fade_out_ambient("day", 2.0);
         } else if is_dawn_dusk {
             // Dawn/dusk transition - both layers at reduced volume
             self.audio.fade_in_ambient("day", "ambient/birds", 0.3, 2.0);
-            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
+            self.audio
+                .fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
         } else {
             self.audio.fade_in_ambient("day", "ambient/birds", 0.5, 2.0);
             self.audio.fade_out_ambient("night", 2.0);
@@ -554,13 +507,15 @@ impl GenesisApp {
         // Weather-based ambient
         if self.environment.weather.is_raining() {
             let rain_volume = self.environment.weather.rain_intensity();
-            self.audio.fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
+            self.audio
+                .fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
         } else {
             self.audio.fade_out_ambient("rain", 2.0);
         }
 
         if self.environment.weather.is_stormy() {
-            self.audio.fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
+            self.audio
+                .fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
         } else {
             self.audio.fade_out_ambient("thunder", 1.0);
         }
@@ -568,7 +523,8 @@ impl GenesisApp {
         // Wind based on weather intensity
         let wind_volume = self.environment.weather.wind_strength() * 0.4;
         if wind_volume > 0.1 {
-            self.audio.fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
+            self.audio
+                .fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
         } else {
             self.audio.fade_out_ambient("wind", 2.0);
         }
@@ -589,37 +545,6 @@ impl GenesisApp {
     pub fn play_ui_sound(&mut self, name: &str) {
         let event = SoundEvent::new(AudioCategory::Ui, name);
         self.audio.queue_sound(event);
-    }
-
-    /// Updates crafting system for the frame.
-    fn update_crafting(&mut self, _dt: f32) {
-        // Check for recipe hot-reload in debug mode
-        if self.recipe_loader.check_hot_reload() {
-            info!("Recipes hot-reloaded");
-        }
-
-        // Process pending crafting events
-        let result = self.crafting_events.process_events(Some(&mut self.audio));
-
-        // Handle completed crafts
-        for (recipe_id, _output_item, _quantity) in &result.completed_crafts {
-            // Add to recent recipes
-            self.crafting_persistence.add_recent(*recipe_id);
-
-            // Record for profiling
-            if let Some(recipe) = self.recipe_loader.get_recipe(recipe_id.raw()) {
-                self.crafting_profiler.record_craft(recipe_id.raw(), &recipe.category);
-            }
-        }
-
-        // Handle learned recipes
-        for recipe_id in &result.recipes_learned {
-            self.crafting_persistence.learn_recipe(*recipe_id);
-        }
-
-        // Update playtime for frequency stats
-        let playtime = self.gameplay.game_time();
-        self.crafting_profiler.update_playtime(playtime);
     }
 
     /// Render the frame.
@@ -935,22 +860,20 @@ fn render_interaction_prompt(ctx: &egui::Context, data: &InteractionData) {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .resizable(false)
             .collapsible(false)
-            .show(ctx, |ui| {
-                match data.mode {
-                    NPCInteractionMode::Trading => {
-                        ui.label("Trading with Merchant");
-                        ui.separator();
-                        ui.label("(Trade UI coming soon...)");
-                        ui.separator();
-                        ui.label("Press [E] to close");
-                    },
-                    NPCInteractionMode::Dialogue => {
-                        ui.label("NPC says: Hello, traveler!");
-                        ui.separator();
-                        ui.label("Press [E] to close");
-                    },
-                    NPCInteractionMode::None => {},
-                }
+            .show(ctx, |ui| match data.mode {
+                NPCInteractionMode::Trading => {
+                    ui.label("Trading with Merchant");
+                    ui.separator();
+                    ui.label("(Trade UI coming soon...)");
+                    ui.separator();
+                    ui.label("Press [E] to close");
+                },
+                NPCInteractionMode::Dialogue => {
+                    ui.label("NPC says: Hello, traveler!");
+                    ui.separator();
+                    ui.label("Press [E] to close");
+                },
+                NPCInteractionMode::None => {},
             });
     } else if data.can_interact {
         // Show interaction prompt

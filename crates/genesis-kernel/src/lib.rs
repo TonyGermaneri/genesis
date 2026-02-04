@@ -52,9 +52,12 @@ pub mod cell;
 pub mod chunk;
 pub mod chunk_manager;
 pub mod collision;
+pub mod combat_collision;
+pub mod combat_particles;
 pub mod compute;
 pub mod crafting_anim;
 pub mod crafting_grid;
+pub mod damage_render;
 pub mod edge;
 pub mod event;
 pub mod intent;
@@ -63,6 +66,7 @@ pub mod lighting;
 pub mod npc_collision;
 pub mod npc_render;
 pub mod particles;
+pub mod projectile;
 pub mod quadtree;
 pub mod readback;
 pub mod render;
@@ -85,6 +89,15 @@ pub mod prelude {
     pub use crate::chunk::*;
     pub use crate::chunk_manager::*;
     pub use crate::collision::*;
+    // Combat modules use explicit imports to avoid conflicts
+    pub use crate::combat_collision::{
+        CombatBoxManager, CombatCollider, CollisionResult, FrameRange, Hitbox, HitboxSequenceBuilder,
+        HitboxShape, Hurtbox,
+    };
+    pub use crate::combat_particles::{
+        BloodSplatterEffect, CombatEffectType, CombatParticle, CombatParticleInstance,
+        CombatParticleManager, HitSparkEffect, ImpactDustEffect,
+    };
     pub use crate::compute::*;
     // Crafting modules use explicit imports to avoid conflicts
     pub use crate::crafting_anim::{
@@ -93,6 +106,10 @@ pub mod prelude {
     pub use crate::crafting_grid::{
         CraftingGrid, CraftingResult, ExtractedPattern, ItemSlot, RecipeMatcher, RecipePattern,
         RecipeType,
+    };
+    pub use crate::damage_render::{
+        AnimationStyle, DamageNumber, DamageNumberBatch, DamageNumberInstance, DamageNumberManager,
+        DamageType,
     };
     pub use crate::edge::*;
     pub use crate::event::*;
@@ -104,6 +121,10 @@ pub mod prelude {
     pub use crate::npc_collision::*;
     pub use crate::npc_render::*;
     pub use crate::particles::*;
+    pub use crate::projectile::{
+        Projectile, ProjectileCollision, ProjectileInstance, ProjectileManager, ProjectileState,
+        ProjectileType, TrajectoryPredictor,
+    };
     pub use crate::quadtree::*;
     pub use crate::readback::*;
     pub use crate::render::*;

@@ -310,7 +310,12 @@ impl NpcMetrics {
 
     /// Recalculates the peak AI time from current samples.
     fn recalculate_peak(&mut self) {
-        self.peak_ai_time = self.ai_times.iter().copied().max().unwrap_or(Duration::ZERO);
+        self.peak_ai_time = self
+            .ai_times
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(Duration::ZERO);
     }
 
     /// Sets the current NPC count.
