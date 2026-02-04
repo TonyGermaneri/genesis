@@ -21,6 +21,9 @@ use crate::input::InputHandler;
 use crate::renderer::Renderer;
 use crate::timing::{FpsCounter, FrameTiming};
 
+// Re-export egui for UI building
+use egui;
+
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)]
@@ -79,7 +82,7 @@ impl GenesisApp {
 
         // Create gameplay state with a seed
         let seed = 42; // TODO: Make configurable or random
-        // Spawn player at center of chunk (128, 128) for 256x256 chunk
+                       // Spawn player at center of chunk (128, 128) for 256x256 chunk
         let mut gameplay = GameplayState::with_player_position(seed, (128.0, 100.0));
         // Set player as grounded for top-down movement
         gameplay.player.set_grounded(true);
@@ -184,23 +187,82 @@ impl GenesisApp {
         let _ = self.timing.accumulate(dt);
     }
 
-    /// Render the frame.
+    /// Render the frame with egui UI overlay.
     fn render(&mut self) {
-        if let Some(renderer) = &mut self.renderer {
-            // Pass camera and debug info to renderer
-            match renderer.render_with_state(
-                &self.camera,
-                &self.gameplay,
-                self.show_debug,
-                self.current_fps,
-                self.current_frame_time,
-                self.hotbar_slot,
-            ) {
-                Ok(()) => {},
-                Err(e) => {
-                    warn!("Render error: {e}");
-                },
+        let (renderer, window) = match (&mut self.renderer, &self.window) {
+            (Some(r), Some(w)) => (r, w),
+            _ => return,
+        };
+
+        // Capture state for UI closure
+        let show_debug = self.show_debug;
+        let fps = self.current_fps;
+        let frame_time = self.current_frame_time;
+        let player_pos = self.gameplay.player.position();
+        let player_vel = self.gameplay.player.velocity();
+        let camera_pos = self.camera.position;
+        let camera_zoom = self.camera.zoom;
+        let hotbar_slot = self.hotbar_slot;
+        let app_mode = self.app_mode;
+
+        // Render with egui UI
+        let result = renderer.render_with_ui(window, &self.camera, |ctx| {
+            // Debug overlay (top-left)
+            if show_debug {
+                egui::Window::new("Debug")
+                    .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
+                    .resizable(false)
+                    .collapsible(false)
+                    .show(ctx, |ui| {
+                        ui.label(format!("FPS: {:.0}", fps));
+                        ui.label(format!("Frame: {:.2}ms", frame_time));
+                        ui.separator();
+                        ui.label(format!("Player: ({:.0}, {:.0})", player_pos.x, player_pos.y));
+                        ui.label(format!("Velocity: ({:.1}, {:.1})", player_vel.x, player_vel.y));
+                        ui.separator();
+                        ui.label(format!("Camera: ({:.0}, {:.0})", camera_pos.0, camera_pos.1));
+                        ui.label(format!("Zoom: {:.1}x", camera_zoom));
+                    });
             }
+
+            // Hotbar (bottom-center)
+            egui::TopBottomPanel::bottom("hotbar_panel")
+                .frame(egui::Frame::none())
+                .show(ctx, |ui| {
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space((ui.available_width() - 400.0) / 2.0);
+                        for i in 0..10 {
+                            let selected = hotbar_slot == i;
+                            let text = format!("{}", (i + 1) % 10);
+                            let btn = egui::Button::new(text)
+                                .min_size(egui::vec2(36.0, 36.0))
+                                .fill(if selected {
+                                    egui::Color32::from_rgb(80, 120, 180)
+                                } else {
+                                    egui::Color32::from_rgb(40, 40, 50)
+                                });
+                            ui.add(btn);
+                        }
+                    });
+                    ui.add_space(10.0);
+                });
+
+            // Mode indicator
+            if app_mode == AppMode::Paused {
+                egui::Window::new("Paused")
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .resizable(false)
+                    .collapsible(false)
+                    .show(ctx, |ui| {
+                        ui.label("PAUSED");
+                        ui.label("Press ESC to resume");
+                    });
+            }
+        });
+
+        if let Err(e) = result {
+            warn!("Render error: {e}");
         }
     }
 }

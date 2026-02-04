@@ -209,6 +209,89 @@ impl Default for PlayerConfig {
     }
 }
 
+/// Top-down player configuration (for 2D top-down movement).
+///
+/// This configuration is used for smooth top-down RPG-style movement
+/// without gravity or jumping.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopDownPlayerConfig {
+    /// Normal movement speed (units per second)
+    pub walk_speed: f32,
+    /// Sprint speed when shift held (units per second)
+    pub run_speed: f32,
+    /// How fast to reach target speed (higher = snappier)
+    pub acceleration: f32,
+    /// How fast to stop (0-1, lower = more slide/momentum)
+    pub friction: f32,
+    /// Maximum distance for interactions (dig/place/interact)
+    pub interaction_range: f32,
+    /// Default dig radius
+    pub dig_radius: f32,
+    /// Default place radius
+    pub place_radius: f32,
+    /// Collision half-width
+    pub collision_half_width: f32,
+    /// Collision half-height
+    pub collision_half_height: f32,
+}
+
+impl Default for TopDownPlayerConfig {
+    fn default() -> Self {
+        Self {
+            walk_speed: 120.0,
+            run_speed: 240.0,
+            acceleration: 20.0,
+            friction: 0.85,
+            interaction_range: 64.0,
+            dig_radius: 1.5,
+            place_radius: 1.5,
+            collision_half_width: 6.0,
+            collision_half_height: 6.0,
+        }
+    }
+}
+
+impl TopDownPlayerConfig {
+    /// Create a new top-down player config.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create config with custom movement speeds.
+    #[must_use]
+    pub fn with_speeds(walk_speed: f32, run_speed: f32) -> Self {
+        Self {
+            walk_speed,
+            run_speed,
+            ..Default::default()
+        }
+    }
+
+    /// Set acceleration and friction.
+    #[must_use]
+    pub fn with_physics(mut self, acceleration: f32, friction: f32) -> Self {
+        self.acceleration = acceleration;
+        self.friction = friction.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Set interaction range.
+    #[must_use]
+    pub fn with_interaction_range(mut self, range: f32) -> Self {
+        self.interaction_range = range;
+        self
+    }
+
+    /// Set collision size.
+    #[must_use]
+    pub fn with_collision_size(mut self, half_width: f32, half_height: f32) -> Self {
+        self.collision_half_width = half_width;
+        self.collision_half_height = half_height;
+        self
+    }
+}
+
 /// The player entity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
@@ -358,27 +441,52 @@ impl Player {
     }
 
     /// Update the player based on input.
-    /// Returns the new position (collision should be checked externally).
+    /// Uses pure top-down movement (no gravity or jumping).
     pub fn update(&mut self, input: &Input, dt: f32) {
-        // Update timers
-        self.jump_buffer = (self.jump_buffer - dt).max(0.0);
-        self.coyote_time = (self.coyote_time - dt).max(0.0);
+        // Get movement speed based on running state
+        let speed = if input.running { 200.0 } else { 120.0 };
 
-        // Handle jump input buffering
-        if input.jump_just_pressed {
-            self.jump_buffer = Self::JUMP_BUFFER_TIME;
+        // Direct 8-direction movement
+        let input_dir = input.movement.normalized();
+        let target_velocity = input_dir.scale(speed);
+
+        // Smooth acceleration
+        let accel = 12.0 * dt;
+        self.velocity.x += (target_velocity.x - self.velocity.x) * accel;
+        self.velocity.y += (target_velocity.y - self.velocity.y) * accel;
+
+        // Apply friction when no input
+        if !input.has_movement() {
+            self.velocity.x *= 0.85;
+            self.velocity.y *= 0.85;
+
+            // Stop completely at very low velocities
+            if self.velocity.x.abs() < 0.5 {
+                self.velocity.x = 0.0;
+            }
+            if self.velocity.y.abs() < 0.5 {
+                self.velocity.y = 0.0;
+            }
         }
 
-        // Update state based on environment
-        self.update_state(input);
-
-        // Update movement
-        self.update_movement(input, dt);
+        // Update position
+        self.position = self.position.plus(self.velocity.scale(dt));
 
         // Update facing direction
         if let Some(dir) = Direction::from_vec2(input.movement) {
             self.facing = dir;
         }
+
+        // Update state
+        self.state = if self.velocity.x.abs() > 1.0 || self.velocity.y.abs() > 1.0 {
+            if input.running {
+                PlayerState::Running
+            } else {
+                PlayerState::Walking
+            }
+        } else {
+            PlayerState::Idle
+        };
     }
 
     /// Update player state based on input and environment.
@@ -627,6 +735,201 @@ impl Player {
     #[must_use]
     pub fn animation_state_with_digging(&self, is_digging: bool) -> PlayerAnimationState {
         PlayerAnimationState::from_player_state(self.state, is_digging)
+    }
+
+    // ========================================
+    // Top-Down Movement Methods
+    // ========================================
+
+    /// Update for top-down movement (no gravity, 8-direction).
+    ///
+    /// This is the main update method for top-down RPG-style movement.
+    /// It handles:
+    /// 1. Getting input direction
+    /// 2. Applying acceleration towards target velocity
+    /// 3. Applying friction when no input
+    /// 4. Checking collision with terrain
+    /// 5. Resolving collision (sliding along walls)
+    /// 6. Updating position
+    pub fn update_topdown<C: crate::physics::CollisionQuery>(
+        &mut self,
+        input: &Input,
+        terrain: &C,
+        topdown_config: &TopDownPlayerConfig,
+        dt: f32,
+    ) {
+        // 1. Get input direction
+        let input_dir = input.movement.normalized();
+        let has_input = input.has_movement();
+
+        // 2. Determine target speed
+        let target_speed = if input.running {
+            topdown_config.run_speed
+        } else {
+            topdown_config.walk_speed
+        };
+
+        // 3. Calculate target velocity
+        let target_velocity = if has_input {
+            input_dir.scale(target_speed)
+        } else {
+            Vec2::ZERO
+        };
+
+        // 4. Apply acceleration towards target velocity
+        let accel = topdown_config.acceleration * dt;
+        self.velocity.x += (target_velocity.x - self.velocity.x) * accel;
+        self.velocity.y += (target_velocity.y - self.velocity.y) * accel;
+
+        // 5. Apply friction when no input
+        if !has_input {
+            self.velocity.x *= topdown_config.friction;
+            self.velocity.y *= topdown_config.friction;
+
+            // Stop completely at very low velocities
+            if self.velocity.x.abs() < 0.1 {
+                self.velocity.x = 0.0;
+            }
+            if self.velocity.y.abs() < 0.1 {
+                self.velocity.y = 0.0;
+            }
+        }
+
+        // 6. Update facing direction
+        if has_input {
+            if let Some(dir) = Direction::from_vec2(input.movement) {
+                self.facing = dir;
+            }
+        }
+
+        // 7. Update state
+        self.state = if self.velocity.x.abs() > 1.0 || self.velocity.y.abs() > 1.0 {
+            if input.running {
+                PlayerState::Running
+            } else {
+                PlayerState::Walking
+            }
+        } else {
+            PlayerState::Idle
+        };
+
+        // 8. Calculate desired position
+        let desired_pos = self.position.plus(self.velocity.scale(dt));
+
+        // 9. Check collision and resolve with sliding
+        let final_pos = self.resolve_topdown_collision(
+            desired_pos,
+            topdown_config.collision_half_width,
+            topdown_config.collision_half_height,
+            terrain,
+        );
+
+        // 10. Update position
+        self.position = final_pos;
+
+        // 11. Update velocity based on actual movement (for next frame)
+        if dt > 0.0 {
+            let actual_movement = final_pos.minus(self.position.minus(self.velocity.scale(dt)));
+            // If we didn't move as expected, adjust velocity
+            if (final_pos.x - desired_pos.x).abs() > 0.001 {
+                self.velocity.x = 0.0;
+            }
+            if (final_pos.y - desired_pos.y).abs() > 0.001 {
+                self.velocity.y = 0.0;
+            }
+            let _ = actual_movement; // Silence warning
+        }
+    }
+
+    /// Resolve collision for top-down movement with sliding.
+    fn resolve_topdown_collision<C: crate::physics::CollisionQuery>(
+        &self,
+        desired_pos: Vec2,
+        half_width: f32,
+        half_height: f32,
+        terrain: &C,
+    ) -> Vec2 {
+        use crate::physics::AABB;
+
+        // Try full movement first
+        let full_aabb = AABB::from_center(desired_pos, half_width, half_height);
+        if !terrain.check_collision(full_aabb) {
+            return desired_pos;
+        }
+
+        // Try horizontal only
+        let horiz_pos = Vec2::new(desired_pos.x, self.position.y);
+        let horiz_aabb = AABB::from_center(horiz_pos, half_width, half_height);
+        let can_move_horiz = !terrain.check_collision(horiz_aabb);
+
+        // Try vertical only
+        let vert_pos = Vec2::new(self.position.x, desired_pos.y);
+        let vert_aabb = AABB::from_center(vert_pos, half_width, half_height);
+        let can_move_vert = !terrain.check_collision(vert_aabb);
+
+        match (can_move_horiz, can_move_vert) {
+            // Prefer horizontal slide
+            (true, false | true) => horiz_pos,
+            (false, true) => vert_pos,
+            (false, false) => self.position, // Can't move at all
+        }
+    }
+
+    /// Get position player is aiming at (for dig/place).
+    ///
+    /// Takes the mouse position in world coordinates and returns
+    /// the position to use for terrain interactions.
+    #[must_use]
+    pub fn aim_position(&self, mouse_world: (f32, f32)) -> (f32, f32) {
+        // Simply return the mouse position - it's already in world coords
+        mouse_world
+    }
+
+    /// Check if player can interact with position.
+    ///
+    /// Returns true if the position is within interaction range.
+    #[must_use]
+    pub fn can_interact_at(&self, world_pos: (f32, f32), interaction_range: f32) -> bool {
+        let dx = world_pos.0 - self.position.x;
+        let dy = world_pos.1 - self.position.y;
+        let dist_sq = dx * dx + dy * dy;
+        dist_sq <= interaction_range * interaction_range
+    }
+
+    /// Get the distance to a world position.
+    #[must_use]
+    pub fn distance_to(&self, world_pos: (f32, f32)) -> f32 {
+        let dx = world_pos.0 - self.position.x;
+        let dy = world_pos.1 - self.position.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    /// Get movement speed modifier based on terrain.
+    ///
+    /// This can be used to slow movement on certain terrain types.
+    #[must_use]
+    pub fn get_terrain_speed_modifier<C: crate::physics::CollisionQuery>(
+        &self,
+        terrain: &C,
+    ) -> f32 {
+        let cell_x = self.position.x.floor() as i32;
+        let cell_y = self.position.y.floor() as i32;
+
+        // Check for water (slow down)
+        if terrain.is_liquid(cell_x, cell_y) {
+            return 0.5;
+        }
+
+        // Default normal speed
+        1.0
+    }
+
+    /// Apply terrain-based speed modifier to velocity.
+    pub fn apply_terrain_modifier<C: crate::physics::CollisionQuery>(&mut self, terrain: &C) {
+        let modifier = self.get_terrain_speed_modifier(terrain);
+        if modifier < 1.0 {
+            self.velocity = self.velocity.scale(modifier);
+        }
     }
 }
 
