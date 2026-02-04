@@ -1229,7 +1229,10 @@ mod tests {
                 break;
             }
         }
-        assert!(differs, "Noise with different seeds should differ somewhere");
+        assert!(
+            differs,
+            "Noise with different seeds should differ somewhere"
+        );
     }
 
     #[test]

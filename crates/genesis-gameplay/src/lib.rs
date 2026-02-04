@@ -19,11 +19,13 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod ai;
 pub mod biome;
 pub mod collision_response;
 pub mod combat;
 pub mod crafting;
 pub mod crafting_ui;
+pub mod dialogue;
 pub mod economy;
 pub mod entity;
 pub mod events;
@@ -48,11 +50,13 @@ pub mod weather;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::ai::*;
     pub use crate::biome::*;
     pub use crate::collision_response::*;
     pub use crate::combat::*;
     pub use crate::crafting::*;
     pub use crate::crafting_ui::*;
+    pub use crate::dialogue::*;
     pub use crate::economy::*;
     pub use crate::entity::*;
     pub use crate::events::*;
