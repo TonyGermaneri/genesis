@@ -1,0 +1,261 @@
+# Core weapons - melee weapons
+version = "1.0.0"
+
+[[weapons]]
+id = 1
+name = "Iron Sword"
+description = "A sturdy iron sword. Basic but reliable."
+category = "sword"
+base_damage = 15.0
+damage_variance = 0.1
+damage_type = "physical"
+attack_speed = 1.0
+crit_chance = 0.05
+crit_multiplier = 2.0
+knockback = 0.5
+stamina_cost = 10.0
+durability = 100
+required_level = 1
+required_strength = 5
+item_id = 100
+rarity = "common"
+sound_set = "sword_metal"
+
+[[weapons]]
+id = 2
+name = "Steel Sword"
+description = "A well-forged steel sword with keen edge."
+category = "sword"
+base_damage = 22.0
+damage_variance = 0.1
+damage_type = "physical"
+attack_speed = 1.0
+crit_chance = 0.08
+crit_multiplier = 2.0
+knockback = 0.6
+stamina_cost = 12.0
+durability = 150
+required_level = 5
+required_strength = 8
+item_id = 101
+rarity = "uncommon"
+sound_set = "sword_metal"
+
+[[weapons]]
+id = 3
+name = "Iron Dagger"
+description = "A small iron dagger. Quick strikes but low damage."
+category = "dagger"
+base_damage = 8.0
+damage_variance = 0.05
+damage_type = "physical"
+attack_speed = 1.5
+crit_chance = 0.15
+crit_multiplier = 2.5
+knockback = 0.1
+stamina_cost = 5.0
+durability = 60
+required_level = 1
+required_dexterity = 5
+item_id = 102
+rarity = "common"
+sound_set = "dagger"
+
+[[weapons]]
+id = 4
+name = "Iron Axe"
+description = "A heavy iron axe. Slow but powerful."
+category = "axe"
+base_damage = 20.0
+damage_variance = 0.15
+damage_type = "physical"
+attack_speed = 0.85
+crit_chance = 0.05
+crit_multiplier = 2.2
+knockback = 1.0
+armor_penetration = 5.0
+stamina_cost = 15.0
+durability = 120
+required_level = 1
+required_strength = 8
+item_id = 103
+rarity = "common"
+sound_set = "axe"
+
+[[weapons]]
+id = 5
+name = "Iron Greatsword"
+description = "A massive two-handed iron sword."
+category = "greatsword"
+base_damage = 35.0
+damage_variance = 0.12
+damage_type = "physical"
+attack_speed = 0.65
+reach = 1.8
+crit_chance = 0.06
+crit_multiplier = 2.0
+knockback = 1.5
+stamina_cost = 25.0
+durability = 140
+required_level = 3
+required_strength = 15
+item_id = 104
+rarity = "common"
+sound_set = "greatsword"
+
+[[weapons]]
+id = 6
+name = "Iron Mace"
+description = "A blunt iron mace. Effective against armor."
+category = "mace"
+base_damage = 18.0
+damage_variance = 0.1
+damage_type = "physical"
+attack_speed = 0.9
+crit_chance = 0.03
+crit_multiplier = 1.8
+knockback = 1.2
+armor_penetration = 10.0
+stamina_cost = 12.0
+durability = 130
+required_level = 1
+required_strength = 7
+item_id = 105
+rarity = "common"
+sound_set = "mace"
+
+[[weapons]]
+id = 7
+name = "Iron Spear"
+description = "A long iron spear. Great reach but unwieldy."
+category = "spear"
+base_damage = 16.0
+damage_variance = 0.08
+damage_type = "physical"
+attack_speed = 0.85
+reach = 2.2
+crit_chance = 0.08
+crit_multiplier = 2.2
+knockback = 0.8
+stamina_cost = 14.0
+durability = 90
+required_level = 1
+required_strength = 6
+required_dexterity = 4
+item_id = 106
+rarity = "common"
+sound_set = "spear"
+
+[[weapons]]
+id = 8
+name = "Flame Blade"
+description = "A sword enchanted with eternal fire."
+category = "sword"
+base_damage = 18.0
+damage_variance = 0.1
+damage_type = "fire"
+attack_speed = 1.0
+crit_chance = 0.1
+crit_multiplier = 2.0
+knockback = 0.5
+stamina_cost = 15.0
+durability = 200
+required_level = 10
+required_strength = 10
+item_id = 107
+rarity = "rare"
+sound_set = "sword_fire"
+
+[[weapons.status_effects]]
+effect = "burning"
+chance = 0.25
+duration = 3.0
+stacks = 1
+
+[[weapons]]
+id = 9
+name = "Frost Axe"
+description = "An axe imbued with freezing cold."
+category = "axe"
+base_damage = 25.0
+damage_variance = 0.15
+damage_type = "ice"
+attack_speed = 0.8
+crit_chance = 0.08
+crit_multiplier = 2.0
+knockback = 1.2
+armor_penetration = 8.0
+stamina_cost = 18.0
+durability = 180
+required_level = 12
+required_strength = 12
+item_id = 108
+rarity = "rare"
+sound_set = "axe_ice"
+
+[[weapons.status_effects]]
+effect = "frozen"
+chance = 0.15
+duration = 2.0
+stacks = 1
+
+[[weapons]]
+id = 10
+name = "Poison Dagger"
+description = "A dagger coated with deadly venom."
+category = "dagger"
+base_damage = 10.0
+damage_variance = 0.05
+damage_type = "poison"
+attack_speed = 1.6
+crit_chance = 0.2
+crit_multiplier = 2.8
+knockback = 0.1
+stamina_cost = 6.0
+durability = 80
+required_level = 8
+required_dexterity = 12
+item_id = 109
+rarity = "rare"
+sound_set = "dagger_poison"
+
+[[weapons.status_effects]]
+effect = "poisoned"
+chance = 0.4
+duration = 5.0
+stacks = 3
+
+[[weapons]]
+id = 11
+name = "Thunder Warhammer"
+description = "A massive hammer crackling with lightning."
+category = "warhammer"
+base_damage = 45.0
+damage_variance = 0.2
+damage_type = "electric"
+attack_speed = 0.55
+reach = 1.6
+crit_chance = 0.1
+crit_multiplier = 2.5
+knockback = 2.0
+armor_penetration = 15.0
+stamina_cost = 35.0
+durability = 250
+required_level = 15
+required_strength = 20
+item_id = 110
+rarity = "epic"
+sound_set = "hammer_thunder"
+
+[[weapons.status_effects]]
+effect = "stunned"
+chance = 0.2
+duration = 1.5
+stacks = 1
+
+[[weapons.abilities]]
+name = "Thunder Strike"
+description = "Slam the ground to release a shockwave."
+cooldown = 10.0
+cost = 50.0
+damage_multiplier = 2.0
