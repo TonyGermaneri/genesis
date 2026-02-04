@@ -26,6 +26,7 @@ pub mod memory_profiler;
 pub mod minimap;
 pub mod perf;
 pub mod perf_hud;
+pub mod quest_ui;
 pub mod replay;
 pub mod screenshot;
 pub mod test_harness;
@@ -45,6 +46,7 @@ pub mod prelude {
     pub use crate::minimap::*;
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
+    pub use crate::quest_ui::*;
     pub use crate::replay::*;
     pub use crate::screenshot::*;
     pub use crate::test_harness::*;
