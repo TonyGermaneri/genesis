@@ -31,6 +31,7 @@ pub mod interaction;
 pub mod inventory;
 pub mod inventory_ui;
 pub mod needs;
+pub mod npc;
 pub mod physics;
 pub mod player;
 pub mod save;
@@ -49,6 +50,7 @@ pub mod prelude {
     pub use crate::inventory::*;
     pub use crate::inventory_ui::*;
     pub use crate::needs::*;
+    pub use crate::npc::*;
     pub use crate::physics::*;
     pub use crate::player::*;
     pub use crate::save::*;
