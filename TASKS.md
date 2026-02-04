@@ -68,6 +68,14 @@
 | I-5 | Release artifact packaging | 🟢 |
 | I-6 | Mod package format | 🟢 |
 | I-7 | Cross-platform builds | 🟢 |
+| I-8 | Performance regression CI | 🟢 |
+| I-9 | Documentation site (mdBook) | 🟢 |
+| I-10 | Build telemetry | 🟢 |
+| I-11 | Docker development image | 🟢 |
+| I-12 | Asset pipeline | 🟢 |
+| I-13 | Localization system | 🟢 |
+| I-14 | Crash reporting | 🟢 |
+| I-15 | Telemetry & Analytics | 🟢 |
 
 ---
 
@@ -104,10 +112,14 @@
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| I-8 | Performance regression CI | ⚪ | P0 |
-| I-9 | Documentation site (mdBook) | ⚪ | P1 |
-| I-10 | Build telemetry | ⚪ | P1 |
-| I-11 | Docker development image | ⚪ | P2 |
+| I-8 | Performance regression CI | 🟢 | P0 |
+| I-9 | Documentation site (mdBook) | 🟢 | P1 |
+| I-10 | Build telemetry | 🟢 | P1 |
+| I-11 | Docker development image | 🟢 | P2 |
+| I-12 | Asset pipeline | 🟢 | P1 |
+| I-13 | Localization system | 🟢 | P1 |
+| I-14 | Crash reporting | 🟢 | P1 |
+| I-15 | Telemetry & Analytics | 🟢 | P2 |
 
 ---
 
