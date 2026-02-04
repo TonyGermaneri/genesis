@@ -17,8 +17,6 @@ use genesis_gameplay::input::KeyCode;
 use genesis_gameplay::GameState as GameplayState;
 use genesis_kernel::Camera;
 
-use crate::audio_assets::AudioCategory;
-use crate::audio_integration::{AudioIntegration, SoundEvent};
 use crate::config::EngineConfig;
 use crate::environment::EnvironmentState;
 use crate::input::InputHandler;
@@ -26,6 +24,16 @@ use crate::perf::PerfMetrics;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
+use crate::audio_integration::{AudioIntegration, SoundEvent};
+use crate::audio_assets::AudioCategory;
+use crate::combat_events::CombatEventHandler;
+use crate::combat_save::CombatPersistence;
+use crate::combat_profile::CombatProfiler;
+use crate::weapon_loader::WeaponLoader;
+use crate::crafting_events::CraftingEventHandler;
+use crate::crafting_save::CraftingPersistence;
+use crate::crafting_profile::CraftingProfiler;
+use crate::recipe_loader::RecipeLoader;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -85,6 +93,32 @@ struct GenesisApp {
     /// Audio integration system
     audio: AudioIntegration,
 
+    // === Crafting ===
+    /// Recipe loader for loading recipes from assets
+    recipe_loader: RecipeLoader,
+    /// Crafting event handler
+    crafting_events: CraftingEventHandler,
+    /// Crafting persistence (learned recipes, workbenches)
+    crafting_persistence: CraftingPersistence,
+    /// Crafting profiler for performance tracking
+    crafting_profiler: CraftingProfiler,
+    /// Whether crafting UI is open
+    show_crafting: bool,
+
+    // === Combat ===
+    /// Weapon loader for loading weapon definitions
+    weapon_loader: WeaponLoader,
+    /// Combat event handler
+    combat_events: CombatEventHandler,
+    /// Combat persistence (health, stats, equipment)
+    combat_persistence: CombatPersistence,
+    /// Combat profiler for performance tracking
+    combat_profiler: CombatProfiler,
+    /// Whether attack input is held (for charge attacks)
+    attack_held: bool,
+    /// Time attack has been held
+    attack_hold_time: f32,
+
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -136,6 +170,29 @@ impl GenesisApp {
             warn!("Audio system not available - continuing without audio");
         }
 
+        // Initialize crafting system
+        let mut recipe_loader = RecipeLoader::with_default_path();
+        if let Err(e) = recipe_loader.load_all() {
+            warn!("Failed to load recipes: {}", e);
+        } else {
+            info!("Loaded {} recipes", recipe_loader.registry().len());
+        }
+        let crafting_events = CraftingEventHandler::new();
+        // Starter recipes that all players know (basic tools)
+        let crafting_persistence = CraftingPersistence::with_starter_recipes([1, 2, 3, 4, 5]);
+        let crafting_profiler = CraftingProfiler::new();
+
+        // Initialize combat system
+        let mut weapon_loader = WeaponLoader::with_default_path();
+        if let Err(e) = weapon_loader.load_all() {
+            warn!("Failed to load weapons: {}", e);
+        } else {
+            info!("Loaded {} weapons", weapon_loader.registry().len());
+        }
+        let combat_events = CombatEventHandler::new();
+        let combat_persistence = CombatPersistence::new();
+        let combat_profiler = CombatProfiler::new();
+
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
@@ -167,6 +224,18 @@ impl GenesisApp {
             npc_spawner,
             last_player_chunk: initial_chunk,
             audio,
+            recipe_loader,
+            crafting_events,
+            crafting_persistence,
+            crafting_profiler,
+            show_crafting: false,
+
+            weapon_loader,
+            combat_events,
+            combat_persistence,
+            combat_profiler,
+            attack_held: false,
+            attack_hold_time: 0.0,
 
             gameplay,
             camera,
@@ -207,6 +276,19 @@ impl GenesisApp {
             info!(
                 "Inventory: {}",
                 if self.show_inventory {
+                    "OPEN"
+                } else {
+                    "CLOSED"
+                }
+            );
+        }
+
+        // Handle crafting toggle (C key)
+        if self.input.is_key_just_pressed(KeyCode::C) {
+            self.show_crafting = !self.show_crafting;
+            info!(
+                "Crafting: {}",
+                if self.show_crafting {
                     "OPEN"
                 } else {
                     "CLOSED"
@@ -311,6 +393,12 @@ impl GenesisApp {
         // Update audio system
         self.update_audio(dt, player_pos.x, player_pos.y);
 
+        // Update crafting system (check hot-reload, process events)
+        self.update_crafting(dt);
+
+        // Update combat system (process events, update cooldowns)
+        self.update_combat(dt);
+
         // Check for chunk changes and spawn/despawn NPCs
         self.update_npc_chunks();
 
@@ -376,8 +464,7 @@ impl GenesisApp {
             for dy in -render_distance..=render_distance {
                 let old_visible_chunk = (old_chunk.0 + dx, old_chunk.1 + dy);
                 // Check if this chunk is still visible from new position
-                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs()
-                    <= render_distance
+                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs() <= render_distance
                     && (old_visible_chunk.1 - current_chunk.1).abs() <= render_distance;
 
                 if !still_visible && self.npc_spawner.get_chunk_npcs(old_visible_chunk).is_some() {
@@ -388,9 +475,10 @@ impl GenesisApp {
 
         // Load new chunks
         for chunk_pos in chunks_to_load {
-            let count = self
-                .npc_spawner
-                .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
+            let count = self.npc_spawner.on_chunk_loaded(
+                chunk_pos,
+                self.gameplay.npc_manager_mut(),
+            );
             if count > 0 {
                 debug!("Spawned {} NPCs in chunk {:?}", count, chunk_pos);
             }
@@ -398,9 +486,10 @@ impl GenesisApp {
 
         // Unload old chunks
         for chunk_pos in chunks_to_unload {
-            let count = self
-                .npc_spawner
-                .on_chunk_unloaded(chunk_pos, self.gameplay.npc_manager_mut());
+            let count = self.npc_spawner.on_chunk_unloaded(
+                chunk_pos,
+                self.gameplay.npc_manager_mut(),
+            );
             if count > 0 {
                 debug!("Despawned {} NPCs from chunk {:?}", count, chunk_pos);
             }
@@ -424,9 +513,10 @@ impl GenesisApp {
         for dx in -render_distance..=render_distance {
             for dy in -render_distance..=render_distance {
                 let chunk_pos = (current_chunk.0 + dx, current_chunk.1 + dy);
-                let count = self
-                    .npc_spawner
-                    .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
+                let count = self.npc_spawner.on_chunk_loaded(
+                    chunk_pos,
+                    self.gameplay.npc_manager_mut(),
+                );
                 total_spawned += count;
             }
         }
@@ -455,9 +545,7 @@ impl GenesisApp {
     fn update_biome_music(&mut self) {
         // Get current biome from player position
         let player_pos = self.gameplay.player_position();
-        let biome = self
-            .terrain_service
-            .get_biome_at(player_pos.0, player_pos.1);
+        let biome = self.terrain_service.get_biome_at(player_pos.0, player_pos.1);
 
         // Map biome to music track (if different from current)
         #[allow(clippy::match_same_arms)]
@@ -491,14 +579,12 @@ impl GenesisApp {
 
         // Day/night ambient layers
         if is_night {
-            self.audio
-                .fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
+            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
             self.audio.fade_out_ambient("day", 2.0);
         } else if is_dawn_dusk {
             // Dawn/dusk transition - both layers at reduced volume
             self.audio.fade_in_ambient("day", "ambient/birds", 0.3, 2.0);
-            self.audio
-                .fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
+            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
         } else {
             self.audio.fade_in_ambient("day", "ambient/birds", 0.5, 2.0);
             self.audio.fade_out_ambient("night", 2.0);
@@ -507,15 +593,13 @@ impl GenesisApp {
         // Weather-based ambient
         if self.environment.weather.is_raining() {
             let rain_volume = self.environment.weather.rain_intensity();
-            self.audio
-                .fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
+            self.audio.fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
         } else {
             self.audio.fade_out_ambient("rain", 2.0);
         }
 
         if self.environment.weather.is_stormy() {
-            self.audio
-                .fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
+            self.audio.fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
         } else {
             self.audio.fade_out_ambient("thunder", 1.0);
         }
@@ -523,8 +607,7 @@ impl GenesisApp {
         // Wind based on weather intensity
         let wind_volume = self.environment.weather.wind_strength() * 0.4;
         if wind_volume > 0.1 {
-            self.audio
-                .fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
+            self.audio.fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
         } else {
             self.audio.fade_out_ambient("wind", 2.0);
         }
@@ -545,6 +628,186 @@ impl GenesisApp {
     pub fn play_ui_sound(&mut self, name: &str) {
         let event = SoundEvent::new(AudioCategory::Ui, name);
         self.audio.queue_sound(event);
+    }
+
+    /// Updates crafting system for the frame.
+    fn update_crafting(&mut self, _dt: f32) {
+        // Check for recipe hot-reload in debug mode
+        if self.recipe_loader.check_hot_reload() {
+            info!("Recipes hot-reloaded");
+        }
+
+        // Process pending crafting events
+        let result = self.crafting_events.process_events(Some(&mut self.audio));
+
+        // Handle completed crafts
+        for (recipe_id, _output_item, _quantity) in &result.completed_crafts {
+            // Add to recent recipes
+            self.crafting_persistence.add_recent(*recipe_id);
+
+            // Record for profiling
+            if let Some(recipe) = self.recipe_loader.get_recipe(recipe_id.raw()) {
+                self.crafting_profiler.record_craft(recipe_id.raw(), &recipe.category);
+            }
+        }
+
+        // Handle learned recipes
+        for recipe_id in &result.recipes_learned {
+            self.crafting_persistence.learn_recipe(*recipe_id);
+        }
+
+        // Update playtime for frequency stats
+        let playtime = self.gameplay.game_time();
+        self.crafting_profiler.update_playtime(playtime);
+    }
+
+    /// Updates combat system for the frame.
+    fn update_combat(&mut self, dt: f32) {
+        // Check for weapon hot-reload in debug mode
+        if self.weapon_loader.check_hot_reload().unwrap_or(false) {
+            info!("Weapons hot-reloaded");
+        }
+
+        // Handle attack input
+        let attack_pressed = self.input.is_key_just_pressed(genesis_gameplay::input::KeyCode::Space);
+        let attack_held_input = self.input.is_key_pressed(genesis_gameplay::input::KeyCode::Space);
+
+        // Track attack hold time for charge attacks
+        if attack_held_input {
+            if !self.attack_held {
+                // Just started holding
+                self.attack_held = true;
+                self.attack_hold_time = 0.0;
+            } else {
+                self.attack_hold_time += dt;
+            }
+        } else if self.attack_held {
+            // Just released - could trigger charged attack based on hold_time
+            self.attack_held = false;
+            // Reset hold time
+            self.attack_hold_time = 0.0;
+        }
+
+        // Process attack if button was just pressed
+        if attack_pressed {
+            // Get player position and direction for attack
+            let player_pos = self.gameplay.player.position();
+            let player_vel = self.gameplay.player.velocity();
+
+            // Determine attack direction from movement or facing
+            let direction = if player_vel.x.abs() > 0.1 || player_vel.y.abs() > 0.1 {
+                let len = (player_vel.x * player_vel.x + player_vel.y * player_vel.y).sqrt();
+                (player_vel.x / len, player_vel.y / len)
+            } else {
+                (1.0, 0.0) // Default facing right
+            };
+
+            // Check if player can attack (has stamina, no cooldown)
+            let stamina_cost = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                self.weapon_loader.registry().get(weapon_id)
+                    .map(|w| w.stamina_cost)
+                    .unwrap_or(10.0)
+            } else {
+                5.0 // Unarmed attack cost
+            };
+
+            if self.combat_persistence.player().can_attack(stamina_cost) {
+                use crate::combat_events::{AttackCategory, AttackTarget, CombatEventHandler};
+
+                // Determine attack type based on equipped weapon
+                let attack_type = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                    self.weapon_loader.registry().get(weapon_id)
+                        .map(|w| match w.category {
+                            crate::weapon_loader::WeaponCategory::Sword |
+                            crate::weapon_loader::WeaponCategory::Greatsword |
+                            crate::weapon_loader::WeaponCategory::Axe |
+                            crate::weapon_loader::WeaponCategory::Greataxe => AttackCategory::MeleeSwing,
+                            crate::weapon_loader::WeaponCategory::Dagger |
+                            crate::weapon_loader::WeaponCategory::Spear => AttackCategory::MeleeThrust,
+                            crate::weapon_loader::WeaponCategory::Bow |
+                            crate::weapon_loader::WeaponCategory::Crossbow => AttackCategory::RangedBow,
+                            crate::weapon_loader::WeaponCategory::Gun => AttackCategory::RangedGun,
+                            crate::weapon_loader::WeaponCategory::Staff => AttackCategory::MagicSpell,
+                            _ => AttackCategory::MeleeSwing,
+                        })
+                        .unwrap_or(AttackCategory::Unarmed)
+                } else {
+                    AttackCategory::Unarmed
+                };
+
+                // Create attack event
+                let event = CombatEventHandler::make_attack_event(
+                    genesis_common::EntityId::from_raw(1), // Player entity ID
+                    AttackTarget::Direction(direction.0, direction.1),
+                    attack_type,
+                    (player_pos.x, player_pos.y),
+                    direction,
+                );
+                self.combat_events.queue_event(event);
+
+                // Consume stamina
+                let current_stamina = self.combat_persistence.player().stamina;
+                self.combat_persistence.player_mut().set_stamina(current_stamina - stamina_cost);
+
+                // Set attack cooldown based on weapon
+                let cooldown = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                    self.weapon_loader.registry().get(weapon_id)
+                        .map(|w| 1.0 / w.attack_speed)
+                        .unwrap_or(0.5)
+                } else {
+                    0.3 // Unarmed attack cooldown
+                };
+                self.combat_persistence.player_mut().attack_cooldown = cooldown;
+
+                debug!("Player attacked with {:?}", attack_type);
+            }
+        }
+
+        // Start profiling event processing
+        self.combat_profiler.start_event_processing();
+
+        // Process pending combat events
+        let result = self.combat_events.process_events(Some(&mut self.audio));
+
+        // End profiling
+        self.combat_profiler.end_event_processing(
+            result.attacks.len() + result.hits.len() + result.deaths.len()
+        );
+
+        // Handle deaths
+        for death in &result.deaths {
+            if death.entity.raw() == 1 {
+                // Player died
+                self.combat_persistence.record_death(5.0); // 5 second respawn
+                info!("Player died!");
+            } else {
+                // Enemy died - record kill
+                self.combat_persistence.record_kill("enemy", 0, death.experience.into());
+            }
+        }
+
+        // Update combat persistence (cooldowns, status effects)
+        self.combat_persistence.update(dt);
+
+        // Regenerate stamina when not attacking
+        if !self.attack_held && self.combat_persistence.player().attack_cooldown <= 0.0 {
+            let current_stamina = self.combat_persistence.player().stamina;
+            let max_stamina = self.combat_persistence.player().max_stamina;
+            let regen_rate = 20.0; // Stamina per second
+            let new_stamina = (current_stamina + regen_rate * dt).min(max_stamina);
+            self.combat_persistence.player_mut().stamina = new_stamina;
+        }
+
+        // Update combat memory usage for profiling
+        self.combat_profiler.update_memory(
+            1, // Player entity
+            0, // Active projectiles (would come from a projectile system)
+            self.combat_persistence.player().status_effects.len(),
+            self.weapon_loader.registry().len(),
+        );
+
+        // End combat profiler frame
+        self.combat_profiler.end_frame();
     }
 
     /// Render the frame.
@@ -860,20 +1123,22 @@ fn render_interaction_prompt(ctx: &egui::Context, data: &InteractionData) {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .resizable(false)
             .collapsible(false)
-            .show(ctx, |ui| match data.mode {
-                NPCInteractionMode::Trading => {
-                    ui.label("Trading with Merchant");
-                    ui.separator();
-                    ui.label("(Trade UI coming soon...)");
-                    ui.separator();
-                    ui.label("Press [E] to close");
-                },
-                NPCInteractionMode::Dialogue => {
-                    ui.label("NPC says: Hello, traveler!");
-                    ui.separator();
-                    ui.label("Press [E] to close");
-                },
-                NPCInteractionMode::None => {},
+            .show(ctx, |ui| {
+                match data.mode {
+                    NPCInteractionMode::Trading => {
+                        ui.label("Trading with Merchant");
+                        ui.separator();
+                        ui.label("(Trade UI coming soon...)");
+                        ui.separator();
+                        ui.label("Press [E] to close");
+                    },
+                    NPCInteractionMode::Dialogue => {
+                        ui.label("NPC says: Hello, traveler!");
+                        ui.separator();
+                        ui.label("Press [E] to close");
+                    },
+                    NPCInteractionMode::None => {},
+                }
             });
     } else if data.can_interact {
         // Show interaction prompt
