@@ -1,328 +1,222 @@
-# PROMPT — Infra Agent — Iteration 4
+# PROMPT — Kernel Agent — Iteration 6
 
-> **Branch**: `infra-agent`
-> **Focus**: Asset pipeline, localization, crash reporting, analytics
+> **Branch**: `kernel-agent`
+> **Focus**: Quadtree spatial partitioning, multi-chunk visible area rendering, collision detection, top-down physics
 
 ## Your Mission
 
-Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
+Implement high-performance spatial systems for the pixel simulation. The current system only renders a single 256x256 chunk - we need to render the visible area efficiently using quadtree optimization.
 
 ---
 
 ## Tasks
 
-### I-12: Asset Pipeline (P0)
-**File**: `crates/genesis-tools/src/assets.rs` and `scripts/build_assets.sh`
+### K-24: Quadtree Spatial Partitioning (P0)
+**File**: `crates/genesis-kernel/src/quadtree.rs`
 
-Implement asset loading and processing:
-
-```rust
-use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
-
-pub struct AssetManager {
-    base_path: PathBuf,
-    cache: HashMap<AssetId, CachedAsset>,
-    manifest: AssetManifest,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetManifest {
-    pub version: u32,
-    pub assets: HashMap<String, AssetEntry>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetEntry {
-    pub path: String,
-    pub asset_type: AssetType,
-    pub hash: String,
-    pub size: u64,
-    pub compressed: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub enum AssetType {
-    Texture,
-    Sound,
-    Music,
-    Font,
-    Shader,
-    Data,
-    Localization,
-}
-
-pub struct CachedAsset {
-    pub data: Vec<u8>,
-    pub asset_type: AssetType,
-    pub loaded_at: std::time::Instant,
-}
-
-impl AssetManager {
-    pub fn new(base_path: impl AsRef<Path>) -> Result<Self, AssetError>;
-
-    pub fn load(&mut self, id: &str) -> Result<&CachedAsset, AssetError>;
-    pub fn load_async(&mut self, id: &str) -> AssetHandle;
-    pub fn unload(&mut self, id: &str);
-
-    pub fn preload_group(&mut self, group: &str);
-    pub fn get_memory_usage(&self) -> usize;
-    pub fn clear_cache(&mut self);
-}
-
-pub enum AssetError {
-    NotFound(String),
-    IoError(std::io::Error),
-    DecompressionError,
-    ManifestCorrupt,
-}
-```
-
-Also create `scripts/build_assets.sh`:
-```bash
-#!/bin/bash
-# Build and compress game assets
-
-set -e
-
-ASSET_DIR="${1:-assets}"
-OUTPUT_DIR="${2:-target/assets}"
-
-echo "Building assets from $ASSET_DIR to $OUTPUT_DIR"
-
-# Create manifest, compress textures, etc.
-```
-
-Requirements:
-- Manifest-based asset tracking
-- LZ4 compression for large assets
-- Async loading with handles
-- Memory budget enforcement
-- Hot reload in debug mode
-
-### I-13: Localization System (P0)
-**File**: `crates/genesis-tools/src/localization.rs`
-
-Implement multi-language support:
+Implement a quadtree for efficient spatial queries and simulation optimization:
 
 ```rust
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-
-pub struct Localization {
-    current_locale: String,
-    strings: HashMap<String, HashMap<String, String>>, // locale -> key -> value
-    fallback_locale: String,
+/// Quadtree node for spatial partitioning
+pub struct QuadTree<T> {
+    bounds: Rect,
+    max_objects: usize,
+    max_levels: usize,
+    level: usize,
+    objects: Vec<(Rect, T)>,
+    children: Option<Box<[QuadTree<T>; 4]>>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LocaleFile {
-    pub locale: String,
-    pub name: String,
-    pub strings: HashMap<String, String>,
+impl<T> QuadTree<T> {
+    pub fn new(bounds: Rect, max_objects: usize, max_levels: usize) -> Self;
+    
+    /// Insert an object with its bounding rect
+    pub fn insert(&mut self, bounds: Rect, object: T) -> bool;
+    
+    /// Query all objects that intersect with the given rect
+    pub fn query(&self, range: Rect) -> Vec<&T>;
+    
+    /// Query objects with their bounds
+    pub fn query_with_bounds(&self, range: Rect) -> Vec<(&Rect, &T)>;
+    
+    /// Clear all objects
+    pub fn clear(&mut self);
+    
+    /// Get statistics (node count, object count, depth)
+    pub fn stats(&self) -> QuadTreeStats;
 }
 
-impl Localization {
-    pub fn new(default_locale: &str) -> Self;
-
-    pub fn load_locale(&mut self, path: impl AsRef<Path>) -> Result<(), LocaleError>;
-    pub fn set_locale(&mut self, locale: &str) -> Result<(), LocaleError>;
-    pub fn get_locale(&self) -> &str;
-    pub fn available_locales(&self) -> Vec<&str>;
-
-    pub fn get(&self, key: &str) -> &str;
-    pub fn get_formatted(&self, key: &str, args: &[(&str, &str)]) -> String;
-    pub fn get_plural(&self, key: &str, count: u32) -> String;
+/// Simple rectangle for bounds
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
-// Macro for compile-time key checking (optional)
-#[macro_export]
-macro_rules! t {
-    ($loc:expr, $key:literal) => {
-        $loc.get($key)
-    };
-    ($loc:expr, $key:literal, $($arg:tt)*) => {
-        $loc.get_formatted($key, &[$($arg)*])
-    };
-}
-```
-
-Create locale files structure:
-```
-assets/locales/
-├── en.json
-├── es.json
-├── fr.json
-├── de.json
-├── ja.json
-└── zh.json
-```
-
-Requirements:
-- JSON locale files
-- Fallback to default locale
-- Format string interpolation
-- Plural forms support
-- Runtime language switching
-
-### I-14: Crash Reporting (P1)
-**File**: `crates/genesis-engine/src/crash_report.rs`
-
-Implement crash capture and reporting:
-
-```rust
-use std::panic;
-use backtrace::Backtrace;
-
-pub struct CrashReporter {
-    report_dir: PathBuf,
-    app_version: String,
-    enabled: bool,
-}
-
-#[derive(Serialize)]
-pub struct CrashReport {
-    pub timestamp: String,
-    pub app_version: String,
-    pub os: String,
-    pub arch: String,
-    pub panic_message: String,
-    pub backtrace: String,
-    pub system_info: SystemInfo,
-    pub recent_logs: Vec<String>,
-}
-
-#[derive(Serialize)]
-pub struct SystemInfo {
-    pub os_version: String,
-    pub cpu: String,
-    pub ram_mb: u64,
-    pub gpu: Option<String>,
-}
-
-impl CrashReporter {
-    pub fn new(report_dir: impl AsRef<Path>, app_version: &str) -> Self;
-
-    pub fn install_panic_hook(&self);
-
-    fn capture_crash(&self, panic_info: &panic::PanicInfo) -> CrashReport;
-    fn write_report(&self, report: &CrashReport) -> Result<PathBuf, std::io::Error>;
-
-    pub fn get_pending_reports(&self) -> Vec<PathBuf>;
-    pub fn submit_report(&self, path: &Path) -> Result<(), ReportError>;
-    pub fn delete_report(&self, path: &Path);
-}
-
-pub enum ReportError {
-    IoError(std::io::Error),
-    NetworkError(String),
-    ServerError(u16),
+impl Rect {
+    pub fn contains_point(&self, x: f32, y: f32) -> bool;
+    pub fn intersects(&self, other: &Rect) -> bool;
+    pub fn contains(&self, other: &Rect) -> bool;
 }
 ```
 
-Requirements:
-- Custom panic hook
-- Backtrace capture
-- System info collection
-- Report file persistence
-- Optional upload (disabled by default)
-
-### I-15: Telemetry & Analytics (P2)
-**File**: `crates/genesis-engine/src/analytics.rs`
-
-Implement opt-in gameplay analytics:
-
-```rust
-use serde::Serialize;
-
-pub struct Analytics {
-    enabled: bool,
-    session_id: String,
-    events: Vec<AnalyticsEvent>,
-    flush_interval: std::time::Duration,
-}
-
-#[derive(Serialize)]
-pub struct AnalyticsEvent {
-    pub timestamp: u64,
-    pub event_type: String,
-    pub properties: HashMap<String, serde_json::Value>,
-}
-
-pub struct AnalyticsConfig {
-    pub enabled: bool,
-    pub endpoint: Option<String>,
-    pub flush_interval_secs: u64,
-    pub batch_size: usize,
-}
-
-impl Analytics {
-    pub fn new(config: AnalyticsConfig) -> Self;
-
-    pub fn track(&mut self, event_type: &str, properties: HashMap<String, serde_json::Value>);
-
-    // Pre-defined events
-    pub fn track_session_start(&mut self);
-    pub fn track_session_end(&mut self, play_time_secs: u64);
-    pub fn track_level_complete(&mut self, level: &str, time_secs: u64);
-    pub fn track_death(&mut self, cause: &str, location: (f32, f32));
-    pub fn track_achievement(&mut self, achievement: &str);
-
-    pub fn flush(&mut self);
-
-    pub fn set_enabled(&mut self, enabled: bool);
-    pub fn is_enabled(&self) -> bool;
-}
-```
-
-Requirements:
-- Disabled by default (opt-in)
-- Local event buffering
-- Batch submission
-- No PII collection
-- Session tracking
+**Tests**:
+- Insert 10,000 objects, query visible area < 1ms
+- Proper subdivision when max_objects exceeded
 
 ---
 
-## Validation Loop
+### K-25: Multi-Chunk Visible Area Rendering (P0)
+**File**: `crates/genesis-kernel/src/chunk_manager.rs`
+
+Implement a chunk manager that loads/unloads chunks based on camera position:
+
+```rust
+/// Manages multiple chunks for visible area rendering
+pub struct ChunkManager {
+    chunks: HashMap<(i32, i32), Chunk>,
+    chunk_size: u32,
+    render_distance: u32,  // How many chunks to keep loaded around camera
+    center_chunk: (i32, i32),
+}
+
+impl ChunkManager {
+    pub fn new(chunk_size: u32, render_distance: u32) -> Self;
+    
+    /// Update which chunks are loaded based on camera position
+    pub fn update_visible(&mut self, camera: &Camera, world_gen: &dyn WorldGenerator);
+    
+    /// Get a cell at world coordinates (across chunk boundaries)
+    pub fn get_cell(&self, world_x: i32, world_y: i32) -> Option<&Cell>;
+    
+    /// Set a cell at world coordinates
+    pub fn set_cell(&mut self, world_x: i32, world_y: i32, cell: Cell);
+    
+    /// Get all visible chunks for rendering
+    pub fn visible_chunks(&self) -> impl Iterator<Item = &Chunk>;
+    
+    /// Convert world coords to chunk coords
+    pub fn world_to_chunk(x: i32, y: i32, chunk_size: u32) -> (i32, i32);
+}
+
+/// A single chunk of the world
+pub struct Chunk {
+    pub position: (i32, i32),  // Chunk coordinates
+    pub cells: Vec<Cell>,
+    pub dirty: bool,  // Needs GPU upload
+}
+```
+
+**Integration**: Update `render.rs` to render all visible chunks, not just one.
+
+---
+
+### K-26: Player-Terrain Collision Detection (P0)
+**File**: `crates/genesis-kernel/src/collision.rs` (extend existing)
+
+Add player collision detection against terrain cells:
+
+```rust
+/// Collision result from terrain check
+#[derive(Debug, Clone)]
+pub struct TerrainCollision {
+    pub collided: bool,
+    pub normal: (f32, f32),      // Push direction
+    pub penetration: f32,        // How far into solid
+    pub cell_type: Option<u16>,  // What material was hit
+}
+
+/// Check collision between a point/circle and terrain
+pub fn check_terrain_collision(
+    chunk_manager: &ChunkManager,
+    position: (f32, f32),
+    radius: f32,
+) -> TerrainCollision;
+
+/// Check collision for a moving object (sweep test)
+pub fn sweep_terrain_collision(
+    chunk_manager: &ChunkManager,
+    start: (f32, f32),
+    end: (f32, f32),
+    radius: f32,
+) -> (TerrainCollision, (f32, f32));  // Returns collision and safe position
+
+/// Resolve collision by pushing entity out of terrain
+pub fn resolve_collision(
+    position: (f32, f32),
+    collision: &TerrainCollision,
+) -> (f32, f32);
+```
+
+---
+
+### K-27: Top-Down Physics Model (P1)
+**File**: `crates/genesis-kernel/src/topdown_physics.rs`
+
+Replace platformer gravity with top-down friction-based physics:
+
+```rust
+/// Physics configuration for top-down movement
+#[derive(Debug, Clone)]
+pub struct TopDownPhysicsConfig {
+    pub friction: f32,           // Ground friction (0.9 = slippery, 0.5 = grippy)
+    pub water_friction: f32,     // Higher friction in water
+    pub sand_friction: f32,      // Sand slows you down
+    pub acceleration: f32,       // How fast to reach target velocity
+    pub max_speed: f32,          // Maximum movement speed
+}
+
+impl Default for TopDownPhysicsConfig {
+    fn default() -> Self {
+        Self {
+            friction: 0.85,
+            water_friction: 0.95,
+            sand_friction: 0.7,
+            acceleration: 800.0,
+            max_speed: 200.0,
+        }
+    }
+}
+
+/// Apply top-down physics to velocity
+pub fn apply_topdown_physics(
+    velocity: &mut (f32, f32),
+    input_direction: (f32, f32),
+    terrain_type: u16,
+    config: &TopDownPhysicsConfig,
+    dt: f32,
+);
+
+/// Get friction multiplier for terrain type
+pub fn terrain_friction(material: u16, config: &TopDownPhysicsConfig) -> f32;
+```
+
+The feel should be:
+- Smooth acceleration when pressing movement
+- Gradual slowdown when releasing (not instant stop)
+- Different terrain affects speed (water = slow, sand = slower)
+- No gravity pulling down - this is top-down view
+
+---
+
+## Validation
 
 After each task:
-
 ```bash
-cargo fmt
+cargo fmt --check
 cargo clippy -- -D warnings
-cargo test --workspace
+cargo test -p genesis-kernel
 ```
 
-If ANY step fails, FIX IT before committing.
-
----
-
-## Commit Convention
-
+## Commit Format
 ```
-[infra] feat: I-12 asset pipeline
-[infra] feat: I-13 localization system
-[infra] feat: I-14 crash reporting
-[infra] feat: I-15 telemetry and analytics
+[kernel] feat: K-XX description
 ```
 
----
-
-## Dependencies
-
-Add to `crates/genesis-engine/Cargo.toml`:
-```toml
-backtrace = "0.3"
-lz4 = "1.24"
-```
-
----
-
-## Integration Notes
-
-- I-12 assets used by all crates for loading resources
-- I-13 localization integrated with all UI
-- I-14 crash reporter installed at startup
-- I-15 analytics tracks gameplay events
-- Create sample locale files in `assets/locales/`
+## Done Criteria
+- [ ] Quadtree with O(log n) spatial queries
+- [ ] Multi-chunk rendering with seamless boundaries
+- [ ] Player collision stops at solid terrain
+- [ ] Top-down physics feels smooth and responsive
