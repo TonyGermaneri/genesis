@@ -3,10 +3,14 @@
 //! This module provides the `GameState` struct which serves as the single source
 //! of truth for all game state, coordinating player, entities, and game systems.
 
+use genesis_common::EntityId;
+use serde::{Deserialize, Serialize};
+
+use crate::combat::CombatSystem;
 use crate::entity::EntityArena;
 use crate::input::Input;
+use crate::npc::{NPCManager, NPCStorage, NPCType, NPCWorld};
 use crate::player::Player;
-use serde::{Deserialize, Serialize};
 
 /// Central game state containing all gameplay data.
 ///
@@ -18,6 +22,12 @@ pub struct GameState {
     pub player: Player,
     /// All game entities
     pub entities: EntityArena,
+    /// NPC manager for AI behaviors
+    pub npc_manager: NPCManager,
+    /// Combat system for attacks and damage
+    pub combat_system: CombatSystem,
+    /// Current NPC interaction state
+    pub npc_interaction: NPCInteractionState,
     /// Current game time in seconds
     pub game_time: f64,
     /// Whether the game is paused
@@ -26,6 +36,29 @@ pub struct GameState {
     pub world_seed: u64,
     /// Accumulated time for fixed timestep updates
     accumulator: f64,
+}
+
+/// State of NPC interaction (dialogue, trade, etc.).
+#[derive(Debug, Clone, Default)]
+pub struct NPCInteractionState {
+    /// Entity ID of the NPC being interacted with (if any)
+    pub interacting_with: Option<EntityId>,
+    /// Current interaction mode
+    pub mode: NPCInteractionMode,
+    /// Nearest interactable NPC and distance (for UI prompt)
+    pub nearest_interactable: Option<(EntityId, f32)>,
+}
+
+/// Mode of player-NPC interaction.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NPCInteractionMode {
+    /// Not interacting with anyone
+    #[default]
+    None,
+    /// In dialogue with an NPC
+    Dialogue,
+    /// Trading with a merchant NPC
+    Trading,
 }
 
 /// Fixed timestep for physics updates (60 updates per second).
@@ -40,6 +73,9 @@ impl GameState {
         Self {
             player: Player::new(crate::input::Vec2::ZERO),
             entities: EntityArena::new(),
+            npc_manager: NPCManager::new(),
+            combat_system: CombatSystem::default(),
+            npc_interaction: NPCInteractionState::default(),
             game_time: 0.0,
             paused: false,
             world_seed: seed,
@@ -53,6 +89,9 @@ impl GameState {
         Self {
             player: Player::new(crate::input::Vec2::new(position.0, position.1)),
             entities: EntityArena::new(),
+            npc_manager: NPCManager::new(),
+            combat_system: CombatSystem::default(),
+            npc_interaction: NPCInteractionState::default(),
             game_time: 0.0,
             paused: false,
             world_seed: seed,
@@ -91,6 +130,24 @@ impl GameState {
     fn fixed_update(&mut self, dt: f32, input: &Input) {
         // Update player based on input
         self.player.update(input, dt);
+
+        // Update NPCs with player position for AI targeting
+        let player_pos = self.player_position();
+        // Use a simple entity ID for the player (ID 0)
+        let player_id = EntityId::from_raw(0);
+
+        // Create simple world/storage adapters
+        let world = SimpleNPCWorld;
+        let mut storage = SimpleNPCStorage;
+
+        self.npc_manager.update(
+            dt,
+            player_id,
+            player_pos,
+            &world,
+            &mut storage,
+            &mut self.combat_system,
+        );
     }
 
     /// Toggles the pause state of the game.
@@ -157,10 +214,130 @@ impl GameState {
         &mut self.entities
     }
 
+    /// Returns a reference to the NPC manager.
+    #[must_use]
+    pub const fn npc_manager(&self) -> &NPCManager {
+        &self.npc_manager
+    }
+
+    /// Returns a mutable reference to the NPC manager.
+    pub fn npc_manager_mut(&mut self) -> &mut NPCManager {
+        &mut self.npc_manager
+    }
+
+    /// Returns the number of active NPCs.
+    #[must_use]
+    pub fn npc_count(&self) -> usize {
+        self.npc_manager.len()
+    }
+
+    /// Returns a reference to the combat system.
+    #[must_use]
+    pub const fn combat_system(&self) -> &CombatSystem {
+        &self.combat_system
+    }
+
+    /// Returns a mutable reference to the combat system.
+    pub fn combat_system_mut(&mut self) -> &mut CombatSystem {
+        &mut self.combat_system
+    }
+
+    /// Returns a reference to the NPC interaction state.
+    #[must_use]
+    pub const fn npc_interaction(&self) -> &NPCInteractionState {
+        &self.npc_interaction
+    }
+
+    /// Returns whether the player is currently interacting with an NPC.
+    #[must_use]
+    pub fn is_interacting(&self) -> bool {
+        self.npc_interaction.interacting_with.is_some()
+    }
+
+    /// Finds the nearest interactable NPC within range of the player.
+    ///
+    /// Returns the entity ID and distance if found.
+    /// Only Merchant NPCs are currently interactable.
+    #[must_use]
+    pub fn find_nearest_interactable(&self, max_range: f32) -> Option<(EntityId, f32)> {
+        let player_pos = self.player_position();
+        let mut nearest: Option<(EntityId, f32)> = None;
+
+        // Iterate through all NPCs to find the nearest interactable one
+        for id in 0..self.npc_manager.len() as u64 {
+            let entity_id = EntityId::from_raw(id + 1); // NPC IDs start at 1
+            if let Some(npc) = self.npc_manager.get(entity_id) {
+                // Only Merchant NPCs are interactable for now
+                if npc.npc_type != NPCType::Merchant {
+                    continue;
+                }
+
+                let dx = npc.position.0 - player_pos.0;
+                let dy = npc.position.1 - player_pos.1;
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                if dist <= max_range {
+                    if let Some((_, current_dist)) = nearest {
+                        if dist < current_dist {
+                            nearest = Some((entity_id, dist));
+                        }
+                    } else {
+                        nearest = Some((entity_id, dist));
+                    }
+                }
+            }
+        }
+
+        nearest
+    }
+
+    /// Updates the nearest interactable NPC (call each frame).
+    pub fn update_nearest_interactable(&mut self) {
+        const INTERACTION_RANGE: f32 = 3.0;
+        self.npc_interaction.nearest_interactable = self.find_nearest_interactable(INTERACTION_RANGE);
+    }
+
+    /// Attempts to start an interaction with the nearest NPC.
+    ///
+    /// Returns true if an interaction was started.
+    pub fn try_interact(&mut self) -> bool {
+        // Don't allow interaction if already interacting
+        if self.is_interacting() {
+            return false;
+        }
+
+        // Find nearest interactable NPC
+        const INTERACTION_RANGE: f32 = 3.0;
+        if let Some((entity_id, _dist)) = self.find_nearest_interactable(INTERACTION_RANGE) {
+            if let Some(npc) = self.npc_manager.get(entity_id) {
+                // Start appropriate interaction based on NPC type
+                let mode = match npc.npc_type {
+                    NPCType::Merchant => NPCInteractionMode::Trading,
+                    _ => NPCInteractionMode::Dialogue,
+                };
+
+                self.npc_interaction.interacting_with = Some(entity_id);
+                self.npc_interaction.mode = mode;
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Ends the current NPC interaction.
+    pub fn end_interaction(&mut self) {
+        self.npc_interaction.interacting_with = None;
+        self.npc_interaction.mode = NPCInteractionMode::None;
+    }
+
     /// Resets the game state with a new seed.
     pub fn reset(&mut self, seed: u64) {
         self.player = Player::new(crate::input::Vec2::ZERO);
         self.entities = EntityArena::new();
+        self.npc_manager = NPCManager::new();
+        self.combat_system = CombatSystem::default();
+        self.npc_interaction = NPCInteractionState::default();
         self.game_time = 0.0;
         self.paused = false;
         self.world_seed = seed;
@@ -302,6 +479,76 @@ impl GameplaySystem {
     /// Get a mutable reference to the player.
     pub fn player_mut(&mut self) -> &mut crate::player::Player {
         self.state.player_mut()
+    }
+}
+
+// =============================================================================
+// Simple NPC trait implementations for basic world/storage integration
+// =============================================================================
+
+/// Simple NPC world implementation for pathfinding and LOS.
+///
+/// This is a basic implementation that always allows movement and LOS.
+/// For more advanced gameplay, this should be replaced with actual world queries.
+struct SimpleNPCWorld;
+
+impl NPCWorld for SimpleNPCWorld {
+    fn has_line_of_sight(&self, _from: (f32, f32), _to: (f32, f32)) -> bool {
+        // Simple implementation: always have LOS
+        // In a real game, this would ray-cast through the tile map
+        true
+    }
+
+    fn get_next_waypoint(&self, from: (f32, f32), to: (f32, f32)) -> Option<(f32, f32)> {
+        // Simple implementation: direct path to target
+        // In a real game, this would use A* pathfinding
+        let dx = to.0 - from.0;
+        let dy = to.1 - from.1;
+        let dist = (dx * dx + dy * dy).sqrt();
+        if dist < 0.1 {
+            None
+        } else {
+            // Return a point 1 unit toward the target
+            let step = 1.0_f32.min(dist);
+            Some((from.0 + dx / dist * step, from.1 + dy / dist * step))
+        }
+    }
+
+    fn is_walkable(&self, _pos: (f32, f32)) -> bool {
+        // Simple implementation: everywhere is walkable
+        // In a real game, this would check collision with tiles
+        true
+    }
+}
+
+/// Simple NPC storage for entity data.
+///
+/// This is a no-op implementation since we store NPC state directly in NPCManager.
+/// For more advanced systems, this would integrate with the ECS.
+struct SimpleNPCStorage;
+
+impl NPCStorage for SimpleNPCStorage {
+    fn get_health_percent(&self, _entity: EntityId) -> Option<f32> {
+        // NPCs have full health by default
+        Some(1.0)
+    }
+
+    fn get_position(&self, _entity: EntityId) -> Option<(f32, f32)> {
+        // Position is managed by NPCManager directly
+        None
+    }
+
+    fn set_position(&mut self, _entity: EntityId, _pos: (f32, f32)) {
+        // Position is managed by NPCManager directly
+    }
+
+    fn get_facing(&self, _entity: EntityId) -> Option<f32> {
+        // Facing is managed by NPCManager directly
+        None
+    }
+
+    fn set_facing(&mut self, _entity: EntityId, _facing: f32) {
+        // Facing is managed by NPCManager directly
     }
 }
 

@@ -35,6 +35,7 @@ pub mod inventory;
 pub mod inventory_ui;
 pub mod needs;
 pub mod npc;
+pub mod npc_spawning;
 pub mod physics;
 pub mod plants;
 pub mod player;
@@ -64,6 +65,7 @@ pub mod prelude {
     pub use crate::inventory_ui::*;
     pub use crate::needs::*;
     pub use crate::npc::*;
+    pub use crate::npc_spawning::*;
     pub use crate::physics::*;
     pub use crate::plants::*;
     pub use crate::player::*;

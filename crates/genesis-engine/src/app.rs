@@ -22,7 +22,7 @@ use crate::environment::EnvironmentState;
 use crate::input::InputHandler;
 use crate::perf::PerfMetrics;
 use crate::renderer::Renderer;
-use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming};
+use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
 
 /// Application mode (menu/playing/paused).
@@ -66,10 +66,18 @@ struct GenesisApp {
     perf_metrics: PerfMetrics,
     /// Chunk-specific metrics
     chunk_metrics: ChunkMetrics,
+    /// NPC-specific metrics
+    npc_metrics: NpcMetrics,
 
     // === World Generation ===
     /// Terrain generation service with biome management
     terrain_service: TerrainGenerationService,
+
+    // === NPC Spawning ===
+    /// NPC chunk spawner for loading/unloading NPCs with chunks
+    npc_spawner: genesis_gameplay::NPCChunkSpawner,
+    /// Last player chunk position (for detecting chunk changes)
+    last_player_chunk: (i32, i32),
 
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
@@ -108,9 +116,21 @@ impl GenesisApp {
         // Set player as grounded for top-down movement
         gameplay.player.set_grounded(true);
 
+        // Create NPC chunk spawner with the world seed
+        let npc_spawn_config = genesis_gameplay::NPCSpawnConfig::with_seed(seed);
+        let npc_spawner = genesis_gameplay::NPCChunkSpawner::new(npc_spawn_config);
+
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
+
+        // Calculate initial player chunk
+        let player_pos = gameplay.player_position();
+        let chunk_size = 256; // Default chunk size
+        let initial_chunk = (
+            (player_pos.0 / chunk_size as f32).floor() as i32,
+            (player_pos.1 / chunk_size as f32).floor() as i32,
+        );
 
         Self {
             show_debug: config.show_debug_overlay,
@@ -126,7 +146,10 @@ impl GenesisApp {
             environment: EnvironmentState::new(),
             perf_metrics: PerfMetrics::new(120),
             chunk_metrics: ChunkMetrics::new(),
+            npc_metrics: NpcMetrics::new(),
             terrain_service,
+            npc_spawner,
+            last_player_chunk: initial_chunk,
 
             gameplay,
             camera,
@@ -195,6 +218,20 @@ impl GenesisApp {
             debug!("Hotbar slot selected: {}", slot + 1);
         }
 
+        // Handle NPC interaction (E key)
+        if self.input.is_key_just_pressed(KeyCode::E) {
+            if self.gameplay.is_interacting() {
+                // End current interaction
+                self.gameplay.end_interaction();
+                info!("Ended NPC interaction");
+            } else if self.gameplay.try_interact() {
+                // Started new interaction
+                if let Some(entity_id) = self.gameplay.npc_interaction().interacting_with {
+                    info!("Started NPC interaction with {:?}", entity_id);
+                }
+            }
+        }
+
         // Update environment (time and weather)
         self.environment.update(dt);
 
@@ -236,12 +273,26 @@ impl GenesisApp {
         // This already returns the gameplay Input struct
         let input = self.input.get_input();
 
+        // Time NPC updates (NPCs are updated inside gameplay.update via fixed_update)
+        let npc_start = Instant::now();
+        
         // Update gameplay state (player, entities, etc.)
         self.gameplay.update(dt, &input);
+        
+        // Record NPC update timing
+        let npc_elapsed = npc_start.elapsed();
+        self.npc_metrics.record_ai_time(npc_elapsed);
+        self.npc_metrics.set_npc_count(self.gameplay.npc_count());
+
+        // Update nearest interactable NPC for UI prompt
+        self.gameplay.update_nearest_interactable();
 
         // Update camera to follow player
         let player_pos = self.gameplay.player.position();
         self.camera.center_on(player_pos.x, player_pos.y);
+
+        // Check for chunk changes and spawn/despawn NPCs
+        self.update_npc_chunks();
 
         // Update chunk manager camera position for multi-chunk streaming
         if let Some(renderer) = &mut self.renderer {
@@ -267,6 +318,106 @@ impl GenesisApp {
         let _ = self.timing.accumulate(dt);
     }
 
+    /// Updates NPC spawning/despawning based on player chunk position.
+    fn update_npc_chunks(&mut self) {
+        let player_pos = self.gameplay.player_position();
+        let chunk_size = self.npc_spawner.config().chunk_size as f32;
+        
+        let current_chunk = (
+            (player_pos.0 / chunk_size).floor() as i32,
+            (player_pos.1 / chunk_size).floor() as i32,
+        );
+
+        // Only update if player moved to a different chunk
+        if current_chunk == self.last_player_chunk {
+            return;
+        }
+
+        let old_chunk = self.last_player_chunk;
+        self.last_player_chunk = current_chunk;
+
+        // Calculate which chunks should be loaded (3x3 grid around player)
+        let render_distance = 1; // Load chunks within 1 chunk of player
+        let mut chunks_to_load = Vec::new();
+        let mut chunks_to_unload = Vec::new();
+
+        // Determine chunks that should be loaded around new position
+        for dx in -render_distance..=render_distance {
+            for dy in -render_distance..=render_distance {
+                let chunk = (current_chunk.0 + dx, current_chunk.1 + dy);
+                if self.npc_spawner.get_chunk_npcs(chunk).is_none() {
+                    chunks_to_load.push(chunk);
+                }
+            }
+        }
+
+        // Determine chunks that should be unloaded (were in range of old pos but not new)
+        for dx in -render_distance..=render_distance {
+            for dy in -render_distance..=render_distance {
+                let old_visible_chunk = (old_chunk.0 + dx, old_chunk.1 + dy);
+                // Check if this chunk is still visible from new position
+                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs() <= render_distance
+                    && (old_visible_chunk.1 - current_chunk.1).abs() <= render_distance;
+                
+                if !still_visible && self.npc_spawner.get_chunk_npcs(old_visible_chunk).is_some() {
+                    chunks_to_unload.push(old_visible_chunk);
+                }
+            }
+        }
+
+        // Load new chunks
+        for chunk_pos in chunks_to_load {
+            let count = self.npc_spawner.on_chunk_loaded(
+                chunk_pos,
+                self.gameplay.npc_manager_mut(),
+            );
+            if count > 0 {
+                debug!("Spawned {} NPCs in chunk {:?}", count, chunk_pos);
+            }
+        }
+
+        // Unload old chunks
+        for chunk_pos in chunks_to_unload {
+            let count = self.npc_spawner.on_chunk_unloaded(
+                chunk_pos,
+                self.gameplay.npc_manager_mut(),
+            );
+            if count > 0 {
+                debug!("Despawned {} NPCs from chunk {:?}", count, chunk_pos);
+            }
+        }
+    }
+
+    /// Spawns initial NPCs around the player's starting position.
+    fn spawn_initial_npcs(&mut self) {
+        let chunk_size = self.npc_spawner.config().chunk_size as f32;
+        let player_pos = self.gameplay.player_position();
+        
+        let current_chunk = (
+            (player_pos.0 / chunk_size).floor() as i32,
+            (player_pos.1 / chunk_size).floor() as i32,
+        );
+
+        // Load NPCs in 3x3 grid around player
+        let render_distance = 1;
+        let mut total_spawned = 0;
+
+        for dx in -render_distance..=render_distance {
+            for dy in -render_distance..=render_distance {
+                let chunk_pos = (current_chunk.0 + dx, current_chunk.1 + dy);
+                let count = self.npc_spawner.on_chunk_loaded(
+                    chunk_pos,
+                    self.gameplay.npc_manager_mut(),
+                );
+                total_spawned += count;
+            }
+        }
+
+        if total_spawned > 0 {
+            info!("Spawned {} initial NPCs around player", total_spawned);
+        }
+    }
+
     /// Render the frame.
     fn render(&mut self) {
         // Extract all data needed for UI before borrowing renderer
@@ -288,9 +439,21 @@ impl GenesisApp {
             biome_gen_peak_ms: biome_metrics.peak_generation_time_ms(),
             biome_chunks_generated: biome_metrics.total_chunks_generated(),
             biome_exceeds_budget: biome_metrics.exceeds_budget(),
+            npc_count: self.gameplay.npc_count(),
+            npc_update_avg_ms: self.npc_metrics.avg_ai_time_ms(),
+            npc_update_peak_ms: self.npc_metrics.peak_ai_time_ms(),
+            npc_exceeds_budget: self.npc_metrics.exceeds_budget(),
         };
         let environment_time = debug_data.time.clone();
         let environment_weather = debug_data.weather.clone();
+
+        // Collect interaction data for UI
+        let npc_interaction = self.gameplay.npc_interaction();
+        let interaction_data = InteractionData {
+            can_interact: npc_interaction.nearest_interactable.is_some(),
+            is_interacting: npc_interaction.interacting_with.is_some(),
+            mode: npc_interaction.mode,
+        };
 
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             // Use render_with_ui to draw world + egui overlay
@@ -306,6 +469,9 @@ impl GenesisApp {
 
                 // Always show HUD elements (hotbar, vitals, minimap)
                 render_hud(ctx, hotbar_slot, &environment_time, &environment_weather);
+
+                // Show interaction prompt if near an NPC
+                render_interaction_prompt(ctx, &interaction_data);
             });
 
             if let Err(e) = result {
@@ -331,6 +497,21 @@ struct DebugOverlayData {
     biome_gen_peak_ms: f64,
     biome_chunks_generated: u64,
     biome_exceeds_budget: bool,
+    // NPC metrics
+    npc_count: usize,
+    npc_update_avg_ms: f64,
+    npc_update_peak_ms: f64,
+    npc_exceeds_budget: bool,
+}
+
+/// Data needed for NPC interaction UI.
+struct InteractionData {
+    /// Whether player can interact with nearby NPC
+    can_interact: bool,
+    /// Whether currently in an interaction
+    is_interacting: bool,
+    /// Interaction mode (if interacting)
+    mode: genesis_gameplay::NPCInteractionMode,
 }
 
 /// Renders the debug overlay.
@@ -407,6 +588,19 @@ fn render_debug_overlay(ctx: &egui::Context, data: &DebugOverlayData) {
                 ui.label(format!("Chunks Generated: {}", data.biome_chunks_generated));
                 if data.biome_exceeds_budget {
                     ui.colored_label(egui::Color32::YELLOW, "⚠ Biome gen > 16ms!");
+                }
+            }
+
+            // NPC metrics
+            ui.separator();
+            ui.label(format!("NPCs: {}", data.npc_count));
+            if data.npc_count > 0 {
+                ui.label(format!(
+                    "NPC Update: {:.2}ms avg, {:.2}ms peak",
+                    data.npc_update_avg_ms, data.npc_update_peak_ms
+                ));
+                if data.npc_exceeds_budget {
+                    ui.colored_label(egui::Color32::YELLOW, "⚠ NPC update > 2ms!");
                 }
             }
         });
@@ -521,6 +715,55 @@ fn render_hud(
         });
 }
 
+/// Renders the NPC interaction prompt or dialogue window.
+fn render_interaction_prompt(ctx: &egui::Context, data: &InteractionData) {
+    use genesis_gameplay::NPCInteractionMode;
+
+    if data.is_interacting {
+        // Show interaction window based on mode
+        let title = match data.mode {
+            NPCInteractionMode::Trading => "Trade",
+            NPCInteractionMode::Dialogue => "Dialogue",
+            NPCInteractionMode::None => return,
+        };
+
+        egui::Window::new(title)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .resizable(false)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                match data.mode {
+                    NPCInteractionMode::Trading => {
+                        ui.label("Trading with Merchant");
+                        ui.separator();
+                        ui.label("(Trade UI coming soon...)");
+                        ui.separator();
+                        ui.label("Press [E] to close");
+                    },
+                    NPCInteractionMode::Dialogue => {
+                        ui.label("NPC says: Hello, traveler!");
+                        ui.separator();
+                        ui.label("Press [E] to close");
+                    },
+                    NPCInteractionMode::None => {},
+                }
+            });
+    } else if data.can_interact {
+        // Show interaction prompt
+        egui::Window::new("Interaction")
+            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -80.0))
+            .title_bar(false)
+            .resizable(false)
+            .frame(
+                egui::Frame::window(&ctx.style())
+                    .fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 200)),
+            )
+            .show(ctx, |ui| {
+                ui.label("Press [E] to interact");
+            });
+    }
+}
+
 impl ApplicationHandler for GenesisApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed, creating window...");
@@ -552,6 +795,9 @@ impl ApplicationHandler for GenesisApp {
                 // Reset timing after window creation
                 self.timing.reset();
                 self.last_update = Instant::now();
+
+                // Spawn initial NPCs around player
+                self.spawn_initial_npcs();
 
                 info!(
                     "Genesis Engine ready - {}x{} @ {} FPS target",
