@@ -1,7 +1,7 @@
-# PROMPT — Kernel Agent — Iteration 3
+# PROMPT — Gameplay Agent — Iteration 3
 
-> **Branch**: `kernel-agent`
-> **Focus**: Chunk streaming, collision queries, biome material generation
+> **Branch**: `gameplay-agent`
+> **Focus**: Player physics, inventory UI data, crafting UI, save/load
 
 ## Your Mission
 
@@ -11,125 +11,198 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### K-12: Chunk Streaming System (P0)
-**File**: `crates/genesis-kernel/src/streaming.rs`
+### G-13: Player Physics Integration (P0)
+**File**: `crates/genesis-gameplay/src/physics.rs`
 
-Implement chunk streaming based on camera/player position:
+Integrate player movement with kernel collision:
 
 ```rust
-pub struct ChunkStreamer {
-    load_radius: u32,      // chunks to keep loaded
-    unload_radius: u32,    // chunks to unload when outside
-    pending_loads: VecDeque<ChunkId>,
-    pending_unloads: VecDeque<ChunkId>,
+use genesis_kernel::collision::CollisionQuery;
+
+pub struct PlayerPhysics {
+    pub gravity: f32,
+    pub move_speed: f32,
+    pub jump_velocity: f32,
+    pub friction: f32,
 }
 
-impl ChunkStreamer {
-    pub fn new(load_radius: u32, unload_radius: u32) -> Self;
-    pub fn update(&mut self, center: WorldCoord, manager: &mut ChunkManager);
-    pub fn get_pending_loads(&self) -> &[ChunkId];
-    pub fn get_pending_unloads(&self) -> &[ChunkId];
+impl PlayerPhysics {
+    pub fn new() -> Self;
+    pub fn update(
+        &self,
+        player: &mut Player,
+        input: &InputState,
+        collision: &CollisionQuery,
+        dt: f32,
+    );
+    pub fn is_grounded(&self, player: &Player, collision: &CollisionQuery) -> bool;
 }
 ```
 
 Requirements:
-- Stream chunks in spiral pattern from center
-- Prioritize chunks in view frustum
-- Track loading/unloading state
-- Budget: max 2 chunk loads per frame
+- AABB collision with cell grid
+- Gravity when not grounded
+- Wall sliding (don't stick to walls)
+- Jump only when grounded
+- Velocity clamping
 
-### K-13: Collision Query System (P0)
-**File**: `crates/genesis-kernel/src/collision.rs`
+### G-14: Inventory UI Model (P0)
+**File**: `crates/genesis-gameplay/src/inventory_ui.rs`
 
-Implement collision queries for gameplay use:
+Prepare inventory data for UI rendering:
 
 ```rust
-pub struct CollisionQuery {
-    buffer: Arc<CellBuffer>,
+pub struct InventoryUIModel {
+    pub slots: Vec<SlotUIData>,
+    pub selected_slot: Option<usize>,
+    pub drag_item: Option<ItemStack>,
+    pub tooltip: Option<TooltipData>,
 }
 
-impl CollisionQuery {
-    pub fn is_solid(&self, coord: WorldCoord) -> bool;
-    pub fn raycast(&self, origin: Vec2, direction: Vec2, max_dist: f32) -> Option<RayHit>;
-    pub fn box_query(&self, min: WorldCoord, max: WorldCoord) -> Vec<WorldCoord>;
-    pub fn find_ground(&self, x: i32, start_y: i32) -> Option<i32>;
+pub struct SlotUIData {
+    pub index: usize,
+    pub item: Option<ItemStack>,
+    pub is_hotbar: bool,
+    pub is_selected: bool,
 }
 
-pub struct RayHit {
-    pub coord: WorldCoord,
-    pub distance: f32,
-    pub normal: Vec2,
+pub struct TooltipData {
+    pub item_name: String,
+    pub description: String,
+    pub stats: Vec<(String, String)>,
+}
+
+impl InventoryUIModel {
+    pub fn from_inventory(inv: &Inventory, hotbar_size: usize) -> Self;
+    pub fn handle_click(&mut self, slot: usize, button: MouseButton) -> InventoryAction;
+    pub fn handle_drag(&mut self, from: usize, to: usize) -> InventoryAction;
+}
+
+pub enum InventoryAction {
+    None,
+    Move { from: usize, to: usize },
+    Split { slot: usize },
+    Drop { slot: usize, count: u32 },
+    Use { slot: usize },
 }
 ```
 
 Requirements:
-- Read from cell buffer (GPU readback or CPU shadow)
-- Bresenham line algorithm for raycast
-- Solid = material flag check
-- Used by gameplay for player physics
+- Transform Inventory → display model
+- Handle slot click/drag actions
+- Return actions for Inventory to execute
+- Tooltip generation from item metadata
 
-### K-14: Biome Material Assignment (P1)
-**File**: `crates/genesis-kernel/src/biome.rs`
+### G-15: Crafting UI Model (P0)
+**File**: `crates/genesis-gameplay/src/crafting_ui.rs`
 
-Implement biome-based material generation:
+Prepare crafting data for UI rendering:
 
 ```rust
-pub struct BiomeConfig {
-    pub id: BiomeId,
+pub struct CraftingUIModel {
+    pub available_recipes: Vec<RecipeUIData>,
+    pub selected_recipe: Option<usize>,
+    pub crafting_queue: Vec<CraftingQueueItem>,
+    pub filter: RecipeFilter,
+}
+
+pub struct RecipeUIData {
+    pub recipe_id: RecipeId,
     pub name: String,
-    pub surface_material: MaterialId,
-    pub subsurface_material: MaterialId,
-    pub deep_material: MaterialId,
-    pub surface_depth: u32,
-    pub subsurface_depth: u32,
+    pub icon: String,
+    pub can_craft: bool,
+    pub missing_ingredients: Vec<String>,
+    pub inputs: Vec<IngredientUIData>,
+    pub outputs: Vec<IngredientUIData>,
 }
 
-pub struct BiomeManager {
-    biomes: HashMap<BiomeId, BiomeConfig>,
-    noise: SimplexNoise,
+pub struct IngredientUIData {
+    pub item_name: String,
+    pub required: u32,
+    pub available: u32,
 }
 
-impl BiomeManager {
-    pub fn register_biome(&mut self, config: BiomeConfig);
-    pub fn get_biome_at(&self, coord: WorldCoord) -> BiomeId;
-    pub fn get_material_at(&self, coord: WorldCoord, depth: u32) -> MaterialId;
+pub struct CraftingQueueItem {
+    pub recipe_id: RecipeId,
+    pub progress: f32,
+    pub time_remaining: f32,
+}
+
+pub enum RecipeFilter {
+    All,
+    Craftable,
+    Category(String),
+    Search(String),
+}
+
+impl CraftingUIModel {
+    pub fn from_state(
+        recipes: &[CraftingRecipe],
+        inventory: &Inventory,
+        queue: &CraftingQueue,
+        filter: RecipeFilter,
+    ) -> Self;
+    pub fn select_recipe(&mut self, index: usize);
+    pub fn queue_craft(&self) -> Option<RecipeId>;
 }
 ```
 
 Requirements:
-- At least 3 biomes: Forest, Desert, Cave
-- Simplex noise for biome boundaries
-- Smooth transitions at edges
-- Depth-based material layers
+- Filter recipes by craftability, category, search
+- Show ingredient availability
+- Display crafting queue progress
+- Sort by name/category/craftable
 
-### K-15: GPU Readback Optimization (P1)
-**File**: `crates/genesis-kernel/src/readback.rs`
+### G-16: Save/Load Game State (P1)
+**File**: `crates/genesis-gameplay/src/save.rs`
 
-Optimize GPU→CPU data transfer:
+Implement game state serialization:
 
 ```rust
-pub struct ReadbackManager {
-    staging_buffer: wgpu::Buffer,
-    pending_reads: Vec<PendingRead>,
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct SaveGame {
+    pub version: u32,
+    pub timestamp: u64,
+    pub player: PlayerSaveData,
+    pub entities: Vec<EntitySaveData>,
+    pub world_seed: u64,
+    pub game_time: f64,
 }
 
-pub struct PendingRead {
-    pub chunk_id: ChunkId,
-    pub frame_submitted: u64,
+#[derive(Serialize, Deserialize)]
+pub struct PlayerSaveData {
+    pub position: (f32, f32),
+    pub health: f32,
+    pub inventory: Vec<ItemStackSaveData>,
+    pub equipped: Vec<Option<ItemStackSaveData>>,
 }
 
-impl ReadbackManager {
-    pub fn request_readback(&mut self, chunk_id: ChunkId);
-    pub fn poll_readbacks(&mut self, device: &wgpu::Device) -> Vec<(ChunkId, Vec<Cell>)>;
-    pub fn is_pending(&self, chunk_id: ChunkId) -> bool;
+pub struct SaveManager {
+    save_dir: PathBuf,
+}
+
+impl SaveManager {
+    pub fn new(save_dir: PathBuf) -> Self;
+    pub fn save(&self, name: &str, data: &SaveGame) -> Result<(), SaveError>;
+    pub fn load(&self, name: &str) -> Result<SaveGame, SaveError>;
+    pub fn list_saves(&self) -> Vec<SaveMetadata>;
+    pub fn delete(&self, name: &str) -> Result<(), SaveError>;
+}
+
+pub struct SaveMetadata {
+    pub name: String,
+    pub timestamp: u64,
+    pub playtime: f64,
 }
 ```
 
 Requirements:
-- Double-buffered staging for async
-- Track which chunks have pending reads
-- Coalesce nearby chunk reads
-- Timeout handling for stalled reads
+- Binary format (bincode) for compactness
+- Version field for migrations
+- Save metadata without loading full save
+- Atomic writes (write temp, rename)
 
 ---
 
@@ -150,17 +223,17 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[kernel] feat: K-12 chunk streaming system
-[kernel] feat: K-13 collision query system
-[kernel] feat: K-14 biome material assignment
-[kernel] feat: K-15 GPU readback optimization
+[gameplay] feat: G-13 player physics integration
+[gameplay] feat: G-14 inventory UI model
+[gameplay] feat: G-15 crafting UI model
+[gameplay] feat: G-16 save/load game state
 ```
 
 ---
 
 ## Integration Notes
 
-- K-13 collision will be used by gameplay-agent's player controller
-- K-14 biome will be used by world generation
-- Coordinate with genesis-common types
+- G-13 uses CollisionQuery from genesis-kernel (add dependency)
+- G-14/G-15 provide data models, actual UI in genesis-tools
+- G-16 coordinates with chunk save in genesis-world
 - Export new modules in lib.rs

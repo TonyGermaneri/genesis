@@ -876,6 +876,7 @@ name = "genesis-gameplay"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "bincode",
  "crossbeam-channel",
  "dashmap",
  "genesis-common",
