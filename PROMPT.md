@@ -1,63 +1,103 @@
-# Iteration 7: Kernel Agent Tasks
+# Infra Agent — Iteration 8 Prompt
 
 ## Context
-You are the Kernel Agent responsible for GPU compute, rendering, and low-level systems.
-The game now has working top-down movement with static terrain and egui UI.
-This iteration adds multi-chunk streaming and environment simulation.
 
-## Tasks
+You are the **Infra Agent** for Project Genesis, a 2D top-down game engine built with Rust.
 
-### K-28: Multi-Chunk Streaming Render (P0)
-**Goal:** Render multiple chunks around the player, streaming new chunks as player moves.
+**Current State:**
+- ChunkManager in render loop (I-24)
+- Weather/time passed to kernel (I-25)
+- UI systems wired to app (I-26)
+- Multi-chunk performance profiling (I-27)
+- App struct in genesis-engine handles game loop
 
-**Location:** `crates/genesis-kernel/src/render.rs` + `chunk_manager.rs`
+**Iteration 8 Focus:** Wire biome generation into chunk creation and manage world seed.
 
-**Requirements:**
-1. Modify render shader to support multiple chunk buffers
-2. Create a `ChunkRenderManager` that:
-   - Tracks which chunks are visible based on camera viewport
-   - Uploads dirty chunks to GPU
-   - Renders all visible chunks in correct world positions
-3. Shader needs to accept chunk offset uniforms for world positioning
-4. Support render distance of at least 3x3 chunks (9 total)
+---
 
-### K-29: Quadtree Chunk Activation (P0)
-**Goal:** Use quadtree to efficiently determine which chunks need simulation.
+## Assigned Tasks
 
-**Location:** `crates/genesis-kernel/src/quadtree.rs` + `chunk_manager.rs`
+### I-28: Wire biome generation (P0)
 
-**Requirements:**
-1. Create `ChunkActivationTree` using existing Quadtree
-2. Only chunks in player's "active radius" run GPU simulation
-3. Chunks outside active radius are frozen (no compute dispatch)
-4. Active radius configurable (default: 2 chunks from player)
-5. Track chunk state: Dormant, Active, Simulating
+**Goal:** Call terrain generator when chunks are created.
 
-### K-30: Environment Simulation Shader (P1)
-**Goal:** Add grass growth, weather effects to compute shader.
+**Implementation:**
+1. In ChunkManager or wherever chunks are created:
+   - Get TerrainGenerator from gameplay
+   - On new chunk, call terrain_gen.generate_chunk(chunk_x, chunk_y)
+   - Store biome data with chunk
+2. Ensure generation happens before render
 
-**Location:** `crates/genesis-kernel/src/compute.rs`
+```rust
+// In chunk creation
+let biome_data = terrain_generator.generate_chunk(chunk_x, chunk_y, chunk_size);
+chunk.set_biome_data(biome_data);
+```
 
-**Requirements:**
-1. Grass lifecycle: growth stage 0-255, spreads to dirt, dies without light/water
-2. Rain effect: when rain_active, water cells spawn, hydrates nearby
-3. Add EnvParams uniform with time_of_day, rain_active, growth_rate
+---
 
-### K-31: Day/Night Cycle Rendering (P1)
-**Goal:** Visual day/night cycle with lighting changes.
+### I-29: World seed management (P0)
 
-**Location:** `crates/genesis-kernel/src/render.rs`
+**Goal:** Centralized seed storage and propagation.
 
-**Requirements:**
-1. Add time_of_day to render params (0.0-1.0)
-2. Modulate ambient light: Dawn orange, Day bright, Dusk purple, Night blue
-3. Grass color varies by growth stage
-4. Water reflects sky color
+**Implementation:**
+1. Add `world_seed: u64` to App or Config
+2. On startup:
+   - Load seed from config file if exists
+   - Generate random seed if not
+3. Pass seed to:
+   - TerrainGenerator
+   - BiomeManager
+   - WorldGenerator
+4. Support seed change at runtime (triggers world regeneration)
 
-## Files to Modify
-- crates/genesis-kernel/src/render.rs
-- crates/genesis-kernel/src/compute.rs
-- crates/genesis-kernel/src/chunk_manager.rs
-- crates/genesis-kernel/src/lib.rs
+```rust
+pub struct WorldConfig {
+    pub seed: u64,
+    pub chunk_size: u32,
+    pub render_distance: u32,
+}
+```
 
-## Commit Format: [kernel] feat: K-XX description
+---
+
+### I-30: Chunk biome data flow (P0)
+
+**Goal:** Pass biome information from gameplay to kernel for rendering.
+
+**Implementation:**
+1. Add biome_id to Cell struct or separate biome buffer
+2. Flow: TerrainGenerator -> ChunkManager -> RenderPipeline
+3. Update render params to include biome data pointer
+4. Ensure biome data updates when player moves to new area
+
+---
+
+### I-31: Biome generation profiling (P1)
+
+**Goal:** Measure and report biome generation performance.
+
+**Implementation:**
+1. Add timers around terrain generation
+2. Report in debug panel:
+   - Avg generation time per chunk
+   - Total chunks generated this session
+   - Peak generation time
+3. Warn if generation exceeds 16ms
+
+---
+
+## Constraints
+
+1. Minimal coupling between crates
+2. Thread-safe if generation is async
+3. Deterministic: same seed = same world
+4. No memory leaks on chunk unload
+
+---
+
+## Commit Format
+
+```
+[infra] feat: I-28..I-31 Biome generation wiring and seed management
+```
