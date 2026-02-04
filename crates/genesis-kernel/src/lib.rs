@@ -84,6 +84,12 @@ pub mod incremental_save;
 pub mod save_compression;
 pub mod world_region;
 
+// Main Menu & Options infrastructure
+pub mod menu_backdrop;
+pub mod resolution;
+pub mod screenshot;
+pub mod transitions;
+
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::audio::*;
@@ -159,6 +165,23 @@ pub mod prelude {
     pub use crate::world_region::{
         ChunkLocation, RegionCoord, RegionError, RegionFile, RegionHeader, RegionManager,
         RegionStats,
+    };
+    // Main Menu & Options modules
+    pub use crate::menu_backdrop::{
+        AmbientParticle, BackdropMode, BackdropState, BackdropUniforms, CloudParticle,
+        DayNightCycle, ParallaxLayer, StaticBackdrop, TimeOfDay,
+    };
+    pub use crate::resolution::{
+        DisplayMode, OrthoProjection, Resolution, ResolutionChangeRequest, ResolutionManager,
+        ResolutionUniforms, ScalingMode, VSyncMode, Viewport,
+    };
+    pub use crate::screenshot::{
+        CaptureConfig, CaptureRequest, CaptureStatus, ScreenshotData, ScreenshotFormat,
+        ScreenshotManager, ScreenshotQuality,
+    };
+    pub use crate::transitions::{
+        TransitionConfig, TransitionEasing, TransitionManager, TransitionState, TransitionType,
+        TransitionUniforms,
     };
 }
 

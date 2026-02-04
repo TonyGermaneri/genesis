@@ -762,7 +762,7 @@ impl CombatParticleManager {
         match effect_type {
             CombatEffectType::HitSpark => self.spawn_hit_spark(position, direction, intensity),
             CombatEffectType::BloodSplatter => {
-                self.spawn_blood_splatter(position, direction, intensity)
+                self.spawn_blood_splatter(position, direction, intensity);
             },
             CombatEffectType::ImpactDust => self.spawn_impact_dust(position, intensity),
             CombatEffectType::ShieldBlock => self.spawn_shield_block(position, direction),
