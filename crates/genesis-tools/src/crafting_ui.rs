@@ -327,6 +327,625 @@ impl Default for CraftingUIConfig {
     }
 }
 
+/// Extended crafting action with amount support.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CraftingPanelAction {
+    /// Craft a recipe with specified amount
+    CraftAmount {
+        /// Recipe to craft
+        recipe_id: RecipeId,
+        /// Amount to craft
+        amount: u32,
+    },
+    /// Cancel a queued craft
+    CancelQueue(usize),
+    /// Cancel all queued crafts
+    CancelAll,
+    /// Select a recipe
+    SelectRecipe(RecipeId),
+    /// Deselect recipe
+    DeselectRecipe,
+    /// Craft maximum possible amount
+    CraftMax(RecipeId),
+}
+
+/// Crafting panel with recipe details and amount selector.
+#[derive(Debug)]
+pub struct CraftingPanel {
+    /// Currently selected recipe ID
+    pub selected_recipe: Option<RecipeId>,
+    /// Amount to craft
+    pub craft_amount: u32,
+    /// Minimum craft amount
+    pub min_amount: u32,
+    /// Maximum craft amount (0 = unlimited)
+    pub max_amount: u32,
+    /// Configuration
+    pub config: CraftingUIConfig,
+    /// Whether the panel is open
+    pub is_open: bool,
+    /// Current category filter
+    pub category_filter: RecipeCategory,
+    /// Search text
+    pub search_text: String,
+    /// Show craftable only
+    pub craftable_only: bool,
+}
+
+impl Default for CraftingPanel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CraftingPanel {
+    /// Creates a new crafting panel.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            selected_recipe: None,
+            craft_amount: 1,
+            min_amount: 1,
+            max_amount: 99,
+            config: CraftingUIConfig::default(),
+            is_open: false,
+            category_filter: RecipeCategory::All,
+            search_text: String::new(),
+            craftable_only: false,
+        }
+    }
+
+    /// Creates with custom configuration.
+    #[must_use]
+    pub fn with_config(config: CraftingUIConfig) -> Self {
+        Self {
+            selected_recipe: None,
+            craft_amount: 1,
+            min_amount: 1,
+            max_amount: 99,
+            config,
+            is_open: false,
+            category_filter: RecipeCategory::All,
+            search_text: String::new(),
+            craftable_only: false,
+        }
+    }
+
+    /// Renders the crafting panel and returns any actions.
+    pub fn render(
+        &mut self,
+        ctx: &Context,
+        model: &mut CraftingUIModel,
+    ) -> Vec<CraftingPanelAction> {
+        let mut actions = Vec::new();
+
+        if !self.is_open {
+            return actions;
+        }
+
+        Window::new("Crafting Station")
+            .resizable(true)
+            .collapsible(false)
+            .default_width(650.0)
+            .show(ctx, |ui| {
+                // Top toolbar
+                ui.horizontal(|ui| {
+                    // Category tabs
+                    for category in RecipeCategory::all() {
+                        let selected = self.category_filter == *category;
+                        if ui
+                            .selectable_label(selected, category.display_name())
+                            .clicked()
+                        {
+                            self.category_filter = *category;
+                        }
+                    }
+
+                    ui.separator();
+
+                    // Craftable only filter
+                    ui.checkbox(&mut self.craftable_only, "Craftable only");
+                });
+
+                // Search bar
+                ui.horizontal(|ui| {
+                    ui.label("🔍");
+                    ui.add(
+                        TextEdit::singleline(&mut self.search_text)
+                            .hint_text("Search recipes...")
+                            .desired_width(200.0),
+                    );
+                    if ui.button("✕").clicked() {
+                        self.search_text.clear();
+                    }
+                });
+
+                ui.separator();
+
+                // Main layout: recipe list + details
+                ui.horizontal(|ui| {
+                    // Left panel: recipe list
+                    egui::ScrollArea::vertical()
+                        .id_salt("crafting_panel_recipes")
+                        .max_height(400.0)
+                        .show(ui, |ui| {
+                            ui.set_min_width(self.config.recipe_list_width);
+                            self.render_recipe_list(ui, model, &mut actions);
+                        });
+
+                    ui.separator();
+
+                    // Right panel: recipe details
+                    ui.vertical(|ui| {
+                        ui.set_min_width(300.0);
+                        self.render_selected_recipe_details(ui, model, &mut actions);
+                    });
+                });
+
+                ui.separator();
+
+                // Crafting queue
+                self.render_queue(ui, model, &mut actions);
+            });
+
+        actions
+    }
+
+    /// Renders the recipe list.
+    fn render_recipe_list(
+        &mut self,
+        ui: &mut Ui,
+        model: &CraftingUIModel,
+        actions: &mut Vec<CraftingPanelAction>,
+    ) {
+        let filtered = self.filter_recipes(&model.recipes);
+
+        for recipe in &filtered {
+            let is_selected = self.selected_recipe == Some(recipe.recipe_id);
+            let response = self.render_recipe_list_item(ui, recipe, is_selected);
+
+            if response.clicked() {
+                self.selected_recipe = Some(recipe.recipe_id);
+                self.craft_amount = 1; // Reset amount on new selection
+                actions.push(CraftingPanelAction::SelectRecipe(recipe.recipe_id));
+            }
+        }
+
+        if filtered.is_empty() {
+            ui.label("No recipes match the current filter");
+        }
+    }
+
+    /// Filters recipes based on current criteria.
+    fn filter_recipes<'a>(&self, recipes: &'a [RecipeCard]) -> Vec<&'a RecipeCard> {
+        let search_lower = self.search_text.to_lowercase();
+
+        recipes
+            .iter()
+            .filter(|r| {
+                // Category filter
+                self.category_filter == RecipeCategory::All || r.category == self.category_filter
+            })
+            .filter(|r| {
+                // Search filter
+                search_lower.is_empty() || r.name.to_lowercase().contains(&search_lower)
+            })
+            .filter(|r| {
+                // Craftable filter
+                !self.craftable_only || r.can_craft()
+            })
+            .collect()
+    }
+
+    /// Renders a single recipe in the list.
+    fn render_recipe_list_item(
+        &self,
+        ui: &mut Ui,
+        recipe: &RecipeCard,
+        is_selected: bool,
+    ) -> Response {
+        let available_width = ui.available_width();
+        let height = self.config.recipe_card_height;
+        let (rect, response) =
+            ui.allocate_exact_size(Vec2::new(available_width, height), Sense::click());
+
+        if ui.is_rect_visible(rect) {
+            let painter = ui.painter();
+
+            // Background
+            let bg_color = if is_selected {
+                Color32::from_rgba_unmultiplied(
+                    self.config.selected_color[0],
+                    self.config.selected_color[1],
+                    self.config.selected_color[2],
+                    self.config.selected_color[3],
+                )
+            } else if recipe.can_craft() {
+                Color32::from_rgba_unmultiplied(
+                    self.config.craftable_color[0],
+                    self.config.craftable_color[1],
+                    self.config.craftable_color[2],
+                    self.config.craftable_color[3],
+                )
+            } else {
+                Color32::from_rgba_unmultiplied(
+                    self.config.uncraftable_color[0],
+                    self.config.uncraftable_color[1],
+                    self.config.uncraftable_color[2],
+                    self.config.uncraftable_color[3],
+                )
+            };
+
+            painter.rect_filled(rect, Rounding::same(4.0), bg_color);
+
+            if response.hovered() {
+                painter.rect_stroke(rect, Rounding::same(4.0), Stroke::new(1.0, Color32::WHITE));
+            }
+
+            // Icon
+            let icon_rect = egui::Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 8.0),
+                Vec2::splat(height - 16.0),
+            );
+            let icon_color = Color32::from_rgba_unmultiplied(
+                recipe.icon_color[0],
+                recipe.icon_color[1],
+                recipe.icon_color[2],
+                recipe.icon_color[3],
+            );
+            painter.rect_filled(icon_rect, Rounding::same(2.0), icon_color);
+
+            // Name
+            let name_color = if recipe.can_craft() {
+                Color32::WHITE
+            } else {
+                Color32::GRAY
+            };
+            painter.text(
+                rect.left_top() + Vec2::new(height + 4.0, 8.0),
+                egui::Align2::LEFT_TOP,
+                &recipe.name,
+                egui::FontId::proportional(14.0),
+                name_color,
+            );
+
+            // Output preview
+            let output_text = format!("→ {}x {}", recipe.output_quantity, recipe.output_name);
+            painter.text(
+                rect.left_top() + Vec2::new(height + 4.0, 26.0),
+                egui::Align2::LEFT_TOP,
+                output_text,
+                egui::FontId::proportional(11.0),
+                Color32::LIGHT_GRAY,
+            );
+
+            // Time
+            painter.text(
+                rect.right_top() + Vec2::new(-8.0, 8.0),
+                egui::Align2::RIGHT_TOP,
+                format!("{:.1}s", recipe.craft_time),
+                egui::FontId::proportional(10.0),
+                Color32::GRAY,
+            );
+
+            // Lock indicator
+            if !recipe.is_unlocked {
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "🔒",
+                    egui::FontId::proportional(20.0),
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 180),
+                );
+            }
+        }
+
+        response
+    }
+
+    /// Renders the selected recipe's details with amount selector.
+    fn render_selected_recipe_details(
+        &mut self,
+        ui: &mut Ui,
+        model: &CraftingUIModel,
+        actions: &mut Vec<CraftingPanelAction>,
+    ) {
+        let selected_recipe = self
+            .selected_recipe
+            .and_then(|id| model.recipes.iter().find(|r| r.recipe_id == id));
+
+        let Some(recipe) = selected_recipe else {
+            ui.vertical_centered(|ui| {
+                ui.add_space(100.0);
+                ui.label(RichText::new("Select a recipe to view details").weak());
+            });
+            return;
+        };
+
+        // Recipe header
+        ui.heading(&recipe.name);
+        if !recipe.description.is_empty() {
+            ui.label(&recipe.description);
+        }
+
+        ui.separator();
+
+        // Materials section
+        ui.label(RichText::new("Required Materials").strong());
+        self.render_materials_list(ui, recipe);
+
+        // Tools section
+        if !recipe.tools.is_empty() {
+            ui.separator();
+            ui.label(RichText::new("Required Tools").strong());
+            for tool in &recipe.tools {
+                ui.horizontal(|ui| {
+                    ui.label("•");
+                    ui.label(tool);
+                });
+            }
+        }
+
+        // Skill requirement
+        if recipe.skill_required > 0 {
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Skill Required:").strong());
+                ui.label(format!("Level {}", recipe.skill_required));
+            });
+        }
+
+        ui.separator();
+
+        // Output section
+        ui.label(RichText::new("Output").strong());
+        ui.horizontal(|ui| {
+            let icon_color = Color32::from_rgba_unmultiplied(
+                recipe.icon_color[0],
+                recipe.icon_color[1],
+                recipe.icon_color[2],
+                recipe.icon_color[3],
+            );
+            let (icon_rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), Sense::hover());
+            ui.painter()
+                .rect_filled(icon_rect, Rounding::same(2.0), icon_color);
+            ui.label(format!(
+                "{}x {} (per craft)",
+                recipe.output_quantity, recipe.output_name
+            ));
+        });
+
+        ui.separator();
+
+        // Amount selector
+        ui.label(RichText::new("Amount to Craft").strong());
+        ui.horizontal(|ui| {
+            if ui.button("-").clicked() && self.craft_amount > self.min_amount {
+                self.craft_amount -= 1;
+            }
+
+            ui.add(
+                egui::DragValue::new(&mut self.craft_amount)
+                    .range(self.min_amount..=self.max_amount)
+                    .speed(0.1),
+            );
+
+            if ui.button("+").clicked() && self.craft_amount < self.max_amount {
+                self.craft_amount += 1;
+            }
+
+            // Quick buttons
+            if ui.button("1x").clicked() {
+                self.craft_amount = 1;
+            }
+            if ui.button("5x").clicked() {
+                self.craft_amount = 5.min(self.max_amount);
+            }
+            if ui.button("10x").clicked() {
+                self.craft_amount = 10.min(self.max_amount);
+            }
+            if ui.button("Max").clicked() {
+                self.craft_amount = self.calculate_max_craftable(recipe);
+            }
+        });
+
+        // Total output and time
+        let total_output = recipe.output_quantity * self.craft_amount;
+        let total_time = recipe.craft_time * self.craft_amount as f32;
+        ui.label(format!(
+            "Total: {}x {} in {:.1}s",
+            total_output, recipe.output_name, total_time
+        ));
+
+        ui.separator();
+
+        // Craft buttons
+        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+            let can_craft = recipe.can_craft() && !model.queue_full();
+
+            // Craft amount button
+            let craft_btn = ui.add_enabled(
+                can_craft,
+                egui::Button::new(format!("Craft {}", self.craft_amount)),
+            );
+            if craft_btn.clicked() {
+                actions.push(CraftingPanelAction::CraftAmount {
+                    recipe_id: recipe.recipe_id,
+                    amount: self.craft_amount,
+                });
+            }
+
+            // Craft max button
+            let max_craftable = self.calculate_max_craftable(recipe);
+            if max_craftable > 1 {
+                let max_btn = ui.add_enabled(
+                    can_craft,
+                    egui::Button::new(format!("Craft All ({max_craftable})")),
+                );
+                if max_btn.clicked() {
+                    actions.push(CraftingPanelAction::CraftMax(recipe.recipe_id));
+                }
+            }
+
+            // Status messages
+            if model.queue_full() {
+                ui.label(RichText::new("Queue full!").color(Color32::YELLOW));
+            } else if !recipe.can_craft() {
+                let missing = recipe.missing_material_count();
+                ui.label(RichText::new(format!("{missing} materials missing")).color(Color32::RED));
+            }
+        });
+    }
+
+    /// Renders the materials list with availability.
+    #[allow(clippy::unused_self)]
+    fn render_materials_list(&self, ui: &mut Ui, recipe: &RecipeCard) {
+        for mat in &recipe.materials {
+            ui.horizontal(|ui| {
+                // Availability indicator
+                let (indicator, color) = if mat.has_enough() {
+                    ("✓", Color32::GREEN)
+                } else {
+                    ("✗", Color32::RED)
+                };
+                ui.colored_label(color, indicator);
+
+                // Material icon (small color square)
+                let (icon_rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
+                let icon_color = Color32::from_rgba_unmultiplied(
+                    mat.icon_color[0],
+                    mat.icon_color[1],
+                    mat.icon_color[2],
+                    mat.icon_color[3],
+                );
+                ui.painter()
+                    .rect_filled(icon_rect, Rounding::same(2.0), icon_color);
+
+                // Material name and count
+                let count_color = if mat.has_enough() {
+                    Color32::WHITE
+                } else {
+                    Color32::RED
+                };
+                ui.label(&mat.name);
+                ui.colored_label(count_color, format!("{}/{}", mat.available, mat.required));
+            });
+        }
+    }
+
+    /// Calculates the maximum number of items that can be crafted.
+    fn calculate_max_craftable(&self, recipe: &RecipeCard) -> u32 {
+        if recipe.materials.is_empty() {
+            return self.max_amount;
+        }
+
+        recipe
+            .materials
+            .iter()
+            .map(|m| {
+                if m.required > 0 {
+                    m.available / m.required
+                } else {
+                    self.max_amount
+                }
+            })
+            .min()
+            .unwrap_or(0)
+            .min(self.max_amount)
+    }
+
+    /// Renders the crafting queue.
+    fn render_queue(
+        &self,
+        ui: &mut Ui,
+        model: &CraftingUIModel,
+        actions: &mut Vec<CraftingPanelAction>,
+    ) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Crafting Queue").strong());
+            ui.label(format!("({}/{})", model.queue.len(), model.max_queue_size));
+
+            if !model.queue.is_empty() {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.button("Cancel All").clicked() {
+                        actions.push(CraftingPanelAction::CancelAll);
+                    }
+                });
+            }
+        });
+
+        if model.queue.is_empty() {
+            ui.label(RichText::new("Queue is empty").weak());
+            return;
+        }
+
+        for (idx, item) in model.queue.iter().enumerate() {
+            ui.horizontal(|ui| {
+                // Cancel button
+                if ui.small_button("✕").clicked() {
+                    actions.push(CraftingPanelAction::CancelQueue(idx));
+                }
+
+                // Recipe name
+                let name_style = if item.is_active {
+                    RichText::new(&item.recipe_name).strong()
+                } else {
+                    RichText::new(&item.recipe_name).weak()
+                };
+                ui.label(name_style);
+
+                // Progress
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let remaining = item.remaining_time();
+                    ui.label(format!("{remaining:.1}s"));
+
+                    let progress_text = if item.is_active {
+                        "Crafting..."
+                    } else {
+                        "Queued"
+                    };
+                    ui.add_sized(
+                        Vec2::new(120.0, self.config.progress_bar_height),
+                        ProgressBar::new(item.progress).text(progress_text),
+                    );
+                });
+            });
+        }
+    }
+
+    /// Toggles the panel open/closed.
+    pub fn toggle(&mut self) {
+        self.is_open = !self.is_open;
+    }
+
+    /// Opens the panel.
+    pub fn open(&mut self) {
+        self.is_open = true;
+    }
+
+    /// Closes the panel.
+    pub fn close(&mut self) {
+        self.is_open = false;
+    }
+
+    /// Sets the craft amount.
+    pub fn set_amount(&mut self, amount: u32) {
+        self.craft_amount = amount.clamp(self.min_amount, self.max_amount);
+    }
+
+    /// Clears the recipe selection.
+    pub fn deselect(&mut self) {
+        self.selected_recipe = None;
+        self.craft_amount = 1;
+    }
+
+    /// Selects a recipe by ID.
+    pub fn select_recipe(&mut self, recipe_id: RecipeId) {
+        self.selected_recipe = Some(recipe_id);
+        self.craft_amount = 1;
+    }
+}
+
 /// Crafting UI renderer.
 #[derive(Debug)]
 pub struct CraftingUI {
@@ -902,5 +1521,160 @@ mod tests {
         assert!(ui.is_open);
         ui.close();
         assert!(!ui.is_open);
+    }
+
+    #[test]
+    fn test_crafting_panel_new() {
+        let panel = CraftingPanel::new();
+        assert!(!panel.is_open);
+        assert!(panel.selected_recipe.is_none());
+        assert_eq!(panel.craft_amount, 1);
+        assert_eq!(panel.min_amount, 1);
+        assert_eq!(panel.max_amount, 99);
+        assert_eq!(panel.category_filter, RecipeCategory::All);
+        assert!(!panel.craftable_only);
+    }
+
+    #[test]
+    fn test_crafting_panel_toggle() {
+        let mut panel = CraftingPanel::new();
+        assert!(!panel.is_open);
+        panel.toggle();
+        assert!(panel.is_open);
+        panel.toggle();
+        assert!(!panel.is_open);
+    }
+
+    #[test]
+    fn test_crafting_panel_select_recipe() {
+        let mut panel = CraftingPanel::new();
+        panel.select_recipe(RecipeId::new(42));
+        assert_eq!(panel.selected_recipe, Some(RecipeId::new(42)));
+        assert_eq!(panel.craft_amount, 1);
+    }
+
+    #[test]
+    fn test_crafting_panel_deselect() {
+        let mut panel = CraftingPanel::new();
+        panel.select_recipe(RecipeId::new(42));
+        panel.craft_amount = 5;
+        panel.deselect();
+        assert!(panel.selected_recipe.is_none());
+        assert_eq!(panel.craft_amount, 1);
+    }
+
+    #[test]
+    fn test_crafting_panel_set_amount() {
+        let mut panel = CraftingPanel::new();
+        panel.set_amount(50);
+        assert_eq!(panel.craft_amount, 50);
+
+        // Test clamping
+        panel.set_amount(0);
+        assert_eq!(panel.craft_amount, panel.min_amount);
+
+        panel.set_amount(1000);
+        assert_eq!(panel.craft_amount, panel.max_amount);
+    }
+
+    #[test]
+    fn test_crafting_panel_filter_recipes() {
+        let mut panel = CraftingPanel::new();
+        let recipes = vec![
+            {
+                let mut r = RecipeCard::new(RecipeId::new(1), "Iron Sword");
+                r.category = RecipeCategory::Weapons;
+                r.materials
+                    .push(MaterialCost::new(ItemTypeId::new(1), "Iron", 1, 5));
+                r
+            },
+            {
+                let mut r = RecipeCard::new(RecipeId::new(2), "Wooden Pickaxe");
+                r.category = RecipeCategory::Tools;
+                r.materials
+                    .push(MaterialCost::new(ItemTypeId::new(2), "Wood", 10, 1)); // Not enough
+                r
+            },
+        ];
+
+        // All recipes
+        let filtered = panel.filter_recipes(&recipes);
+        assert_eq!(filtered.len(), 2);
+
+        // Category filter
+        panel.category_filter = RecipeCategory::Weapons;
+        let filtered = panel.filter_recipes(&recipes);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "Iron Sword");
+
+        // Craftable only
+        panel.category_filter = RecipeCategory::All;
+        panel.craftable_only = true;
+        let filtered = panel.filter_recipes(&recipes);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "Iron Sword");
+
+        // Search filter
+        panel.craftable_only = false;
+        panel.search_text = "wooden".to_string();
+        let filtered = panel.filter_recipes(&recipes);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "Wooden Pickaxe");
+    }
+
+    #[test]
+    fn test_crafting_panel_calculate_max_craftable() {
+        let panel = CraftingPanel::new();
+        let mut recipe = RecipeCard::new(RecipeId::new(1), "Test");
+        recipe
+            .materials
+            .push(MaterialCost::new(ItemTypeId::new(1), "A", 2, 10)); // Can make 5
+        recipe
+            .materials
+            .push(MaterialCost::new(ItemTypeId::new(2), "B", 3, 9)); // Can make 3
+
+        let max = panel.calculate_max_craftable(&recipe);
+        assert_eq!(max, 3); // Limited by material B
+    }
+
+    #[test]
+    fn test_crafting_panel_calculate_max_no_materials() {
+        let panel = CraftingPanel::new();
+        let recipe = RecipeCard::new(RecipeId::new(1), "Free Item");
+
+        let max = panel.calculate_max_craftable(&recipe);
+        assert_eq!(max, panel.max_amount);
+    }
+
+    #[test]
+    fn test_crafting_panel_action_equality() {
+        assert_eq!(
+            CraftingPanelAction::CraftAmount {
+                recipe_id: RecipeId::new(1),
+                amount: 5
+            },
+            CraftingPanelAction::CraftAmount {
+                recipe_id: RecipeId::new(1),
+                amount: 5
+            }
+        );
+        assert_ne!(
+            CraftingPanelAction::CraftAmount {
+                recipe_id: RecipeId::new(1),
+                amount: 5
+            },
+            CraftingPanelAction::CraftAmount {
+                recipe_id: RecipeId::new(1),
+                amount: 10
+            }
+        );
+        assert_eq!(
+            CraftingPanelAction::SelectRecipe(RecipeId::new(42)),
+            CraftingPanelAction::SelectRecipe(RecipeId::new(42))
+        );
+        assert_eq!(
+            CraftingPanelAction::CancelAll,
+            CraftingPanelAction::CancelAll
+        );
     }
 }

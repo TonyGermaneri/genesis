@@ -40,6 +40,7 @@ pub mod quest_ui;
 pub mod replay;
 pub mod screenshot;
 pub mod test_harness;
+pub mod ui;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -71,6 +72,9 @@ pub mod prelude {
     pub use crate::replay::*;
     pub use crate::screenshot::*;
     pub use crate::test_harness::*;
+    pub use crate::ui::environment::*;
+    pub use crate::ui::minimap as chunk_minimap;
+    pub use crate::ui::stats::*;
 }
 
 pub use prelude::*;
