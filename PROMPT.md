@@ -1,286 +1,216 @@
-# PROMPT — Infra Agent — Iteration 4
+# PROMPT — Tools Agent — Iteration 5
 
-> **Branch**: `infra-agent`
-> **Focus**: Asset pipeline, localization, crash reporting, analytics
+> **Branch**: `tools-agent`
+> **Focus**: HUD integration, inventory hotbar, debug overlay, egui setup
 
 ## Your Mission
 
-Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
+Wire up the UI subsystems for visible gameplay. Complete these tasks sequentially, validating after each.
 
 ---
 
 ## Tasks
 
-### I-12: Asset Pipeline (P0)
-**File**: `crates/genesis-tools/src/assets.rs` and `scripts/build_assets.sh`
+### T-20: Egui Integration Layer (P0)
+**File**: `crates/genesis-tools/src/egui_integration.rs`
 
-Implement asset loading and processing:
-
-```rust
-use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
-
-pub struct AssetManager {
-    base_path: PathBuf,
-    cache: HashMap<AssetId, CachedAsset>,
-    manifest: AssetManifest,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetManifest {
-    pub version: u32,
-    pub assets: HashMap<String, AssetEntry>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetEntry {
-    pub path: String,
-    pub asset_type: AssetType,
-    pub hash: String,
-    pub size: u64,
-    pub compressed: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub enum AssetType {
-    Texture,
-    Sound,
-    Music,
-    Font,
-    Shader,
-    Data,
-    Localization,
-}
-
-pub struct CachedAsset {
-    pub data: Vec<u8>,
-    pub asset_type: AssetType,
-    pub loaded_at: std::time::Instant,
-}
-
-impl AssetManager {
-    pub fn new(base_path: impl AsRef<Path>) -> Result<Self, AssetError>;
-
-    pub fn load(&mut self, id: &str) -> Result<&CachedAsset, AssetError>;
-    pub fn load_async(&mut self, id: &str) -> AssetHandle;
-    pub fn unload(&mut self, id: &str);
-
-    pub fn preload_group(&mut self, group: &str);
-    pub fn get_memory_usage(&self) -> usize;
-    pub fn clear_cache(&mut self);
-}
-
-pub enum AssetError {
-    NotFound(String),
-    IoError(std::io::Error),
-    DecompressionError,
-    ManifestCorrupt,
-}
-```
-
-Also create `scripts/build_assets.sh`:
-```bash
-#!/bin/bash
-# Build and compress game assets
-
-set -e
-
-ASSET_DIR="${1:-assets}"
-OUTPUT_DIR="${2:-target/assets}"
-
-echo "Building assets from $ASSET_DIR to $OUTPUT_DIR"
-
-# Create manifest, compress textures, etc.
-```
-
-Requirements:
-- Manifest-based asset tracking
-- LZ4 compression for large assets
-- Async loading with handles
-- Memory budget enforcement
-- Hot reload in debug mode
-
-### I-13: Localization System (P0)
-**File**: `crates/genesis-tools/src/localization.rs`
-
-Implement multi-language support:
+Set up egui for in-game UI:
 
 ```rust
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use egui::{Context, FullOutput};
+use egui_wgpu::Renderer as EguiRenderer;
+use egui_winit::State as EguiWinit;
+use winit::window::Window;
 
-pub struct Localization {
-    current_locale: String,
-    strings: HashMap<String, HashMap<String, String>>, // locale -> key -> value
-    fallback_locale: String,
+pub struct EguiIntegration {
+    context: Context,
+    state: EguiWinit,
+    renderer: EguiRenderer,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LocaleFile {
-    pub locale: String,
-    pub name: String,
-    pub strings: HashMap<String, String>,
-}
+impl EguiIntegration {
+    pub fn new(
+        device: &wgpu::Device,
+        output_format: wgpu::TextureFormat,
+        window: &Window,
+    ) -> Self;
 
-impl Localization {
-    pub fn new(default_locale: &str) -> Self;
+    /// Handle winit window event, returns true if egui consumed it
+    pub fn handle_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> bool;
 
-    pub fn load_locale(&mut self, path: impl AsRef<Path>) -> Result<(), LocaleError>;
-    pub fn set_locale(&mut self, locale: &str) -> Result<(), LocaleError>;
-    pub fn get_locale(&self) -> &str;
-    pub fn available_locales(&self) -> Vec<&str>;
+    /// Begin frame - call before any UI code
+    pub fn begin_frame(&mut self, window: &Window);
 
-    pub fn get(&self, key: &str) -> &str;
-    pub fn get_formatted(&self, key: &str, args: &[(&str, &str)]) -> String;
-    pub fn get_plural(&self, key: &str, count: u32) -> String;
-}
+    /// End frame and get paint jobs
+    pub fn end_frame(&mut self, window: &Window) -> FullOutput;
 
-// Macro for compile-time key checking (optional)
-#[macro_export]
-macro_rules! t {
-    ($loc:expr, $key:literal) => {
-        $loc.get($key)
-    };
-    ($loc:expr, $key:literal, $($arg:tt)*) => {
-        $loc.get_formatted($key, &[$($arg)*])
-    };
-}
-```
+    /// Render egui output
+    pub fn render(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        screen_descriptor: egui_wgpu::ScreenDescriptor,
+        output: FullOutput,
+    );
 
-Create locale files structure:
-```
-assets/locales/
-├── en.json
-├── es.json
-├── fr.json
-├── de.json
-├── ja.json
-└── zh.json
-```
-
-Requirements:
-- JSON locale files
-- Fallback to default locale
-- Format string interpolation
-- Plural forms support
-- Runtime language switching
-
-### I-14: Crash Reporting (P1)
-**File**: `crates/genesis-engine/src/crash_report.rs`
-
-Implement crash capture and reporting:
-
-```rust
-use std::panic;
-use backtrace::Backtrace;
-
-pub struct CrashReporter {
-    report_dir: PathBuf,
-    app_version: String,
-    enabled: bool,
-}
-
-#[derive(Serialize)]
-pub struct CrashReport {
-    pub timestamp: String,
-    pub app_version: String,
-    pub os: String,
-    pub arch: String,
-    pub panic_message: String,
-    pub backtrace: String,
-    pub system_info: SystemInfo,
-    pub recent_logs: Vec<String>,
-}
-
-#[derive(Serialize)]
-pub struct SystemInfo {
-    pub os_version: String,
-    pub cpu: String,
-    pub ram_mb: u64,
-    pub gpu: Option<String>,
-}
-
-impl CrashReporter {
-    pub fn new(report_dir: impl AsRef<Path>, app_version: &str) -> Self;
-
-    pub fn install_panic_hook(&self);
-
-    fn capture_crash(&self, panic_info: &panic::PanicInfo) -> CrashReport;
-    fn write_report(&self, report: &CrashReport) -> Result<PathBuf, std::io::Error>;
-
-    pub fn get_pending_reports(&self) -> Vec<PathBuf>;
-    pub fn submit_report(&self, path: &Path) -> Result<(), ReportError>;
-    pub fn delete_report(&self, path: &Path);
-}
-
-pub enum ReportError {
-    IoError(std::io::Error),
-    NetworkError(String),
-    ServerError(u16),
+    /// Get egui context for UI code
+    pub fn context(&self) -> &Context;
 }
 ```
 
 Requirements:
-- Custom panic hook
-- Backtrace capture
-- System info collection
-- Report file persistence
-- Optional upload (disabled by default)
+- Clean egui-wgpu-winit setup
+- Event handling passthrough
+- Proper frame lifecycle
+- Screen scaling support
 
-### I-15: Telemetry & Analytics (P2)
-**File**: `crates/genesis-engine/src/analytics.rs`
+### T-21: Game HUD Renderer (P0)
+**File**: `crates/genesis-tools/src/game_hud.rs`
 
-Implement opt-in gameplay analytics:
+Render the main gameplay HUD:
 
 ```rust
-use serde::Serialize;
+use egui::Context;
+use genesis_gameplay::{Player, Inventory};
 
-pub struct Analytics {
-    enabled: bool,
-    session_id: String,
-    events: Vec<AnalyticsEvent>,
-    flush_interval: std::time::Duration,
+pub struct GameHUD {
+    show_debug: bool,
+    show_inventory: bool,
 }
 
-#[derive(Serialize)]
-pub struct AnalyticsEvent {
-    pub timestamp: u64,
-    pub event_type: String,
-    pub properties: HashMap<String, serde_json::Value>,
-}
+impl GameHUD {
+    pub fn new() -> Self;
 
-pub struct AnalyticsConfig {
-    pub enabled: bool,
-    pub endpoint: Option<String>,
-    pub flush_interval_secs: u64,
-    pub batch_size: usize,
-}
+    /// Render the full HUD
+    pub fn render(
+        &mut self,
+        ctx: &Context,
+        player: &Player,
+        inventory: &Inventory,
+        fps: f32,
+        frame_time: f32,
+    );
 
-impl Analytics {
-    pub fn new(config: AnalyticsConfig) -> Self;
+    /// Render health/stamina bars (top-left)
+    fn render_vitals(&self, ctx: &Context, player: &Player);
 
-    pub fn track(&mut self, event_type: &str, properties: HashMap<String, serde_json::Value>);
+    /// Render hotbar (bottom-center)
+    fn render_hotbar(&self, ctx: &Context, inventory: &Inventory);
 
-    // Pre-defined events
-    pub fn track_session_start(&mut self);
-    pub fn track_session_end(&mut self, play_time_secs: u64);
-    pub fn track_level_complete(&mut self, level: &str, time_secs: u64);
-    pub fn track_death(&mut self, cause: &str, location: (f32, f32));
-    pub fn track_achievement(&mut self, achievement: &str);
+    /// Render debug info (top-right, toggleable)
+    fn render_debug(&self, ctx: &Context, fps: f32, frame_time: f32, player: &Player);
 
-    pub fn flush(&mut self);
+    /// Toggle debug overlay
+    pub fn toggle_debug(&mut self);
 
-    pub fn set_enabled(&mut self, enabled: bool);
-    pub fn is_enabled(&self) -> bool;
+    /// Toggle inventory panel
+    pub fn toggle_inventory(&mut self);
 }
 ```
 
 Requirements:
-- Disabled by default (opt-in)
-- Local event buffering
-- Batch submission
-- No PII collection
-- Session tracking
+- Health bar with color gradient
+- Hotbar with 10 slots (1-9, 0)
+- Selected slot highlight
+- Debug info: FPS, position, velocity, chunk
+- Minimap placeholder
+
+### T-22: Hotbar Widget (P0)
+**File**: `crates/genesis-tools/src/hotbar.rs`
+
+Focused hotbar implementation:
+
+```rust
+use egui::{Context, Ui, Response};
+use genesis_gameplay::inventory::{Inventory, ItemStack};
+
+pub struct Hotbar {
+    selected_slot: usize,
+    slot_size: f32,
+}
+
+impl Hotbar {
+    pub fn new() -> Self;
+
+    /// Render hotbar, returns selected slot if changed
+    pub fn render(&mut self, ctx: &Context, inventory: &Inventory) -> Option<usize>;
+
+    /// Select slot by number (0-9)
+    pub fn select_slot(&mut self, slot: usize);
+
+    /// Select next/previous slot (mouse wheel)
+    pub fn cycle_slot(&mut self, delta: i32);
+
+    /// Get currently selected slot
+    pub fn selected(&self) -> usize;
+
+    /// Render single slot with item
+    fn render_slot(&self, ui: &mut Ui, slot: usize, item: Option<&ItemStack>, selected: bool) -> Response;
+}
+```
+
+Requirements:
+- 10 slots horizontally centered
+- Number key hints (1-9, 0)
+- Item icon and count
+- Selection highlight
+- Mouse wheel cycling
+
+### T-23: Debug Overlay (P1)
+**File**: `crates/genesis-tools/src/debug_overlay.rs`
+
+Comprehensive debug information:
+
+```rust
+use egui::Context;
+use genesis_gameplay::Player;
+use genesis_kernel::Camera;
+
+pub struct DebugOverlay {
+    visible: bool,
+    show_fps: bool,
+    show_position: bool,
+    show_chunk_info: bool,
+    show_memory: bool,
+}
+
+impl DebugOverlay {
+    pub fn new() -> Self;
+
+    pub fn render(
+        &mut self,
+        ctx: &Context,
+        fps: f32,
+        frame_time_ms: f32,
+        player: &Player,
+        camera: &Camera,
+        memory_usage: usize,
+    );
+
+    pub fn toggle(&mut self);
+    pub fn is_visible(&self) -> bool;
+}
+
+/// FPS tracking helper
+pub struct FpsCounter {
+    frames: VecDeque<f64>,
+    last_time: std::time::Instant,
+}
+
+impl FpsCounter {
+    pub fn new() -> Self;
+    pub fn tick(&mut self) -> (f32, f32);  // (fps, frame_time_ms)
+}
+```
+
+Requirements:
+- F3 to toggle (like Minecraft)
+- Smooth FPS counter (rolling average)
+- Player position and velocity
+- Current chunk coordinates
+- Memory usage estimate
 
 ---
 
@@ -301,28 +231,29 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[infra] feat: I-12 asset pipeline
-[infra] feat: I-13 localization system
-[infra] feat: I-14 crash reporting
-[infra] feat: I-15 telemetry and analytics
+[tools] feat: T-20 egui integration layer
+[tools] feat: T-21 game HUD renderer
+[tools] feat: T-22 hotbar widget
+[tools] feat: T-23 debug overlay
 ```
 
 ---
 
 ## Dependencies
 
-Add to `crates/genesis-engine/Cargo.toml`:
+Ensure these are in `crates/genesis-tools/Cargo.toml`:
 ```toml
-backtrace = "0.3"
-lz4 = "1.24"
+egui = "0.30"
+egui-wgpu = "0.30"
+egui-winit = "0.30"
 ```
 
 ---
 
 ## Integration Notes
 
-- I-12 assets used by all crates for loading resources
-- I-13 localization integrated with all UI
-- I-14 crash reporter installed at startup
-- I-15 analytics tracks gameplay events
-- Create sample locale files in `assets/locales/`
+- T-20 provides egui setup used by app.rs
+- T-21 HUD rendered each frame after game render
+- T-22 hotbar integrated with inventory
+- T-23 debug toggled by F3 key
+- Export new modules in lib.rs
