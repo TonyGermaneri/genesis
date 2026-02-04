@@ -1,0 +1,97 @@
+# Genesis Development Docker Compose
+# 
+# Usage:
+#   docker compose up dev          # Start development shell
+#   docker compose run dev bash    # Interactive bash
+#   docker compose run dev just test  # Run tests
+#
+# GPU Support (Linux only):
+#   docker compose --profile gpu up dev-gpu
+
+services:
+  # ============================================
+  # Development Environment
+  # ============================================
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    volumes:
+      # Mount source code
+      - .:/workspace
+      # Persist cargo registry cache
+      - cargo-registry:/usr/local/cargo/registry
+      # Persist cargo git cache
+      - cargo-git:/usr/local/cargo/git
+      # Persist target directory for faster builds
+      - cargo-target:/workspace/target
+    environment:
+      - RUST_BACKTRACE=1
+      - CARGO_TERM_COLOR=always
+      - RUST_LOG=info
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # ============================================
+  # Watch Mode (auto-rebuild on changes)
+  # ============================================
+  watch:
+    extends: dev
+    command: cargo watch -x check -x test
+
+  # ============================================
+  # Test Runner
+  # ============================================
+  test:
+    extends: dev
+    command: cargo test --workspace
+
+  # ============================================
+  # Linting
+  # ============================================
+  lint:
+    extends: dev
+    command: >
+      bash -c "
+        cargo fmt --all -- --check &&
+        cargo clippy --workspace -- -D warnings
+      "
+
+  # ============================================
+  # GPU Development (Linux only)
+  # ============================================
+  dev-gpu:
+    extends: dev
+    profiles:
+      - gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+    environment:
+      - RUST_BACKTRACE=1
+      - VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+
+  # ============================================
+  # Documentation Server
+  # ============================================
+  docs:
+    extends: dev
+    ports:
+      - "3000:3000"
+    command: >
+      bash -c "
+        cargo install mdbook 2>/dev/null || true &&
+        cd docs && mdbook serve --hostname 0.0.0.0 --port 3000
+      "
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  cargo-target:

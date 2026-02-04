@@ -1,0 +1,117 @@
+# Genesis Development Environment
+# Dockerfile.dev - Development container with full toolchain
+#
+# Build: docker build -f Dockerfile.dev -t genesis-dev .
+# Run:   docker run -it -v $(pwd):/workspace genesis-dev
+#
+# For GPU support (Linux):
+# docker run -it --gpus all -v $(pwd):/workspace genesis-dev
+
+# ============================================
+# Stage 1: Base with system dependencies
+# ============================================
+FROM rust:1.75-bookworm AS base
+
+# Install system dependencies for graphics/windowing
+RUN apt-get update && apt-get install -y \
+    # Vulkan
+    libvulkan-dev \
+    vulkan-tools \
+    mesa-vulkan-drivers \
+    # Wayland
+    libwayland-dev \
+    libxkbcommon-dev \
+    # X11 (fallback)
+    libx11-dev \
+    libxi-dev \
+    libxcursor-dev \
+    libxrandr-dev \
+    # Build tools
+    pkg-config \
+    cmake \
+    # Utilities
+    git \
+    curl \
+    jq \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# Stage 2: Rust tools
+# ============================================
+FROM base AS tools
+
+# Install Rust components
+RUN rustup component add clippy rustfmt rust-src
+
+# Install commonly used cargo tools
+RUN cargo install --locked \
+    cargo-watch \
+    cargo-nextest \
+    cargo-llvm-cov \
+    cargo-deny \
+    && rm -rf /usr/local/cargo/registry/cache
+
+# Install just (command runner)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+# ============================================
+# Stage 3: Development environment
+# ============================================
+FROM tools AS dev
+
+# Set up workspace
+WORKDIR /workspace
+
+# Create non-root user for development
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID developer \
+    && useradd -m -u $UID -g $GID -s /bin/bash developer \
+    && chown -R developer:developer /workspace
+
+# Environment variables
+ENV RUST_BACKTRACE=1
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+# Default to bash for interactive use
+CMD ["/bin/bash"]
+
+# ============================================
+# Stage 4: Dependency cache layer (optional)
+# ============================================
+FROM dev AS cached
+
+# Copy Cargo manifests for dependency caching
+COPY --chown=developer:developer Cargo.toml Cargo.lock ./
+COPY --chown=developer:developer crates/genesis-common/Cargo.toml crates/genesis-common/
+COPY --chown=developer:developer crates/genesis-kernel/Cargo.toml crates/genesis-kernel/
+COPY --chown=developer:developer crates/genesis-world/Cargo.toml crates/genesis-world/
+COPY --chown=developer:developer crates/genesis-gameplay/Cargo.toml crates/genesis-gameplay/
+COPY --chown=developer:developer crates/genesis-tools/Cargo.toml crates/genesis-tools/
+COPY --chown=developer:developer crates/genesis-engine/Cargo.toml crates/genesis-engine/
+
+# Create stub lib.rs files for dependency compilation
+RUN mkdir -p crates/genesis-common/src \
+    && mkdir -p crates/genesis-kernel/src \
+    && mkdir -p crates/genesis-world/src \
+    && mkdir -p crates/genesis-gameplay/src \
+    && mkdir -p crates/genesis-tools/src \
+    && mkdir -p crates/genesis-engine/src \
+    && echo "// stub" > crates/genesis-common/src/lib.rs \
+    && echo "// stub" > crates/genesis-kernel/src/lib.rs \
+    && echo "// stub" > crates/genesis-world/src/lib.rs \
+    && echo "// stub" > crates/genesis-gameplay/src/lib.rs \
+    && echo "// stub" > crates/genesis-tools/src/lib.rs \
+    && echo "fn main() {}" > crates/genesis-engine/src/main.rs
+
+# Build dependencies (this layer gets cached)
+RUN cargo build --workspace || true
+RUN cargo build --workspace --release || true
+
+# Remove stub files (will be replaced by volume mount)
+RUN rm -rf crates/*/src
+
+USER developer
