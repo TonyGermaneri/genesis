@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-03
-> Sprint: Iteration 4 — Core Loop
+> Sprint: Iteration 5 — Playable Integration
 
 ## Legend
 
@@ -12,83 +12,83 @@
 
 ---
 
-## Completed — Iterations 1-3
+## Completed — Iterations 1-4
 
 ### Kernel Agent
 | ID | Task | Status |
 |----|------|--------|
-| K-1 to K-11 | Cell simulation, buffers, rendering, chunks | 🟢 |
-| K-12 | Chunk streaming system | 🟢 |
-| K-13 | Collision query system | 🟢 |
-| K-14 | Biome material assignment | 🟢 |
-| K-15 | GPU readback optimization | 🟢 |
+| K-1 to K-15 | Cell simulation, buffers, rendering, chunks, streaming, collision, biome | 🟢 |
+| K-16 | Procedural world generation | 🟢 |
+| K-17 | Dynamic lighting system | 🟢 |
+| K-18 | Particle system | 🟢 |
+| K-19 | Audio spatial integration | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
 |----|------|--------|
-| G-1 to G-12 | Entity, inventory, crafting, economy, factions, player | 🟢 |
-| G-13 | Player physics integration | 🟢 |
-| G-14 | Inventory UI model | 🟢 |
-| G-15 | Crafting UI model | 🟢 |
-| G-16 | Save/load game state | 🟢 |
+| G-1 to G-16 | Entity, inventory, crafting, economy, factions, player, physics, save/load | 🟢 |
+| G-17 | Combat system | 🟢 |
+| G-18 | NPC AI system | 🟢 |
+| G-19 | Vehicle system | 🟢 |
+| G-20 | Quest system | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
 |----|------|--------|
-| T-1 to T-11 | Replay, inspectors, HUD, test harness, hot reload | 🟢 |
-| T-12 | Inventory UI renderer | 🟢 |
-| T-13 | Crafting UI renderer | 🟢 |
-| T-14 | Minimap renderer | 🟢 |
-| T-15 | Debug console | 🟢 |
+| T-1 to T-15 | Replay, inspectors, HUD, test harness, UI renderers, console | 🟢 |
+| T-16 | Audio engine integration | 🟢 |
+| T-17 | Quest UI | 🟢 |
+| T-18 | Dialogue system UI | 🟢 |
+| T-19 | Combat HUD | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
 |----|------|--------|
-| I-1 to I-7 | CI/CD, releases, mod format | 🟢 |
-| I-8 | Performance regression CI | 🟢 |
-| I-9 | Documentation site | 🟢 |
-| I-10 | Build telemetry | 🟢 |
-| I-11 | Docker development image | 🟢 |
+| I-1 to I-11 | CI/CD, releases, mod format, Docker, docs | 🟢 |
+| I-12 | Asset pipeline | 🟢 |
+| I-13 | Localization system | 🟢 |
+| I-14 | Crash reporting | 🟢 |
+| I-15 | Telemetry & analytics | 🟢 |
 
 ---
 
-## Iteration 4 — Active
+## Iteration 5 — Playable Integration (Active)
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| K-16 | Procedural world generation | ⚪ | P0 |
-| K-17 | Dynamic lighting system | ⚪ | P0 |
-| K-18 | Particle system | ⚪ | P1 |
-| K-19 | Audio spatial integration | ⚪ | P1 |
+| K-20 | Camera system | ⚪ | P0 |
+| K-21 | World terrain rendering | ⚪ | P0 |
+| K-22 | Cell rendering with camera | ⚪ | P0 |
+| K-23 | Initial world and biome display | ⚪ | P1 |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| G-17 | Combat system | ⚪ | P0 |
-| G-18 | NPC AI system | ⚪ | P0 |
-| G-19 | Vehicle system | ⚪ | P0 |
-| G-20 | Quest system | ⚪ | P1 |
+| G-21 | Game state manager | ⚪ | P0 |
+| G-22 | Player spawn system | ⚪ | P0 |
+| G-23 | Player movement controller | ⚪ | P0 |
+| G-24 | Engine integration exports | ⚪ | P0 |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| T-16 | Audio engine integration | ⚪ | P0 |
-| T-17 | Quest UI | ⚪ | P0 |
-| T-18 | Dialogue system UI | ⚪ | P0 |
-| T-19 | Combat HUD | ⚪ | P1 |
+| T-20 | Egui integration layer | ⚪ | P0 |
+| T-21 | Game HUD renderer | ⚪ | P0 |
+| T-22 | Hotbar widget | ⚪ | P0 |
+| T-23 | Debug overlay | ⚪ | P1 |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| I-12 | Asset pipeline | ⚪ | P0 |
-| I-13 | Localization system | ⚪ | P0 |
-| I-14 | Crash reporting | ⚪ | P1 |
-| I-15 | Telemetry & analytics | ⚪ | P2 |
+| I-16 | Input system integration | ⚪ | P0 |
+| I-17 | Main game loop integration | ⚪ | P0 |
+| I-18 | Engine configuration | ⚪ | P0 |
+| I-19 | Frame timing | ⚪ | P1 |
 
 ---
 
