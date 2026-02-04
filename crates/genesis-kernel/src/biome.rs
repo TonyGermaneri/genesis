@@ -25,6 +25,10 @@ pub mod biome_ids {
     pub const CAVE: BiomeId = 2;
     /// Ocean biome with water and sand.
     pub const OCEAN: BiomeId = 3;
+    /// Plains biome with open grasslands.
+    pub const PLAINS: BiomeId = 4;
+    /// Mountain biome with stone, snow caps, and elevation.
+    pub const MOUNTAIN: BiomeId = 5;
 }
 
 /// Pre-defined material IDs (matching genesis-tools/screenshot.rs conventions).
@@ -51,6 +55,8 @@ pub mod material_ids {
     pub const CLAY: MaterialId = 8;
     /// Gravel material.
     pub const GRAVEL: MaterialId = 9;
+    /// Snow material (for mountain peaks).
+    pub const SNOW: MaterialId = 10;
 }
 
 /// Configuration for a single biome.
@@ -150,6 +156,34 @@ impl BiomeConfig {
             material_ids::STONE,
             2,  // 2 cells of sand
             10, // 10 cells of clay
+        )
+    }
+
+    /// Creates a default Plains biome.
+    #[must_use]
+    pub fn plains() -> Self {
+        Self::new(
+            biome_ids::PLAINS,
+            "Plains",
+            material_ids::GRASS,
+            material_ids::DIRT,
+            material_ids::STONE,
+            2,  // 2 cells of grass
+            12, // 12 cells of dirt
+        )
+    }
+
+    /// Creates a default Mountain biome.
+    #[must_use]
+    pub fn mountain() -> Self {
+        Self::new(
+            biome_ids::MOUNTAIN,
+            "Mountain",
+            material_ids::STONE,
+            material_ids::STONE,
+            material_ids::STONE,
+            0,
+            0,
         )
     }
 
@@ -353,6 +387,8 @@ impl BiomeManager {
         manager.register_biome(BiomeConfig::desert());
         manager.register_biome(BiomeConfig::cave());
         manager.register_biome(BiomeConfig::ocean());
+        manager.register_biome(BiomeConfig::plains());
+        manager.register_biome(BiomeConfig::mountain());
         manager
     }
 
@@ -390,18 +426,35 @@ impl BiomeManager {
         let n1 = self.noise.fbm(x, y, 3, 0.5);
         // Secondary noise adds local variation
         let n2 = self.noise2.noise2d(x, y);
+        // Third noise for elevation/mountain determination
+        let elevation_noise = self.noise.fbm(x * 2.0, y * 2.0, 2, 0.6);
 
         // Combine noises
         let combined = n1 + n2 * 0.2;
 
         // Map noise to biomes with smooth transitions
         // Thresholds create roughly equal-sized biome regions
-        if combined < -0.3 {
+        if combined < -0.4 {
             biome_ids::OCEAN
-        } else if combined < 0.1 {
+        } else if combined < -0.15 {
+            // Transition zone - could be plains near ocean
+            biome_ids::PLAINS
+        } else if combined < 0.15 {
             biome_ids::FOREST
-        } else if combined < 0.5 {
-            biome_ids::DESERT
+        } else if combined < 0.4 {
+            // Check elevation for mountain vs desert
+            if elevation_noise > 0.3 {
+                biome_ids::MOUNTAIN
+            } else {
+                biome_ids::DESERT
+            }
+        } else if combined < 0.6 {
+            // High elevation tends to be mountain
+            if elevation_noise > 0.2 {
+                biome_ids::MOUNTAIN
+            } else {
+                biome_ids::PLAINS
+            }
         } else {
             // Deep areas become caves
             biome_ids::CAVE
@@ -432,12 +485,15 @@ impl BiomeManager {
         let y = coord.y as f64;
 
         let n = self.noise.fbm(x, y, 3, 0.5);
+        let elevation = self.noise.fbm(x * 2.0, y * 2.0, 2, 0.6);
 
-        // Calculate distance to each biome threshold
+        // Calculate distance to each biome threshold (updated with new biomes)
         let thresholds = [
-            (biome_ids::OCEAN, -0.3),
-            (biome_ids::FOREST, 0.1),
-            (biome_ids::DESERT, 0.5),
+            (biome_ids::OCEAN, -0.4),
+            (biome_ids::PLAINS, -0.15),
+            (biome_ids::FOREST, 0.15),
+            (biome_ids::DESERT, 0.4),
+            (biome_ids::MOUNTAIN, 0.6),
             (biome_ids::CAVE, 1.0),
         ];
 
@@ -456,11 +512,17 @@ impl BiomeManager {
 
                 // Full weight in center, blend at edges
                 #[allow(clippy::cast_possible_truncation)]
-                let weight = if min_dist < blend_range {
+                let mut weight = if min_dist < blend_range {
                     (min_dist / blend_range) as f32
                 } else {
                     1.0
                 };
+
+                // Elevation affects mountain weight
+                if biome_id == biome_ids::MOUNTAIN && elevation < 0.2 {
+                    weight *= elevation as f32 / 0.2;
+                }
+
                 weights.push((biome_id, weight));
             } else {
                 // Check if we're in blend range
@@ -581,12 +643,14 @@ mod tests {
     #[test]
     fn test_biome_manager_defaults() {
         let manager = BiomeManager::with_defaults(42);
-        assert_eq!(manager.biome_count(), 4);
+        assert_eq!(manager.biome_count(), 6);
 
         assert!(manager.get_biome(biome_ids::FOREST).is_some());
         assert!(manager.get_biome(biome_ids::DESERT).is_some());
         assert!(manager.get_biome(biome_ids::CAVE).is_some());
         assert!(manager.get_biome(biome_ids::OCEAN).is_some());
+        assert!(manager.get_biome(biome_ids::PLAINS).is_some());
+        assert!(manager.get_biome(biome_ids::MOUNTAIN).is_some());
     }
 
     #[test]

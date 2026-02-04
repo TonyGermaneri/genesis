@@ -148,13 +148,14 @@ impl ChunkRenderParams {
 
 /// Multi-chunk render shader in WGSL.
 ///
-/// This shader supports rendering multiple chunks with world offsets
-/// and day/night cycle lighting.
+/// This shader supports rendering multiple chunks with world offsets,
+/// day/night cycle lighting, biome-aware coloring, biome transition blending,
+/// water animation, and mountain/elevation rendering.
 pub const MULTI_CHUNK_RENDER_SHADER: &str = r"
 // Cell structure (must match compute shader)
 struct Cell {
     material: u32,      // u16 material + u8 flags + u8 temperature/growth
-    velocity_data: u32, // i8 vel_x + i8 vel_y + u16 data
+    velocity_data: u32, // i8 vel_x + i8 vel_y + u8 biome_id + u8 elevation
 }
 
 // Material color (RGBA float)
@@ -190,7 +191,49 @@ const FLAG_BURNING: u32 = 4u;
 // Material IDs
 const MAT_AIR: u32 = 0u;
 const MAT_WATER: u32 = 1u;
+const MAT_SAND: u32 = 2u;
 const MAT_GRASS: u32 = 3u;
+const MAT_DIRT: u32 = 4u;
+const MAT_STONE: u32 = 5u;
+const MAT_SNOW: u32 = 6u;
+const MAT_SANDSTONE: u32 = 7u;
+
+// Biome IDs (K-32)
+const BIOME_FOREST: u32 = 0u;
+const BIOME_DESERT: u32 = 1u;
+const BIOME_CAVE: u32 = 2u;
+const BIOME_OCEAN: u32 = 3u;
+const BIOME_PLAINS: u32 = 4u;
+const BIOME_MOUNTAIN: u32 = 5u;
+
+// Biome color palettes (K-32)
+// Forest biome colors
+const FOREST_GRASS: vec3<f32> = vec3<f32>(0.290, 0.486, 0.137);  // #4a7c23
+const FOREST_DIRT: vec3<f32> = vec3<f32>(0.545, 0.412, 0.078);   // #8b6914
+const FOREST_STONE: vec3<f32> = vec3<f32>(0.400, 0.420, 0.380);  // Mossy gray
+
+// Desert biome colors
+const DESERT_SAND: vec3<f32> = vec3<f32>(0.761, 0.651, 0.333);   // #c2a655
+const DESERT_SANDSTONE: vec3<f32> = vec3<f32>(0.722, 0.584, 0.431); // #b8956e
+const DESERT_STONE: vec3<f32> = vec3<f32>(0.600, 0.520, 0.420);  // Tan stone
+
+// Lake/Ocean biome colors (K-34)
+const OCEAN_WATER: vec3<f32> = vec3<f32>(0.227, 0.486, 0.647);   // #3a7ca5
+const OCEAN_DEEP: vec3<f32> = vec3<f32>(0.118, 0.302, 0.420);    // #1e4d6b
+const OCEAN_SAND: vec3<f32> = vec3<f32>(0.761, 0.706, 0.549);    // Beach sand
+
+// Plains biome colors
+const PLAINS_GRASS: vec3<f32> = vec3<f32>(0.486, 0.702, 0.259);  // #7cb342
+const PLAINS_DIRT: vec3<f32> = vec3<f32>(0.627, 0.502, 0.376);   // #a08060
+
+// Mountain biome colors (K-35)
+const MOUNTAIN_STONE: vec3<f32> = vec3<f32>(0.478, 0.478, 0.478); // #7a7a7a
+const MOUNTAIN_SNOW: vec3<f32> = vec3<f32>(0.910, 0.910, 0.910);  // #e8e8e8
+const MOUNTAIN_ROCK: vec3<f32> = vec3<f32>(0.380, 0.350, 0.320);  // Dark rock
+
+// Cave biome colors
+const CAVE_STONE: vec3<f32> = vec3<f32>(0.350, 0.340, 0.350);    // Dark stone
+const CAVE_DIRT: vec3<f32> = vec3<f32>(0.400, 0.320, 0.250);     // Cave dirt
 
 // Bindings
 @group(0) @binding(0) var<storage, read> cells: array<Cell>;
@@ -232,6 +275,118 @@ fn get_flags(cell: Cell) -> u32 {
 // Helper: get temperature/growth from cell
 fn get_growth(cell: Cell) -> u32 {
     return (cell.material >> 24u) & 0xFFu;
+}
+
+// Helper: get biome ID from cell data (K-32)
+fn get_biome(cell: Cell) -> u32 {
+    return (cell.velocity_data >> 16u) & 0xFFu;
+}
+
+// Helper: get elevation from cell data (K-35)
+fn get_elevation(cell: Cell) -> u32 {
+    return (cell.velocity_data >> 24u) & 0xFFu;
+}
+
+// Pseudo-random hash for noise (K-33)
+fn hash2d(p: vec2<f32>) -> f32 {
+    let h = dot(p, vec2<f32>(127.1, 311.7));
+    return fract(sin(h) * 43758.5453123);
+}
+
+// 2D noise for biome transitions (K-33)
+fn noise2d(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    
+    let a = hash2d(i);
+    let b = hash2d(i + vec2<f32>(1.0, 0.0));
+    let c = hash2d(i + vec2<f32>(0.0, 1.0));
+    let d = hash2d(i + vec2<f32>(1.0, 1.0));
+    
+    let u = f * f * (3.0 - 2.0 * f);
+    
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Fractal Brownian motion noise (K-33)
+fn fbm(p: vec2<f32>, octaves: i32) -> f32 {
+    var value = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var pos = p;
+    
+    for (var i = 0; i < octaves; i = i + 1) {
+        value = value + amplitude * noise2d(pos * frequency);
+        amplitude = amplitude * 0.5;
+        frequency = frequency * 2.0;
+    }
+    
+    return value;
+}
+
+// Get biome-specific color for material (K-32)
+fn get_biome_material_color(material_id: u32, biome_id: u32, base_color: vec3<f32>) -> vec3<f32> {
+    // Apply biome-specific color palettes
+    if biome_id == BIOME_FOREST {
+        if material_id == MAT_GRASS {
+            return FOREST_GRASS;
+        } else if material_id == MAT_DIRT {
+            return FOREST_DIRT;
+        } else if material_id == MAT_STONE {
+            return FOREST_STONE;
+        }
+    } else if biome_id == BIOME_DESERT {
+        if material_id == MAT_SAND {
+            return DESERT_SAND;
+        } else if material_id == MAT_SANDSTONE || material_id == MAT_DIRT {
+            return DESERT_SANDSTONE;
+        } else if material_id == MAT_STONE {
+            return DESERT_STONE;
+        }
+    } else if biome_id == BIOME_OCEAN {
+        if material_id == MAT_WATER {
+            return OCEAN_WATER;
+        } else if material_id == MAT_SAND {
+            return OCEAN_SAND;
+        }
+    } else if biome_id == BIOME_PLAINS {
+        if material_id == MAT_GRASS {
+            return PLAINS_GRASS;
+        } else if material_id == MAT_DIRT {
+            return PLAINS_DIRT;
+        }
+    } else if biome_id == BIOME_MOUNTAIN {
+        if material_id == MAT_STONE {
+            return MOUNTAIN_STONE;
+        } else if material_id == MAT_SNOW {
+            return MOUNTAIN_SNOW;
+        }
+    } else if biome_id == BIOME_CAVE {
+        if material_id == MAT_STONE {
+            return CAVE_STONE;
+        } else if material_id == MAT_DIRT {
+            return CAVE_DIRT;
+        }
+    }
+    
+    // Default: return base color from material palette
+    return base_color;
+}
+
+// Get biome blend weight for transitions (K-33)
+fn get_biome_blend_weight(world_pos: vec2<f32>, biome_id: u32) -> f32 {
+    // Use noise to create natural-looking transition boundaries
+    let noise_scale = 0.02;
+    let blend_noise = fbm(world_pos * noise_scale, 3);
+    
+    // Calculate distance from biome center (simulated)
+    let biome_noise = fbm(world_pos * 0.005, 2);
+    
+    // Blend smoothly at biome boundaries
+    let edge_distance = abs(blend_noise - 0.5) * 2.0;
+    let blend_factor = smoothstep(0.0, 0.3, edge_distance);
+    
+    return blend_factor;
 }
 
 // Calculate ambient light based on time of day
@@ -277,6 +432,81 @@ fn get_sky_color(time: f32) -> vec3<f32> {
     return vec3<f32>(0.4, 0.6, 0.9);
 }
 
+// Water wave animation (K-34)
+fn get_water_offset(world_pos: vec2<f32>, time: f32) -> f32 {
+    let wave_speed = 2.0;
+    let wave_scale = 0.1;
+    
+    // Multiple wave frequencies for natural look
+    let wave1 = sin(world_pos.x * 0.3 + time * wave_speed) * 0.5;
+    let wave2 = sin(world_pos.y * 0.2 + time * wave_speed * 0.7) * 0.3;
+    let wave3 = sin((world_pos.x + world_pos.y) * 0.15 + time * wave_speed * 1.3) * 0.2;
+    
+    return (wave1 + wave2 + wave3) * wave_scale;
+}
+
+// Water color with depth and animation (K-34)
+fn get_water_color(world_pos: vec2<f32>, time: f32, base_water: vec3<f32>, biome_id: u32) -> vec3<f32> {
+    // Wave animation offset for shimmer effect
+    let wave_offset = get_water_offset(world_pos, time);
+    
+    // Pseudo-depth based on noise (simulates varying water depth)
+    let depth_noise = fbm(world_pos * 0.05, 2);
+    let depth = depth_noise * 0.6 + 0.2;
+    
+    // Select water colors based on biome
+    var shallow_color = OCEAN_WATER;
+    var deep_color = OCEAN_DEEP;
+    
+    if biome_id == BIOME_FOREST {
+        // Forest lakes - slightly greener
+        shallow_color = vec3<f32>(0.200, 0.450, 0.500);
+        deep_color = vec3<f32>(0.100, 0.280, 0.350);
+    }
+    
+    // Blend between shallow and deep based on depth
+    var water_color = mix(shallow_color, deep_color, depth);
+    
+    // Add wave highlights
+    let highlight = max(0.0, wave_offset) * 0.3;
+    water_color = water_color + vec3<f32>(highlight, highlight * 0.8, highlight * 0.6);
+    
+    // Sky reflection
+    let sky = get_sky_color(time);
+    let reflection_strength = 0.2 + wave_offset * 0.1;
+    water_color = mix(water_color, sky, reflection_strength);
+    
+    return water_color;
+}
+
+// Mountain/elevation rendering (K-35)
+fn get_elevation_color(base_color: vec3<f32>, elevation: f32, world_pos: vec2<f32>) -> vec3<f32> {
+    var color = base_color;
+    
+    // Snow cap at high elevations
+    let snow_threshold = 0.7;
+    let snow_blend_range = 0.15;
+    
+    if elevation > snow_threshold {
+        // Add snow with noise for natural edge
+        let snow_noise = fbm(world_pos * 0.1, 2);
+        let snow_factor = smoothstep(snow_threshold - snow_blend_range, snow_threshold + snow_blend_range, elevation + snow_noise * 0.1);
+        color = mix(color, MOUNTAIN_SNOW, snow_factor);
+    }
+    
+    // Shadow on steep slopes (simulated via noise)
+    let slope_noise = fbm(world_pos * 0.08 + vec2<f32>(100.0, 0.0), 2);
+    let shadow_factor = max(0.0, slope_noise - 0.5) * 0.3;
+    color = color * (1.0 - shadow_factor);
+    
+    // Highlight on sun-facing slopes
+    let highlight_noise = fbm(world_pos * 0.08 + vec2<f32>(0.0, 100.0), 2);
+    let highlight_factor = max(0.0, highlight_noise - 0.6) * 0.2;
+    color = color + vec3<f32>(highlight_factor, highlight_factor * 0.9, highlight_factor * 0.8);
+    
+    return color;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Convert UV to pixel coordinates
@@ -286,6 +516,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Convert pixel to world cell coordinates (accounting for camera and zoom)
     let world_x = i32(f32(pixel_x) / params.zoom) + params.camera_x;
     let world_y = i32(f32(pixel_y) / params.zoom) + params.camera_y;
+    
+    // World position as float for effects
+    let world_pos = vec2<f32>(f32(world_x), f32(world_y));
     
     // Convert to local chunk coordinates
     let local_x = world_x - chunk_params.world_offset_x;
@@ -302,41 +535,65 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let idx = u32(local_y) * params.chunk_size + u32(local_x);
     let cell = cells[idx];
     
-    // Get base color from material
+    // Get cell properties
     let material_id = get_material(cell);
+    let biome_id = get_biome(cell);
+    let elevation = f32(get_elevation(cell)) / 255.0;
+    let growth = get_growth(cell);
+    let flags = get_flags(cell);
+    
+    // Get base color from material palette
     let num_colors = arrayLength(&colors);
     let color_idx = min(material_id, num_colors - 1u);
-    var base_color = colors[color_idx];
+    let base_material_color = colors[color_idx];
+    var base_color = vec3<f32>(base_material_color.r, base_material_color.g, base_material_color.b);
+    
+    // Apply biome-specific coloring (K-32)
+    var color = get_biome_material_color(material_id, biome_id, base_color);
+    
+    // Biome transition blending (K-33)
+    let blend_weight = get_biome_blend_weight(world_pos, biome_id);
+    // Subtle noise variation at transitions
+    let transition_noise = noise2d(world_pos * 0.1) * 0.1;
+    color = color * (1.0 - transition_noise * (1.0 - blend_weight));
+    
+    // Special material handling
+    
+    // Grass color varies by growth stage and biome
+    if material_id == MAT_GRASS {
+        let growth_factor = f32(growth) / 255.0;
+        var young_color: vec3<f32>;
+        var mature_color: vec3<f32>;
+        
+        if biome_id == BIOME_FOREST {
+            young_color = vec3<f32>(0.400, 0.550, 0.200);
+            mature_color = FOREST_GRASS;
+        } else if biome_id == BIOME_PLAINS {
+            young_color = vec3<f32>(0.550, 0.700, 0.300);
+            mature_color = PLAINS_GRASS;
+        } else {
+            young_color = vec3<f32>(0.6, 0.7, 0.3);
+            mature_color = vec3<f32>(0.2, 0.5, 0.2);
+        }
+        
+        color = mix(young_color, mature_color, growth_factor);
+    }
+    
+    // Water with animation and depth (K-34)
+    if material_id == MAT_WATER {
+        color = get_water_color(world_pos, params.time_of_day * 10.0, color, biome_id);
+    }
+    
+    // Mountain/elevation effects (K-35)
+    if biome_id == BIOME_MOUNTAIN || elevation > 0.5 {
+        color = get_elevation_color(color, elevation, world_pos);
+    }
     
     // Get ambient light for day/night cycle
     let ambient = get_ambient_light(params.time_of_day);
     
-    var color = vec3<f32>(base_color.r, base_color.g, base_color.b);
-    
-    // Special material handling
-    let growth = get_growth(cell);
-    
-    // Grass color varies by growth stage
-    if material_id == MAT_GRASS {
-        let growth_factor = f32(growth) / 255.0;
-        // Young grass is lighter/yellower, mature is darker/greener
-        let young_color = vec3<f32>(0.6, 0.7, 0.3);   // Light green-yellow
-        let mature_color = vec3<f32>(0.2, 0.5, 0.2);  // Dark green
-        color = mix(young_color, mature_color, growth_factor);
-    }
-    
-    // Water reflects sky color
-    if material_id == MAT_WATER {
-        let sky = get_sky_color(params.time_of_day);
-        // Blend water color with sky reflection
-        color = mix(color, sky, 0.3);
-    }
-    
     // Apply ambient lighting
     color = color * ambient;
-    
-    // Modulate color based on cell state
-    let flags = get_flags(cell);
     
     // Add burning effect (orange glow, ignores ambient)
     if (flags & FLAG_BURNING) != 0u {
@@ -365,7 +622,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(0.0, 0.3, 0.3, 1.0);
     }
     
-    return vec4<f32>(color.r, color.g, color.b, base_color.a);
+    // Water has slight transparency (K-34)
+    var alpha = base_material_color.a;
+    if material_id == MAT_WATER {
+        alpha = 0.85; // Slight transparency for water
+    }
+    
+    return vec4<f32>(color.r, color.g, color.b, alpha);
 }
 ";
 
