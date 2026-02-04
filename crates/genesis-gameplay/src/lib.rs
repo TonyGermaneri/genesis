@@ -26,6 +26,7 @@ pub mod economy;
 pub mod entity;
 pub mod events;
 pub mod faction;
+pub mod game_state;
 pub mod input;
 pub mod interaction;
 pub mod inventory;
@@ -36,6 +37,7 @@ pub mod physics;
 pub mod player;
 pub mod quest;
 pub mod save;
+pub mod spawn;
 pub mod vehicle;
 
 /// Prelude for convenient imports
@@ -47,6 +49,7 @@ pub mod prelude {
     pub use crate::entity::*;
     pub use crate::events::*;
     pub use crate::faction::*;
+    pub use crate::game_state::*;
     pub use crate::input::*;
     pub use crate::interaction::*;
     pub use crate::inventory::*;
@@ -57,6 +60,7 @@ pub mod prelude {
     pub use crate::player::*;
     pub use crate::quest::*;
     pub use crate::save::*;
+    pub use crate::spawn::*;
     pub use crate::vehicle::*;
 }
 
