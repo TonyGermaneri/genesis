@@ -262,12 +262,7 @@ pub struct AudioBuffer {
 impl AudioBuffer {
     /// Create a new audio buffer from samples.
     #[must_use]
-    pub fn new(
-        id: BufferId,
-        samples: Vec<f32>,
-        sample_rate: u32,
-        channels: u16,
-    ) -> Self {
+    pub fn new(id: BufferId, samples: Vec<f32>, sample_rate: u32, channels: u16) -> Self {
         let num_samples = samples.len() / channels as usize;
         let duration_secs = num_samples as f64 / sample_rate as f64;
 
@@ -431,7 +426,10 @@ impl Default for VolumeSettings {
         volumes.insert(AudioCategory::Master, 1.0);
         volumes.insert(AudioCategory::Music, AudioCategory::Music.default_volume());
         volumes.insert(AudioCategory::Sfx, AudioCategory::Sfx.default_volume());
-        volumes.insert(AudioCategory::Ambient, AudioCategory::Ambient.default_volume());
+        volumes.insert(
+            AudioCategory::Ambient,
+            AudioCategory::Ambient.default_volume(),
+        );
         volumes.insert(AudioCategory::Ui, AudioCategory::Ui.default_volume());
         volumes.insert(AudioCategory::Voice, AudioCategory::Voice.default_volume());
         Self { volumes }
@@ -554,8 +552,8 @@ impl AudioBufferCache {
         let id = BufferId::new(self.next_id);
         self.next_id += 1;
 
-        let buffer = AudioBuffer::new(id, samples, sample_rate, channels)
-            .with_source_path(path.clone());
+        let buffer =
+            AudioBuffer::new(id, samples, sample_rate, channels).with_source_path(path.clone());
         self.total_size += buffer.size_bytes();
 
         self.path_to_id.insert(path, id);
@@ -731,7 +729,9 @@ impl AudioResourceManager {
         channels: u16,
         path: impl Into<PathBuf>,
     ) -> Option<BufferId> {
-        self.cache.write().add_with_path(samples, sample_rate, channels, path)
+        self.cache
+            .write()
+            .add_with_path(samples, sample_rate, channels, path)
     }
 
     /// Start playing a sound.
@@ -775,7 +775,10 @@ impl AudioResourceManager {
         let sound = PlayingSound::new(handle, source).with_position(x, y);
         playing.insert(handle, sound);
 
-        debug!("Started playing spatial sound {:?} at ({}, {})", handle, x, y);
+        debug!(
+            "Started playing spatial sound {:?} at ({}, {})",
+            handle, x, y
+        );
         Some(handle)
     }
 
@@ -908,7 +911,11 @@ impl AudioResourceManager {
     /// Get number of active (not finished) sounds.
     #[must_use]
     pub fn active_count(&self) -> usize {
-        self.playing.read().values().filter(|s| s.is_playing()).count()
+        self.playing
+            .read()
+            .values()
+            .filter(|s| s.is_playing())
+            .count()
     }
 }
 
@@ -996,7 +1003,8 @@ mod tests {
         settings.set(AudioCategory::Music, 0.5);
 
         assert!((settings.get(AudioCategory::Master) - 0.8).abs() < f32::EPSILON);
-        assert!((settings.effective(AudioCategory::Music) - 0.4).abs() < f32::EPSILON); // 0.8 * 0.5
+        assert!((settings.effective(AudioCategory::Music) - 0.4).abs() < f32::EPSILON);
+        // 0.8 * 0.5
     }
 
     #[test]

@@ -353,7 +353,8 @@ impl NpcRenderManager {
     pub fn register_sprite_config(&mut self, npc_type: u8, config: SpriteSheetConfig) {
         let idx = npc_type as usize;
         if idx >= self.sprite_configs.len() {
-            self.sprite_configs.resize(idx + 1, SpriteSheetConfig::default());
+            self.sprite_configs
+                .resize(idx + 1, SpriteSheetConfig::default());
         }
         self.sprite_configs[idx] = config;
     }
@@ -376,7 +377,8 @@ impl NpcRenderManager {
             }
 
             let config = self.get_sprite_config(npc.npc_type);
-            self.instances.push(NpcInstance::from_render_data(npc, config));
+            self.instances
+                .push(NpcInstance::from_render_data(npc, config));
 
             if self.instances.len() >= MAX_VISIBLE_NPCS {
                 break;
@@ -415,7 +417,8 @@ impl NpcRenderManager {
         self.speech_bubbles.retain(|b| b.npc_id != npc_id);
 
         if self.speech_bubbles.len() < MAX_SPEECH_BUBBLES {
-            self.speech_bubbles.push(SpeechBubble::new(npc_id, position, text));
+            self.speech_bubbles
+                .push(SpeechBubble::new(npc_id, position, text));
         }
     }
 
@@ -613,10 +616,22 @@ mod tests {
 
     #[test]
     fn test_direction_from_velocity() {
-        assert_eq!(FacingDirection::from_velocity(1.0, 0.0), FacingDirection::East);
-        assert_eq!(FacingDirection::from_velocity(-1.0, 0.0), FacingDirection::West);
-        assert_eq!(FacingDirection::from_velocity(0.0, 1.0), FacingDirection::South);
-        assert_eq!(FacingDirection::from_velocity(0.0, -1.0), FacingDirection::North);
+        assert_eq!(
+            FacingDirection::from_velocity(1.0, 0.0),
+            FacingDirection::East
+        );
+        assert_eq!(
+            FacingDirection::from_velocity(-1.0, 0.0),
+            FacingDirection::West
+        );
+        assert_eq!(
+            FacingDirection::from_velocity(0.0, 1.0),
+            FacingDirection::South
+        );
+        assert_eq!(
+            FacingDirection::from_velocity(0.0, -1.0),
+            FacingDirection::North
+        );
     }
 
     #[test]

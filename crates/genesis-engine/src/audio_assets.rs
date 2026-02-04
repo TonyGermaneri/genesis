@@ -124,7 +124,7 @@ impl AudioCategory {
     pub const fn should_cache(&self) -> bool {
         match self {
             Self::Music | Self::Ambient => false, // Stream these
-            Self::Sfx | Self::Ui => true,          // Cache these
+            Self::Sfx | Self::Ui => true,         // Cache these
         }
     }
 }
@@ -491,10 +491,7 @@ impl AudioAssetLoader {
             }
 
             // Skip stub files for preload
-            if path
-                .to_string_lossy()
-                .ends_with(&self.stub_extension)
-            {
+            if path.to_string_lossy().ends_with(&self.stub_extension) {
                 continue;
             }
 
@@ -647,7 +644,8 @@ mod tests {
 
     #[test]
     fn test_placeholder_creation() {
-        let placeholder = AudioAssetLoader::create_placeholder(PathBuf::from("/test/stub.mp3.stub"));
+        let placeholder =
+            AudioAssetLoader::create_placeholder(PathBuf::from("/test/stub.mp3.stub"));
 
         assert!(placeholder.is_placeholder());
         assert!(placeholder.info.is_stub);
