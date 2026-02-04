@@ -1,84 +1,33 @@
-# Iteration 10: Tools Agent - Audio UI & Settings
+# Iteration 11: Tools Agent - Crafting UI
 
 ## Objective
-Create UI components for audio settings, volume controls, and debug visualization.
+Create drag-drop crafting interface, recipe browser, and workbench panels.
 
 ## Tasks
 
-### 1. Audio Settings Panel (`crates/genesis-tools/src/ui/audio_settings.rs`)
-Create volume control UI:
-```rust
-// Key components:
-// - Master volume slider (0-100%)
-// - Music volume slider
-// - SFX volume slider
-// - Ambient volume slider
-// - Mute toggles per category
-// - Apply/Reset buttons
-```
+### 1. Crafting Grid UI (ui/crafting_grid.rs)
+- 3x3 drag-drop grid for ingredients
+- Output slot with result preview
+- Craft button with cooldown visual
+- Clear grid button
 
-### 2. Audio Debug UI (`crates/genesis-tools/src/ui/audio_debug.rs`)
-Debug visualization:
-```rust
-// - Currently playing sounds list
-// - Active music track display
-// - Ambient layers status
-// - Spatial audio sources on minimap
-// - Audio channel usage meters
-// - Peak level indicators
-```
+### 2. Recipe Book UI (ui/recipe_book.rs)
+- Categorized recipe browser
+- Search/filter by name or ingredient
+- Show required materials
+- Highlight craftable vs locked recipes
 
-### 3. Sound Test Panel (`crates/genesis-tools/src/ui/sound_test.rs`)
-Testing interface:
-```rust
-// - Sound browser by category
-// - Play/stop controls
-// - Position controls for spatial testing
-// - Volume/pan preview
-// - Loop toggle
-```
+### 3. Crafting Preview (ui/crafting_preview.rs)
+- Show output item on valid recipe match
+- Display item stats/description
+- Ingredient availability indicators
+- Crafting time estimate
 
-### 4. Settings Persistence
-Save/load audio preferences:
-```rust
-// - AudioSettings struct (all volumes, mute states)
-// - Serialize to config file
-// - Load on startup
-// - Apply settings to audio system
-```
+### 4. Workbench UI (ui/workbench_ui.rs)
+- Station-specific crafting panels
+- Forge UI with fuel slot
+- Alchemy UI with flask slots
+- Progress bars for timed crafting
 
-### 5. Update UI module
-Export new components in `crates/genesis-tools/src/ui/mod.rs`:
-```rust
-pub mod audio_settings;
-pub mod audio_debug;
-pub mod sound_test;
-```
-
-## UI Layout
-```
-┌─────────────────────────────────────┐
-│ Audio Settings                   [X]│
-├─────────────────────────────────────┤
-│ Master Volume    [████████░░] 80%   │
-│ Music Volume     [██████░░░░] 60%   │
-│ SFX Volume       [████████░░] 80%   │
-│ Ambient Volume   [██████████] 100%  │
-├─────────────────────────────────────┤
-│ [✓] Enable Spatial Audio            │
-│ [ ] Mono Audio                      │
-├─────────────────────────────────────┤
-│      [Apply]  [Reset]  [Defaults]   │
-└─────────────────────────────────────┘
-```
-
-## Technical Requirements
-- Real-time volume updates (no restart)
-- Slider granularity: 1%
-- Visual feedback on change
-- Keyboard accessibility
-
-## Integration Points
-- Uses kernel audio system for playback
-- Gameplay agent respects volume settings
-- Settings saved to config system (if exists)
+### 5. Update ui/mod.rs
+Export: crafting_grid, recipe_book, crafting_preview, workbench_ui
