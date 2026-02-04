@@ -1,35 +1,35 @@
-# Iteration 12: Infra Agent - Combat Integration
+# Iteration 13: Infra Agent - Save System Integration
 
 ## Objective
-Wire combat events, load weapon data, persist combat state, and profile performance.
+Coordinate save/load operations, auto-save, versioning, and cloud prep.
 
 ## Tasks
 
-### 1. Combat Event System (combat_events.rs)
-- OnAttack: trigger sounds, particles, hitbox
-- OnHit: apply damage, knockback, effects
-- OnDeath: drop loot, play animation
-- OnBlock: reduce damage, play sound
+### 1. Save File Manager (save_manager.rs)
+- SaveManager: orchestrate all save operations
+- Save slot directory structure
+- Atomic save operations (temp file + rename)
+- Error handling and recovery
 
-### 2. Weapon Data Loading (weapon_loader.rs)
-- Load weapons from assets/weapons/*.toml
-- WeaponData: damage, speed, reach, type
-- Validate weapon stats on load
-- Hot-reload for development
+### 2. Auto-save System (autosave.rs)
+- Configurable auto-save interval
+- Trigger on key events (area transition)
+- Pause during combat/cutscenes
+- Rotating auto-save slots
 
-### 3. Combat State Persistence (combat_save.rs)
-- Save player HP, stamina
-- Save active status effects
-- Save equipped weapon state
-- Load combat state on game load
+### 3. Save File Versioning (save_version.rs)
+- Save format version number
+- Migration functions between versions
+- Backward compatibility where possible
+- Version mismatch warnings
 
-### 4. Combat Profiling (combat_profile.rs)
-- Hitbox collision check timing
-- Projectile update timing
-- Combat event processing time
-- Entity combat update batching
+### 4. Cloud Save Preparation (cloud_storage.rs)
+- StorageBackend trait abstraction
+- LocalStorage implementation
+- Sync status tracking
+- Conflict resolution hooks
 
 ### 5. Update Engine Integration
-- Add combat to game loop
-- Wire input to attack actions
-- Connect UI to combat stats
+- Wire save/load to pause menu
+- Integrate with game state
+- Handle save during gameplay
