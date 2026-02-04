@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-04
-> Sprint: Iteration 9 — NPC System
+> Sprint: Iteration 10 — Sound System
 
 ## Legend
 
@@ -12,7 +12,7 @@
 
 ---
 
-## Completed — Iterations 1-8
+## Completed — Iterations 1-9
 
 ### Kernel Agent
 | ID | Task | Status |
@@ -20,6 +20,7 @@
 | K-1 to K-27 | Cell simulation, chunks, collision, quadtree | 🟢 |
 | K-28 to K-31 | Multi-chunk streaming, chunk activation, env sim, day/night | 🟢 |
 | K-32 to K-35 | Biome rendering, transitions, water animation | 🟢 |
+| K-36 to K-39 | NPC rendering, collision, batch render, speech bubbles | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
@@ -27,6 +28,7 @@
 | G-1 to G-28 | Player, physics, terrain manipulation | 🟢 |
 | G-29 to G-32 | Grass interaction, weather, time, plant growth | 🟢 |
 | G-33 to G-36 | Biome terrain generation, resource distribution | 🟢 |
+| G-37 to G-40 | NPC entities, AI behaviors, spawning, dialogue | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
@@ -34,6 +36,7 @@
 | T-1 to T-27 | Egui, HUD, hotbar, debug panels | 🟢 |
 | T-28 to T-31 | Inventory, stats, weather HUD, minimap | 🟢 |
 | T-32 to T-35 | Biome minimap, debug info, seed display | 🟢 |
+| T-36 to T-39 | Dialogue UI, NPC debug, spawn editor | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
@@ -41,43 +44,47 @@
 | I-1 to I-23 | CI/CD, input, game loop, egui | 🟢 |
 | I-24 to I-27 | ChunkManager wiring, env integration, profiling | 🟢 |
 | I-28 to I-31 | Biome generation wiring, seed management | 🟢 |
+| I-32 to I-35 | NPC manager, interaction, chunk loading | 🟢 |
 
 ---
 
-## Iteration 9 — NPC System
+## Iteration 10 — Sound System
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| K-36 | NPC sprite rendering | ⚪ | P0 | Render NPC entities with direction/animation |
-| K-37 | NPC collision detection | ⚪ | P0 | Circle collision for NPC bodies |
-| K-38 | NPC batch rendering | ⚪ | P1 | Efficient instanced rendering for many NPCs |
-| K-39 | Speech bubble rendering | ⚪ | P1 | Render dialogue text above NPCs |
+| K-40 | Audio backend initialization | ⚪ | P0 | Initialize rodio/kira audio device |
+| K-41 | Spatial audio positioning | ⚪ | P0 | 2D positional audio based on distance |
+| K-42 | Audio streaming for music | ⚪ | P1 | Stream large MP3 files for music |
+| K-43 | Audio mixing/channels | ⚪ | P1 | Separate channels for music/sfx/ambient |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| G-37 | NPC entity system | ⚪ | P0 | NPC struct with position, state, type |
-| G-38 | NPC AI behavior trees | ⚪ | P0 | Patrol, idle, chase, flee behaviors |
-| G-39 | NPC spawning system | ⚪ | P0 | Spawn rules per biome, density limits |
-| G-40 | Dialogue system | ⚪ | P1 | Dialogue trees, conversation state |
+| G-41 | Sound event system | ⚪ | P0 | Events for footsteps, attacks, pickups |
+| G-42 | Ambient sound rules | ⚪ | P0 | Biome-specific ambient sounds |
+| G-43 | Music state machine | ⚪ | P0 | Combat/explore/menu music transitions |
+| G-44 | NPC sound triggers | ⚪ | P1 | NPC voices, attack sounds |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| T-36 | Dialogue UI panel | ⚪ | P0 | Show NPC dialogue with choices |
-| T-37 | NPC debug overlay | ⚪ | P0 | Show NPC state, AI path, targets |
-| T-38 | NPC spawn editor | ⚪ | P1 | Debug tool to spawn/remove NPCs |
-| T-39 | NPC list panel | ⚪ | P1 | List all NPCs in loaded chunks |
+| T-40 | Sound settings UI | ⚪ | P0 | Volume sliders for music/sfx/ambient |
+| T-41 | Audio debug panel | ⚪ | P0 | Show playing sounds, channels |
+| T-42 | Sound test panel | ⚪ | P1 | Preview sounds in debug mode |
+| T-43 | Jukebox/music player | ⚪ | P1 | Manual music selection (debug) |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| I-32 | NPC manager integration | ⚪ | P0 | Add NPC system to game loop |
+| I-36 | Audio manager integration | ⚪ | P0 | Add audio to game loop |
+| I-37 | Sound asset loading | ⚪ | P0 | Load MP3/WAV from assets folder |
+| I-38 | Audio config persistence | ⚪ | P0 | Save/load volume settings |
+| I-39 | Sound performance profiling | ⚪ | P1 | Track audio CPU usage
 | I-33 | NPC-player interaction | ⚪ | P0 | Detect interact key near NPCs |
 | I-34 | NPC chunk loading | ⚪ | P0 | Load/unload NPCs with chunks |
 | I-35 | NPC update profiling | ⚪ | P1 | Measure AI tick performance
