@@ -35,6 +35,7 @@ pub mod npc;
 pub mod physics;
 pub mod player;
 pub mod save;
+pub mod vehicle;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -54,6 +55,7 @@ pub mod prelude {
     pub use crate::physics::*;
     pub use crate::player::*;
     pub use crate::save::*;
+    pub use crate::vehicle::*;
 }
 
 pub use prelude::*;
