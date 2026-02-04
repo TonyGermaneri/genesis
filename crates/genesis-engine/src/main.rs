@@ -48,6 +48,26 @@ pub mod recipe_loader;
 /// Weapon data loading
 pub mod weapon_loader;
 
+// === Save System ===
+/// Auto-save system
+pub mod autosave;
+/// Cloud storage abstraction
+pub mod cloud_storage;
+/// Save file manager
+pub mod save_manager;
+/// Save file versioning
+pub mod save_version;
+
+// === Menu & Settings ===
+/// Exit handling and cleanup
+pub mod exit_handler;
+/// Input rebinding system
+pub mod input_rebind;
+/// Menu state machine
+pub mod menu_state;
+/// Settings persistence
+pub mod settings_persistence;
+
 use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

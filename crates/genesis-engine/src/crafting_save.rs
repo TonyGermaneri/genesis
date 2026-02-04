@@ -418,6 +418,16 @@ impl CraftingPersistence {
         self.data.clone()
     }
 
+    /// Loads save data from a save file.
+    pub fn load_data(&mut self, data: &CraftingSaveData) {
+        self.data = data.clone();
+        // Re-learn starter recipes (ensure they're always available)
+        for &recipe_id in &self.starter_recipes {
+            self.data.learn_recipe(recipe_id);
+        }
+        self.dirty = false;
+    }
+
     /// Returns whether there are unsaved changes.
     #[must_use]
     pub const fn is_dirty(&self) -> bool {

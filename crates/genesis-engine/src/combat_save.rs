@@ -639,6 +639,20 @@ impl CombatPersistence {
         self.dirty = false;
     }
 
+    /// Returns save data for the save system.
+    #[must_use]
+    pub fn save_data(&self) -> CombatSaveData {
+        self.data.clone()
+    }
+
+    /// Loads save data from the save system.
+    pub fn load_data(&mut self, data: &CombatSaveData) {
+        self.data = data.clone();
+        self.entities.clear(); // Clear entity tracking on load
+        self.dirty = false;
+        debug!("Loaded combat save data from save system");
+    }
+
     /// Loads from save data.
     pub fn load(&mut self, data: CombatSaveData) {
         self.data = data;
