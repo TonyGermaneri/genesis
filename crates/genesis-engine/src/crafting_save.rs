@@ -122,7 +122,8 @@ impl WorkbenchSaveData {
                 return;
             }
         }
-        self.outputs.push(WorkbenchItemStack::new(item_id, quantity));
+        self.outputs
+            .push(WorkbenchItemStack::new(item_id, quantity));
     }
 
     /// Returns true if the workbench has any contents.
@@ -307,8 +308,7 @@ impl CraftingSaveData {
 
     /// Serializes to JSON.
     pub fn to_json(&self) -> CraftingSaveResult<String> {
-        serde_json::to_string(self)
-            .map_err(|e| CraftingSaveError::Serialization(e.to_string()))
+        serde_json::to_string(self).map_err(|e| CraftingSaveError::Serialization(e.to_string()))
     }
 
     /// Serializes to JSON (pretty).
@@ -333,8 +333,8 @@ impl CraftingSaveData {
 
     /// Deserializes from binary.
     pub fn from_bytes(bytes: &[u8]) -> CraftingSaveResult<Self> {
-        let json = std::str::from_utf8(bytes)
-            .map_err(|e| CraftingSaveError::Corrupted(e.to_string()))?;
+        let json =
+            std::str::from_utf8(bytes).map_err(|e| CraftingSaveError::Corrupted(e.to_string()))?;
         Self::from_json(json)
     }
 }
@@ -392,14 +392,17 @@ impl CraftingPersistence {
     /// Loads from save data.
     pub fn load(&mut self, data: CraftingSaveData) -> CraftingSaveResult<()> {
         self.data = data.migrate()?;
-        
+
         // Ensure starter recipes are learned
         for &recipe_id in &self.starter_recipes {
             self.data.learn_recipe(recipe_id);
         }
 
         self.dirty = false;
-        info!("Loaded crafting state: {} recipes learned", self.data.learned_recipes.len());
+        info!(
+            "Loaded crafting state: {} recipes learned",
+            self.data.learned_recipes.len()
+        );
         Ok(())
     }
 
@@ -555,7 +558,7 @@ mod tests {
     #[test]
     fn test_crafting_save_data_recipes() {
         let mut data = CraftingSaveData::new();
-        
+
         assert!(!data.is_recipe_learned(1));
         data.learn_recipe(1);
         assert!(data.is_recipe_learned(1));
@@ -634,7 +637,7 @@ mod tests {
     #[test]
     fn test_crafting_persistence_reset() {
         let mut persistence = CraftingPersistence::with_starter_recipes([1, 2]);
-        
+
         persistence.learn_recipe(RecipeId::new(3));
         persistence.learn_recipe(RecipeId::new(4));
         assert_eq!(persistence.learned_recipes().len(), 4);

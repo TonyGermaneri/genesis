@@ -213,10 +213,10 @@ impl CraftingGrid {
                 Some(id) => {
                     slot.item_id = id;
                     slot.count = 1;
-                }
+                },
                 None => {
                     *slot = ItemSlot::empty();
-                }
+                },
             }
             true
         } else {
@@ -409,7 +409,11 @@ impl RecipePattern {
     /// * `items` - Item IDs in row-major order
     #[must_use]
     pub fn shaped(width: usize, height: usize, items: &[SlotContent]) -> Self {
-        assert_eq!(items.len(), width * height, "Item count must match dimensions");
+        assert_eq!(
+            items.len(),
+            width * height,
+            "Item count must match dimensions"
+        );
 
         Self {
             recipe_type: RecipeType::Shaped,
@@ -616,9 +620,9 @@ impl RecipeMatcher {
 
         for (grid_item, recipe_item) in grid_items.iter().zip(recipe_items.iter()) {
             match (grid_item, recipe_item) {
-                (None, None) => {}
-                (Some(_), Some(WILDCARD_ITEM)) => {} // Wildcard matches any
-                (Some(g), Some(r)) if g == r => {}
+                (None, None) => {},
+                (Some(_), Some(WILDCARD_ITEM)) => {}, // Wildcard matches any
+                (Some(g), Some(r)) if g == r => {},
                 _ => return false,
             }
         }
@@ -777,8 +781,8 @@ mod tests {
 
     #[test]
     fn test_recipe_pattern_shaped() {
-        let pattern = RecipePattern::shaped(2, 2, &[Some(1), Some(2), Some(3), None])
-            .with_result(100, 1);
+        let pattern =
+            RecipePattern::shaped(2, 2, &[Some(1), Some(2), Some(3), None]).with_result(100, 1);
 
         assert!(pattern.is_shaped());
         assert!(!pattern.is_shapeless());
@@ -808,8 +812,7 @@ mod tests {
         let mut matcher = RecipeMatcher::new();
 
         // Register a stick recipe (2 planks vertical)
-        let stick_recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)])
-            .with_result(2, 4);
+        let stick_recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)]).with_result(2, 4);
         matcher.register(stick_recipe);
 
         // Create matching grid
@@ -826,8 +829,7 @@ mod tests {
     fn test_recipe_matcher_shaped_offset() {
         let mut matcher = RecipeMatcher::new();
 
-        let recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)])
-            .with_result(2, 4);
+        let recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)]).with_result(2, 4);
         matcher.register(recipe);
 
         // Pattern in different position
@@ -883,8 +885,7 @@ mod tests {
         grid.set_full_slot(0, 0, ItemSlot::new(1, 3));
         grid.set_full_slot(0, 1, ItemSlot::new(1, 2));
 
-        let recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)])
-            .with_result(2, 4);
+        let recipe = RecipePattern::shaped(1, 2, &[Some(1), Some(1)]).with_result(2, 4);
 
         let result = execute_craft(&mut grid, &recipe).expect("should craft");
         assert_eq!(result.item_id, 2);
