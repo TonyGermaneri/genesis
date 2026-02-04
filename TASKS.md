@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-03
-> Sprint: Iteration 3 — Playable Prototype
+> Sprint: Iteration 4 — Core Loop
 
 ## Legend
 
@@ -12,102 +12,83 @@
 
 ---
 
-## Completed — Iteration 1 & 2
+## Completed — Iterations 1-3
 
 ### Kernel Agent
 | ID | Task | Status |
 |----|------|--------|
-| K-1 | Cell simulation shader | 🟢 |
-| K-2 | Double-buffered cell storage | 🟢 |
-| K-3 | Intent buffer upload | 🟢 |
-| K-4 | Event buffer readback | 🟢 |
-| K-5 | Material property LUT | 🟢 |
-| K-6 | GPU validation layer | 🟢 |
-| K-7 | Benchmark compute dispatch | 🟢 |
-| K-8 | Compute+render integration | 🟢 |
-| K-9 | Cell rendering pipeline | 🟢 |
-| K-10 | Multi-chunk management | 🟢 |
-| K-11 | Edge cell sharing | 🟢 |
+| K-1 to K-11 | Cell simulation, buffers, rendering, chunks | 🟢 |
+| K-12 | Chunk streaming system | 🟢 |
+| K-13 | Collision query system | 🟢 |
+| K-14 | Biome material assignment | 🟢 |
+| K-15 | GPU readback optimization | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
 |----|------|--------|
-| G-1 | Entity storage (arena) | 🟢 |
-| G-2 | Inventory with stacking | 🟢 |
-| G-3 | Crafting recipe execution | 🟢 |
-| G-4 | Building placement | 🟢 |
-| G-5 | Economy: wallet/prices | 🟢 |
-| G-6 | Faction reputation | 🟢 |
-| G-7 | Needs system | 🟢 |
-| G-10 | Player controller | 🟢 |
-| G-11 | Input handling | 🟢 |
-| G-12 | World interaction (dig/place) | 🟢 |
+| G-1 to G-12 | Entity, inventory, crafting, economy, factions, player | 🟢 |
+| G-13 | Player physics integration | 🟢 |
+| G-14 | Inventory UI model | 🟢 |
+| G-15 | Crafting UI model | 🟢 |
+| G-16 | Save/load game state | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
 |----|------|--------|
-| T-1 | Replay recording | 🟢 |
-| T-2 | Replay playback | 🟢 |
-| T-3 | Determinism verification | 🟢 |
-| T-4 | Chunk viewer (egui) | 🟢 |
-| T-5 | Cell inspector probe | 🟢 |
-| T-6 | Performance HUD | 🟢 |
-| T-7 | Event log viewer | 🟢 |
-| T-8 | Test harness | 🟢 |
-| T-9 | Screenshot tests | 🟢 |
-| T-10 | Memory profiler | 🟢 |
-| T-11 | Hot reload | 🟢 |
+| T-1 to T-11 | Replay, inspectors, HUD, test harness, hot reload | 🟢 |
+| T-12 | Inventory UI renderer | 🟢 |
+| T-13 | Crafting UI renderer | 🟢 |
+| T-14 | Minimap renderer | 🟢 |
+| T-15 | Debug console | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
 |----|------|--------|
-| I-1 | GitHub Actions workflow | 🟢 |
-| I-2 | Clippy + rustfmt in CI | 🟢 |
-| I-3 | Test runner in CI | 🟢 |
-| I-4 | Nix build in CI | 🟢 |
-| I-5 | Release artifact packaging | 🟢 |
-| I-6 | Mod package format | 🟢 |
-| I-7 | Cross-platform builds | 🟢 |
+| I-1 to I-7 | CI/CD, releases, mod format | 🟢 |
+| I-8 | Performance regression CI | 🟢 |
+| I-9 | Documentation site | 🟢 |
+| I-10 | Build telemetry | 🟢 |
+| I-11 | Docker development image | 🟢 |
 
 ---
 
-## Iteration 3 — Active
+## Iteration 4 — Active
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| K-12 | Chunk streaming system | ⚪ | P0 |
-| K-13 | Collision query system | ⚪ | P0 |
-| K-14 | Biome material assignment | ⚪ | P1 |
-| K-15 | GPU readback optimization | ⚪ | P1 |
+| K-16 | Procedural world generation | ⚪ | P0 |
+| K-17 | Dynamic lighting system | ⚪ | P0 |
+| K-18 | Particle system | ⚪ | P1 |
+| K-19 | Audio spatial integration | ⚪ | P1 |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| G-13 | Player physics integration | ⚪ | P0 |
-| G-14 | Inventory UI model | ⚪ | P0 |
-| G-15 | Crafting UI model | ⚪ | P0 |
-| G-16 | Save/load game state | ⚪ | P1 |
+| G-17 | Combat system | ⚪ | P0 |
+| G-18 | NPC AI system | ⚪ | P0 |
+| G-19 | Vehicle system | ⚪ | P0 |
+| G-20 | Quest system | ⚪ | P1 |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| T-12 | Inventory UI renderer | ⚪ | P0 |
-| T-13 | Crafting UI renderer | ⚪ | P0 |
-| T-14 | Minimap renderer | ⚪ | P1 |
-| T-15 | Debug console | ⚪ | P1 |
+| T-16 | Audio engine integration | ⚪ | P0 |
+| T-17 | Quest UI | ⚪ | P0 |
+| T-18 | Dialogue system UI | ⚪ | P0 |
+| T-19 | Combat HUD | ⚪ | P1 |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| I-8 | Performance regression CI | ⚪ | P0 |
-| I-9 | Documentation site (mdBook) | ⚪ | P1 |
-| I-10 | Build telemetry | ⚪ | P1 |
-| I-11 | Docker development image | ⚪ | P2 |
+| I-12 | Asset pipeline | ⚪ | P0 |
+| I-13 | Localization system | ⚪ | P0 |
+| I-14 | Crash reporting | ⚪ | P1 |
+| I-15 | Telemetry & analytics | ⚪ | P2 |
 
 ---
 
