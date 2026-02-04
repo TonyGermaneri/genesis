@@ -1,34 +1,33 @@
-# Iteration 12: Gameplay Agent - Combat Logic
+# Iteration 13: Gameplay Agent - Game State Serialization
 
 ## Objective
-Implement combat stats, melee/ranged attacks, and damage calculations.
+Implement player state, NPC persistence, world time, and progress tracking.
 
 ## Tasks
 
-### 1. Combat Stats System (combat_stats.rs)
-- CombatStats: hp, max_hp, attack, defense, crit_chance, dodge
-- Stat modifiers from equipment
-- Temporary buffs/debuffs
-- Stamina for attacks
+### 1. Player State Serialization (player_save.rs)
+- PlayerSaveData: position, rotation, inventory
+- Stats: HP, stamina, experience, level
+- Equipment: equipped items, hotbar
+- Quest progress, learned recipes
 
-### 2. Melee Attack Logic (melee_combat.rs)
-- Attack timing windows (windup, active, recovery)
-- Combo chains with timing bonuses
-- Stamina cost per swing
-- Weapon reach and arc
+### 2. NPC State Persistence (npc_save.rs)
+- NPC positions and AI states
+- Health, inventory for each NPC
+- Dialogue progress flags
+- Respawn timers for defeated NPCs
 
-### 3. Ranged Attack Logic (ranged_combat.rs)
-- Bow draw time and power scaling
-- Arrow velocity based on draw
-- Throwing weapons (instant)
-- Ammo consumption
+### 3. World Time/Weather Save (world_state_save.rs)
+- Current day/time
+- Weather state and forecast
+- Moon phase, season
+- Environment event timers
 
-### 4. Damage Calculation (damage_calc.rs)
-- Base damage from weapon + stats
-- Defense reduction formula
-- Critical hit multiplier
-- Elemental resistances
-- Damage types (physical, fire, ice, poison)
+### 4. Game Progress Tracking (progress_save.rs)
+- Discovered map regions
+- Achievements unlocked
+- Statistics (enemies killed, items crafted)
+- Playtime tracking
 
 ### 5. Update lib.rs
-Export: combat_stats, melee_combat, ranged_combat, damage_calc
+Export: player_save, npc_save, world_state_save, progress_save
