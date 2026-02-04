@@ -441,27 +441,52 @@ impl Player {
     }
 
     /// Update the player based on input.
-    /// Returns the new position (collision should be checked externally).
+    /// Uses pure top-down movement (no gravity or jumping).
     pub fn update(&mut self, input: &Input, dt: f32) {
-        // Update timers
-        self.jump_buffer = (self.jump_buffer - dt).max(0.0);
-        self.coyote_time = (self.coyote_time - dt).max(0.0);
+        // Get movement speed based on running state
+        let speed = if input.running { 200.0 } else { 120.0 };
 
-        // Handle jump input buffering
-        if input.jump_just_pressed {
-            self.jump_buffer = Self::JUMP_BUFFER_TIME;
+        // Direct 8-direction movement
+        let input_dir = input.movement.normalized();
+        let target_velocity = input_dir.scale(speed);
+
+        // Smooth acceleration
+        let accel = 12.0 * dt;
+        self.velocity.x += (target_velocity.x - self.velocity.x) * accel;
+        self.velocity.y += (target_velocity.y - self.velocity.y) * accel;
+
+        // Apply friction when no input
+        if !input.has_movement() {
+            self.velocity.x *= 0.85;
+            self.velocity.y *= 0.85;
+
+            // Stop completely at very low velocities
+            if self.velocity.x.abs() < 0.5 {
+                self.velocity.x = 0.0;
+            }
+            if self.velocity.y.abs() < 0.5 {
+                self.velocity.y = 0.0;
+            }
         }
 
-        // Update state based on environment
-        self.update_state(input);
-
-        // Update movement
-        self.update_movement(input, dt);
+        // Update position
+        self.position = self.position.plus(self.velocity.scale(dt));
 
         // Update facing direction
         if let Some(dir) = Direction::from_vec2(input.movement) {
             self.facing = dir;
         }
+
+        // Update state
+        self.state = if self.velocity.x.abs() > 1.0 || self.velocity.y.abs() > 1.0 {
+            if input.running {
+                PlayerState::Running
+            } else {
+                PlayerState::Walking
+            }
+        } else {
+            PlayerState::Idle
+        };
     }
 
     /// Update player state based on input and environment.

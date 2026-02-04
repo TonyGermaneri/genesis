@@ -121,9 +121,9 @@ impl Renderer {
         info!("Initializing render pipeline...");
         let render_pipeline = CellRenderPipeline::new(&device, surface_format);
 
-        // Create cell buffer with initial test data
+        // Create cell buffer with static terrain (no gravity simulation)
         let chunk_size = DEFAULT_CHUNK_SIZE;
-        let initial_cells = create_test_pattern(chunk_size as usize);
+        let initial_cells = create_static_terrain(chunk_size as usize);
         let cell_buffer =
             CellBuffer::with_cells(&device, &compute_pipeline, chunk_size, &initial_cells);
 
@@ -149,7 +149,7 @@ impl Renderer {
             chunk_manager: None, // Single-chunk mode by default
             render_bind_group,
             egui,
-            simulation_running: true,
+            simulation_running: false, // Disable simulation (no cell gravity)
             frame_count: 0,
         })
     }
@@ -604,8 +604,87 @@ impl Renderer {
     }
 }
 
-/// Creates terrain for initial visualization - a 2D side-view world.
+/// Creates static terrain for top-down RPG view (no gravity/falling).
+/// This terrain is designed for exploration, not cell physics simulation.
 #[allow(clippy::cast_possible_wrap)]
+fn create_static_terrain(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
+    use genesis_kernel::{Cell, CellFlags};
+
+    let total_cells = chunk_size * chunk_size;
+    let mut cells = vec![Cell::default(); total_cells];
+
+    // Create a top-down RPG terrain with:
+    // - Grass as base
+    // - Paths of dirt
+    // - Some water bodies
+    // - Stone formations
+    // - Trees (represented by darker grass)
+
+    for y in 0..chunk_size {
+        for x in 0..chunk_size {
+            let idx = y * chunk_size + x;
+
+            // Base grass everywhere
+            cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID); // Grass
+
+            // Create some variation with noise-like patterns
+            let noise1 = ((x as f32 * 0.1).sin() * (y as f32 * 0.1).cos() * 10.0) as i32;
+            let noise2 = ((x as f32 * 0.05 + 2.0).sin() * (y as f32 * 0.07).sin() * 15.0) as i32;
+            let combined = noise1 + noise2;
+
+            // Dirt paths (crossing the map)
+            let center = chunk_size / 2;
+            let dx = (x as i32 - center as i32).abs();
+            let dy = (y as i32 - center as i32).abs();
+
+            // Horizontal path
+            if dy < 8 && (x > 20 && x < chunk_size - 20) {
+                cells[idx] = Cell::new(4).with_flag(CellFlags::SOLID); // Dirt
+            }
+            // Vertical path
+            if dx < 8 && (y > 20 && y < chunk_size - 20) {
+                cells[idx] = Cell::new(4).with_flag(CellFlags::SOLID); // Dirt
+            }
+
+            // Water lake in corner
+            let lake_x = chunk_size * 3 / 4;
+            let lake_y = chunk_size * 3 / 4;
+            let lake_dx = (x as i32 - lake_x as i32) as f32;
+            let lake_dy = (y as i32 - lake_y as i32) as f32;
+            let lake_dist = (lake_dx * lake_dx + lake_dy * lake_dy).sqrt();
+            if lake_dist < 30.0 {
+                cells[idx] = Cell::new(1).with_flag(CellFlags::LIQUID); // Water
+            }
+            // Sandy beach around water
+            if lake_dist >= 30.0 && lake_dist < 35.0 {
+                cells[idx] = Cell::new(2).with_flag(CellFlags::SOLID); // Sand
+            }
+
+            // Stone formations (scattered)
+            if combined > 12 && lake_dist > 40.0 {
+                cells[idx] = Cell::new(5).with_flag(CellFlags::SOLID); // Stone
+            }
+
+            // Some darker grass patches (forest areas)
+            let forest1_x = chunk_size / 4;
+            let forest1_y = chunk_size / 4;
+            let forest_dx = (x as i32 - forest1_x as i32) as f32;
+            let forest_dy = (y as i32 - forest1_y as i32) as f32;
+            let forest_dist = (forest_dx * forest_dx + forest_dy * forest_dy).sqrt();
+            if forest_dist < 40.0 && combined > 0 && cells[idx].material == 3 {
+                // Make it look like denser vegetation (darker grass - use material 3 with higher temp)
+                cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID);
+            }
+        }
+    }
+
+    cells
+}
+
+/// Creates terrain for initial visualization - a 2D side-view world.
+/// (Legacy function for platformer-style games)
+#[allow(clippy::cast_possible_wrap)]
+#[allow(dead_code)]
 fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
     use genesis_kernel::{Cell, CellFlags};
 
