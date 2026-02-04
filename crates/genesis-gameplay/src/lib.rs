@@ -35,12 +35,15 @@ pub mod inventory_ui;
 pub mod needs;
 pub mod npc;
 pub mod physics;
+pub mod plants;
 pub mod player;
 pub mod quest;
 pub mod save;
 pub mod spawn;
 pub mod terrain_manipulation;
+pub mod time;
 pub mod vehicle;
+pub mod weather;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -60,12 +63,15 @@ pub mod prelude {
     pub use crate::needs::*;
     pub use crate::npc::*;
     pub use crate::physics::*;
+    pub use crate::plants::*;
     pub use crate::player::*;
     pub use crate::quest::*;
     pub use crate::save::*;
     pub use crate::spawn::*;
     pub use crate::terrain_manipulation::*;
+    pub use crate::time::*;
     pub use crate::vehicle::*;
+    pub use crate::weather::*;
 }
 
 pub use prelude::*;
