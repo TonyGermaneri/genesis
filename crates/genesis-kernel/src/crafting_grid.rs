@@ -405,7 +405,7 @@ impl RecipePattern {
     ///
     /// # Arguments
     /// * `width` - Pattern width
-    /// * `height` - Pattern height  
+    /// * `height` - Pattern height
     /// * `items` - Item IDs in row-major order
     #[must_use]
     pub fn shaped(width: usize, height: usize, items: &[SlotContent]) -> Self {

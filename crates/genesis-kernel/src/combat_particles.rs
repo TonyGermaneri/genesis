@@ -212,7 +212,8 @@ impl CombatParticle {
 
         // Apply drag
         if self.drag > 0.0 {
-            let speed = (self.velocity.0 * self.velocity.0 + self.velocity.1 * self.velocity.1).sqrt();
+            let speed =
+                (self.velocity.0 * self.velocity.0 + self.velocity.1 * self.velocity.1).sqrt();
             if speed > 0.01 {
                 let drag_force = self.drag * dt;
                 self.velocity.0 *= 1.0 - drag_force;
@@ -233,7 +234,7 @@ impl CombatParticle {
             CombatEffectType::HitSpark => {
                 // Shrink over time
                 self.size = self.initial_size * (1.0 - progress);
-            }
+            },
             CombatEffectType::BloodSplatter => {
                 // Grow slightly then shrink
                 if progress < 0.2 {
@@ -241,19 +242,19 @@ impl CombatParticle {
                 } else {
                     self.size = self.initial_size * 1.2 * (1.0 - (progress - 0.2) / 0.8);
                 }
-            }
+            },
             CombatEffectType::ImpactDust => {
                 // Grow and fade
                 self.size = self.initial_size * (1.0 + progress * 2.0);
-            }
+            },
             CombatEffectType::PoisonCloud => {
                 // Grow slowly
                 self.size = self.initial_size * (1.0 + progress * 0.5);
-            }
+            },
             _ => {
                 // Default: shrink
                 self.size = self.initial_size * (1.0 - progress * 0.5);
-            }
+            },
         }
     }
 }
@@ -582,7 +583,12 @@ impl CombatParticleManager {
     }
 
     /// Spawn blood splatter effect.
-    pub fn spawn_blood_splatter(&mut self, position: (f32, f32), direction: (f32, f32), intensity: f32) {
+    pub fn spawn_blood_splatter(
+        &mut self,
+        position: (f32, f32),
+        direction: (f32, f32),
+        intensity: f32,
+    ) {
         let count = ((self.blood_config.count as f32) * intensity) as usize;
         let base_angle = direction.1.atan2(direction.0);
 
@@ -656,12 +662,7 @@ impl CombatParticleManager {
     }
 
     /// Spawn slash trail effect.
-    pub fn spawn_slash_trail(
-        &mut self,
-        start: (f32, f32),
-        end: (f32, f32),
-        color: [f32; 4],
-    ) {
+    pub fn spawn_slash_trail(&mut self, start: (f32, f32), end: (f32, f32), color: [f32; 4]) {
         let dx = end.0 - start.0;
         let dy = end.1 - start.1;
         let len = (dx * dx + dy * dy).sqrt();
@@ -676,10 +677,7 @@ impl CombatParticleManager {
 
             if let Some(particle) = self.pool.allocate() {
                 let t = i as f32 / count.max(1) as f32;
-                particle.position = (
-                    start.0 + dx * t + offset_x,
-                    start.1 + dy * t + offset_y,
-                );
+                particle.position = (start.0 + dx * t + offset_x, start.1 + dy * t + offset_y);
                 particle.velocity = (vel_x, vel_y);
                 particle.lifetime = 0.0;
                 particle.max_lifetime = CombatEffectType::SlashTrail.default_lifetime();
@@ -697,7 +695,8 @@ impl CombatParticleManager {
 
     /// Spawn magic impact effect.
     pub fn spawn_magic_impact(&mut self, position: (f32, f32), color: [f32; 4], intensity: f32) {
-        let count = (CombatEffectType::MagicImpact.default_particle_count() as f32 * intensity) as usize;
+        let count =
+            (CombatEffectType::MagicImpact.default_particle_count() as f32 * intensity) as usize;
 
         for _ in 0..count {
             // Pre-compute random values before borrowing pool
@@ -762,12 +761,14 @@ impl CombatParticleManager {
     ) {
         match effect_type {
             CombatEffectType::HitSpark => self.spawn_hit_spark(position, direction, intensity),
-            CombatEffectType::BloodSplatter => self.spawn_blood_splatter(position, direction, intensity),
+            CombatEffectType::BloodSplatter => {
+                self.spawn_blood_splatter(position, direction, intensity)
+            },
             CombatEffectType::ImpactDust => self.spawn_impact_dust(position, intensity),
             CombatEffectType::ShieldBlock => self.spawn_shield_block(position, direction),
             CombatEffectType::MagicImpact => {
                 self.spawn_magic_impact(position, effect_type.base_color(), intensity);
-            }
+            },
             _ => {
                 // Generic radial burst
                 let count = (effect_type.default_particle_count() as f32 * intensity) as usize;
@@ -788,7 +789,7 @@ impl CombatParticleManager {
                         particle.effect_type = effect_type;
                     }
                 }
-            }
+            },
         }
     }
 
@@ -827,8 +828,14 @@ mod tests {
 
     #[test]
     fn test_effect_type_from_u8() {
-        assert_eq!(CombatEffectType::from_u8(0), Some(CombatEffectType::HitSpark));
-        assert_eq!(CombatEffectType::from_u8(1), Some(CombatEffectType::BloodSplatter));
+        assert_eq!(
+            CombatEffectType::from_u8(0),
+            Some(CombatEffectType::HitSpark)
+        );
+        assert_eq!(
+            CombatEffectType::from_u8(1),
+            Some(CombatEffectType::BloodSplatter)
+        );
         assert_eq!(CombatEffectType::from_u8(99), None);
     }
 

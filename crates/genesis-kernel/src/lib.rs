@@ -78,6 +78,12 @@ pub mod workbench;
 pub mod world_init;
 pub mod worldgen;
 
+// Save/Load infrastructure
+pub mod chunk_serialize;
+pub mod incremental_save;
+pub mod save_compression;
+pub mod world_region;
+
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::audio::*;
@@ -91,8 +97,8 @@ pub mod prelude {
     pub use crate::collision::*;
     // Combat modules use explicit imports to avoid conflicts
     pub use crate::combat_collision::{
-        CombatBoxManager, CombatCollider, CollisionResult, FrameRange, Hitbox, HitboxSequenceBuilder,
-        HitboxShape, Hurtbox,
+        CollisionResult, CombatBoxManager, CombatCollider, FrameRange, Hitbox,
+        HitboxSequenceBuilder, HitboxShape, Hurtbox,
     };
     pub use crate::combat_particles::{
         BloodSplatterEffect, CombatEffectType, CombatParticle, CombatParticleInstance,
@@ -137,6 +143,23 @@ pub mod prelude {
     };
     pub use crate::world_init::*;
     pub use crate::worldgen::*;
+    // Save/Load modules
+    pub use crate::chunk_serialize::{
+        ChunkEncoding, ChunkHeader, ChunkSerializer, Crc32, SerializeError, SerializeStats,
+        SerializedChunk,
+    };
+    pub use crate::incremental_save::{
+        ChunkDelta, DeltaOp, IncrementalSaver, SaveConfig, SavePriority, SaveRequest,
+        SaveResponse, SaveStats,
+    };
+    pub use crate::save_compression::{
+        CompressionConfig, CompressionError, CompressionLevel, CompressionStats, CompressionType,
+        Compressor,
+    };
+    pub use crate::world_region::{
+        ChunkLocation, RegionCoord, RegionError, RegionFile, RegionHeader, RegionManager,
+        RegionStats,
+    };
 }
 
 pub use prelude::*;
