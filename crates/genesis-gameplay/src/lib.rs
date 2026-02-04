@@ -20,6 +20,7 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod crafting;
+pub mod crafting_ui;
 pub mod economy;
 pub mod entity;
 pub mod events;
@@ -35,6 +36,7 @@ pub mod player;
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::crafting::*;
+    pub use crate::crafting_ui::*;
     pub use crate::economy::*;
     pub use crate::entity::*;
     pub use crate::events::*;
