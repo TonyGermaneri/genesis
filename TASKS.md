@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-03
-> Sprint: Iteration 6 — Interactive World
+> Sprint: Iteration 7 — Multi-Chunk World & Environment
 
 ## Legend
 
@@ -12,35 +12,31 @@
 
 ---
 
-## Completed — Iterations 1-5
+## Completed — Iterations 1-6
 
 ### Kernel Agent
 | ID | Task | Status |
 |----|------|--------|
-| K-1 to K-19 | Cell simulation, buffers, rendering, chunks, streaming, collision, biome, world gen, lighting, particles, audio | 🟢 |
-| K-20 to K-23 | Camera system, terrain rendering, world init | 🟢 |
+| K-1 to K-27 | Cell simulation, chunks, collision, quadtree, top-down physics | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
 |----|------|--------|
-| G-1 to G-20 | Entity, inventory, crafting, economy, factions, player, physics, save/load, combat, NPC AI, vehicles, quests | 🟢 |
-| G-21 to G-24 | Game state manager, spawn system, movement controller | 🟢 |
+| G-1 to G-28 | Player, physics, terrain manipulation, top-down controller | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
 |----|------|--------|
-| T-1 to T-19 | Replay, inspectors, HUD, test harness, UI renderers, console, audio, quest UI, dialogue, combat HUD | 🟢 |
-| T-20 to T-23 | Egui integration, game HUD, hotbar, debug overlay | 🟢 |
+| T-1 to T-27 | Egui integration, HUD, hotbar, debug overlay | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
 |----|------|--------|
-| I-1 to I-15 | CI/CD, releases, mod format, Docker, docs, assets, localization, crash reports, analytics | 🟢 |
-| I-16 to I-19 | Input system, game loop, config, frame timing | 🟢 |
+| I-1 to I-23 | CI/CD, input, game loop, egui render, perf metrics | 🟢 |
 
 ---
 
-## Iteration 6 — Interactive World (Active)
+## Iteration 7 — Multi-Chunk World & Environment (Active)
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
@@ -51,32 +47,39 @@
 | K-26 | Player-terrain collision detection | ⚪ | P0 | Circle-vs-cells collision |
 | K-27 | Top-down physics model | ⚪ | P1 | Friction-based movement, no gravity |
 
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| K-28 | Multi-chunk streaming render | ⚪ | P0 | Render multiple chunks around player |
+| K-29 | Quadtree chunk activation | ⚪ | P0 | Only simulate active chunks |
+| K-30 | Environment simulation shader | ⚪ | P1 | Grass growth, rain effects |
+| K-31 | Day/night cycle rendering | ⚪ | P1 | Time-based lighting |
+
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| G-25 | Terrain manipulation system | ⚪ | P0 | Dig/place cells with brush |
-| G-26 | Top-down player controller | ⚪ | P0 | 8-direction movement with friction |
-| G-27 | Player-world collision response | ⚪ | P0 | Smooth wall sliding |
-| G-28 | Interaction system | ⚪ | P1 | Wire dig/place to input |
+| G-29 | Grass interaction system | ⚪ | P0 | Cut grass, get items |
+| G-30 | Weather state system | ⚪ | P0 | Clear/cloudy/rain/storm |
+| G-31 | Time/day cycle system | ⚪ | P0 | Game time with day/night |
+| G-32 | Plant growth system | ⚪ | P1 | Growth stages, harvesting |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| T-24 | Egui renderer integration | ⚪ | P0 | Render egui on top of world |
-| T-25 | Main game HUD | ⚪ | P0 | Health, hotbar, minimap |
-| T-26 | Inventory UI panel | ⚪ | P0 | Drag-drop inventory grid |
-| T-27 | Crafting UI panel | ⚪ | P1 | Recipe list and crafting |
+| T-28 | Inventory panel UI | ⚪ | P0 | 6x9 grid inventory |
+| T-29 | Player stats HUD | ⚪ | P0 | Health, hunger, stamina bars |
+| T-30 | Weather/time HUD | ⚪ | P0 | Clock, weather icon |
+| T-31 | Minimap with chunks | ⚪ | P1 | 5x5 chunk minimap |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| I-20 | Egui in main render loop | ⚪ | P0 | Wire egui to renderer |
-| I-21 | Multi-chunk terrain integration | ⚪ | P0 | Use ChunkManager in renderer |
-| I-22 | Player z-index fix | ⚪ | P0 | Player renders above terrain |
-| I-23 | Performance profiling | ⚪ | P1 | Metrics in debug overlay |
+| I-24 | ChunkManager in render loop | ⚪ | P0 | Enable multi-chunk mode |
+| I-25 | Weather/time to kernel | ⚪ | P0 | Pass env state to shaders |
+| I-26 | Wire UI systems to app | ⚪ | P0 | Connect all HUD elements |
+| I-27 | Multi-chunk perf profiling | ⚪ | P1 | Chunk metrics in debug |
 
 ---
 
