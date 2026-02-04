@@ -1,7 +1,8 @@
 //! Multi-chunk management for visible area rendering.
 //!
 //! This module provides chunk loading/unloading based on camera position,
-//! enabling seamless rendering of large worlds.
+//! enabling seamless rendering of large worlds. Also includes chunk activation
+//! using quadtree spatial partitioning for efficient simulation dispatch.
 
 use std::collections::HashMap;
 
@@ -9,6 +10,7 @@ use tracing::{debug, info};
 
 use crate::camera::Camera;
 use crate::cell::Cell;
+use crate::quadtree::{QuadTree, Rect};
 use crate::worldgen::WorldGenerator;
 
 /// Default chunk size for chunk manager in cells.
@@ -16,6 +18,26 @@ pub const CHUNK_MANAGER_DEFAULT_SIZE: u32 = 256;
 
 /// Default render distance in chunks.
 pub const CHUNK_MANAGER_RENDER_DISTANCE: u32 = 3;
+
+/// Default active radius for simulation in chunks.
+pub const DEFAULT_ACTIVE_RADIUS: u32 = 2;
+
+/// Activation state of a chunk for simulation purposes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ChunkActivationState {
+    /// Chunk is not loaded, no simulation.
+    Dormant,
+    /// Chunk is loaded but outside active simulation radius.
+    Active,
+    /// Chunk is actively being simulated on GPU.
+    Simulating,
+}
+
+impl Default for ChunkActivationState {
+    fn default() -> Self {
+        Self::Dormant
+    }
+}
 
 /// A single chunk of the world.
 #[derive(Debug)]
@@ -342,6 +364,262 @@ impl std::fmt::Debug for VisibleChunkManager {
     }
 }
 
+/// Information about a chunk in the activation tree.
+#[derive(Debug, Clone, Copy)]
+pub struct ChunkInfo {
+    /// Chunk position in chunk coordinates.
+    pub position: (i32, i32),
+    /// Current state of the chunk.
+    pub state: ChunkActivationState,
+}
+
+/// Quadtree-based chunk activation for efficient simulation dispatch.
+///
+/// Uses the quadtree to efficiently determine which chunks are within
+/// the player's active simulation radius. Only chunks in the active
+/// radius run GPU simulation; others are frozen.
+pub struct ChunkActivationTree {
+    /// Quadtree storing chunk info, keyed by position.
+    tree: QuadTree<ChunkInfo>,
+    /// Active radius in chunks from player.
+    active_radius: u32,
+    /// Chunk size in cells.
+    chunk_size: u32,
+    /// Current player chunk position.
+    player_chunk: (i32, i32),
+    /// Chunk states cache.
+    chunk_states: HashMap<(i32, i32), ChunkActivationState>,
+}
+
+impl ChunkActivationTree {
+    /// Creates a new chunk activation tree.
+    ///
+    /// World bounds are in chunk coordinates, centered on origin.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn new(world_radius: i32, chunk_size: u32, active_radius: u32) -> Self {
+        info!(
+            "Creating chunk activation tree: world_radius={}, chunk_size={}, active_radius={}",
+            world_radius, chunk_size, active_radius
+        );
+
+        // Create bounds large enough for the world
+        let size = (world_radius * 2 + 1) as f32;
+        let bounds = Rect::new(-world_radius as f32, -world_radius as f32, size, size);
+
+        Self {
+            tree: QuadTree::new(bounds, 8, 6),
+            active_radius,
+            chunk_size,
+            player_chunk: (0, 0),
+            chunk_states: HashMap::new(),
+        }
+    }
+
+    /// Returns the active radius.
+    #[must_use]
+    pub const fn active_radius(&self) -> u32 {
+        self.active_radius
+    }
+
+    /// Sets the active radius.
+    pub fn set_active_radius(&mut self, radius: u32) {
+        if self.active_radius != radius {
+            info!(
+                "Changing active radius from {} to {}",
+                self.active_radius, radius
+            );
+            self.active_radius = radius;
+            self.update_states();
+        }
+    }
+
+    /// Returns the player's current chunk position.
+    #[must_use]
+    pub const fn player_chunk(&self) -> (i32, i32) {
+        self.player_chunk
+    }
+
+    /// Updates the player position and recalculates chunk states.
+    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+    pub fn update_player_position(&mut self, world_x: f32, world_y: f32) {
+        let new_chunk = (
+            (world_x / self.chunk_size as f32).floor() as i32,
+            (world_y / self.chunk_size as f32).floor() as i32,
+        );
+
+        if new_chunk != self.player_chunk {
+            debug!("Player moved to chunk {:?}", new_chunk);
+            self.player_chunk = new_chunk;
+            self.update_states();
+        }
+    }
+
+    /// Registers a chunk in the activation tree.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn register_chunk(&mut self, chunk_x: i32, chunk_y: i32) {
+        let pos = (chunk_x, chunk_y);
+
+        if self.chunk_states.contains_key(&pos) {
+            return; // Already registered
+        }
+
+        let state = self.calculate_state(chunk_x, chunk_y);
+        let info = ChunkInfo {
+            position: pos,
+            state,
+        };
+
+        let bounds = Rect::new(chunk_x as f32, chunk_y as f32, 1.0, 1.0);
+        self.tree.insert(bounds, info);
+        self.chunk_states.insert(pos, state);
+
+        debug!("Registered chunk {:?} with state {:?}", pos, state);
+    }
+
+    /// Unregisters a chunk from the activation tree.
+    pub fn unregister_chunk(&mut self, chunk_x: i32, chunk_y: i32) {
+        let pos = (chunk_x, chunk_y);
+        self.chunk_states.remove(&pos);
+        self.tree.remove_where(|info| info.position == pos);
+        debug!("Unregistered chunk {:?}", pos);
+    }
+
+    /// Gets the state of a specific chunk.
+    #[must_use]
+    pub fn get_state(&self, chunk_x: i32, chunk_y: i32) -> ChunkActivationState {
+        self.chunk_states
+            .get(&(chunk_x, chunk_y))
+            .copied()
+            .unwrap_or(ChunkActivationState::Dormant)
+    }
+
+    /// Returns all chunks that should be simulated.
+    #[must_use]
+    pub fn simulating_chunks(&self) -> Vec<(i32, i32)> {
+        self.chunk_states
+            .iter()
+            .filter(|(_, &state)| state == ChunkActivationState::Simulating)
+            .map(|(&pos, _)| pos)
+            .collect()
+    }
+
+    /// Returns all chunks that are active (loaded but not simulating).
+    #[must_use]
+    pub fn active_chunks(&self) -> Vec<(i32, i32)> {
+        self.chunk_states
+            .iter()
+            .filter(|(_, &state)| state == ChunkActivationState::Active)
+            .map(|(&pos, _)| pos)
+            .collect()
+    }
+
+    /// Returns the number of chunks being simulated.
+    #[must_use]
+    pub fn simulating_count(&self) -> usize {
+        self.chunk_states
+            .values()
+            .filter(|&&state| state == ChunkActivationState::Simulating)
+            .count()
+    }
+
+    /// Returns the total number of registered chunks.
+    #[must_use]
+    pub fn registered_count(&self) -> usize {
+        self.chunk_states.len()
+    }
+
+    /// Queries chunks within a rectangular region (in chunk coordinates).
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn query_region(&self, min_x: i32, min_y: i32, max_x: i32, max_y: i32) -> Vec<ChunkInfo> {
+        let range = Rect::new(
+            min_x as f32,
+            min_y as f32,
+            (max_x - min_x + 1) as f32,
+            (max_y - min_y + 1) as f32,
+        );
+        self.tree.query(range).into_iter().copied().collect()
+    }
+
+    /// Syncs the activation tree with a chunk manager.
+    pub fn sync_with_manager(&mut self, manager: &VisibleChunkManager) {
+        // Unregister chunks no longer in manager
+        let loaded: std::collections::HashSet<_> =
+            manager.visible_chunks().map(|c| c.position).collect();
+
+        let to_remove: Vec<_> = self
+            .chunk_states
+            .keys()
+            .filter(|pos| !loaded.contains(pos))
+            .copied()
+            .collect();
+
+        for pos in to_remove {
+            self.unregister_chunk(pos.0, pos.1);
+        }
+
+        // Register new chunks
+        for chunk in manager.visible_chunks() {
+            self.register_chunk(chunk.position.0, chunk.position.1);
+        }
+    }
+
+    /// Calculates the state for a chunk based on distance from player.
+    fn calculate_state(&self, chunk_x: i32, chunk_y: i32) -> ChunkActivationState {
+        let dx = (chunk_x - self.player_chunk.0).unsigned_abs();
+        let dy = (chunk_y - self.player_chunk.1).unsigned_abs();
+        let dist = dx.max(dy);
+
+        if dist <= self.active_radius {
+            ChunkActivationState::Simulating
+        } else {
+            ChunkActivationState::Active
+        }
+    }
+
+    /// Updates all chunk states after player movement or radius change.
+    fn update_states(&mut self) {
+        // Rebuild tree with updated states
+        let chunks: Vec<_> = self.chunk_states.keys().copied().collect();
+
+        for pos in chunks {
+            let new_state = self.calculate_state(pos.0, pos.1);
+            self.chunk_states.insert(pos, new_state);
+        }
+
+        // Rebuild tree
+        self.rebuild_tree();
+    }
+
+    /// Rebuilds the quadtree from current chunk states.
+    #[allow(clippy::cast_precision_loss)]
+    fn rebuild_tree(&mut self) {
+        self.tree.clear();
+
+        for (&pos, &state) in &self.chunk_states {
+            let info = ChunkInfo {
+                position: pos,
+                state,
+            };
+            let bounds = Rect::new(pos.0 as f32, pos.1 as f32, 1.0, 1.0);
+            self.tree.insert(bounds, info);
+        }
+    }
+}
+
+impl std::fmt::Debug for ChunkActivationTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChunkActivationTree")
+            .field("active_radius", &self.active_radius)
+            .field("chunk_size", &self.chunk_size)
+            .field("player_chunk", &self.player_chunk)
+            .field("registered_chunks", &self.registered_count())
+            .field("simulating_chunks", &self.simulating_count())
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -536,5 +814,129 @@ mod tests {
         // Mark all dirty
         manager.mark_all_dirty();
         assert_eq!(manager.dirty_count(), 2);
+    }
+
+    #[test]
+    fn test_chunk_state_default() {
+        assert_eq!(
+            ChunkActivationState::default(),
+            ChunkActivationState::Dormant
+        );
+    }
+
+    #[test]
+    fn test_chunk_activation_tree_creation() {
+        let tree = ChunkActivationTree::new(10, 256, 2);
+        assert_eq!(tree.active_radius(), 2);
+        assert_eq!(tree.player_chunk(), (0, 0));
+        assert_eq!(tree.registered_count(), 0);
+    }
+
+    #[test]
+    fn test_chunk_activation_register() {
+        let mut tree = ChunkActivationTree::new(10, 256, 2);
+
+        tree.register_chunk(0, 0);
+        assert_eq!(tree.registered_count(), 1);
+        assert_eq!(tree.get_state(0, 0), ChunkActivationState::Simulating);
+
+        // Register chunk outside active radius
+        tree.register_chunk(5, 5);
+        assert_eq!(tree.registered_count(), 2);
+        assert_eq!(tree.get_state(5, 5), ChunkActivationState::Active);
+    }
+
+    #[test]
+    fn test_chunk_activation_player_movement() {
+        let mut tree = ChunkActivationTree::new(10, 256, 1);
+
+        // Register some chunks
+        for x in -2..=2 {
+            for y in -2..=2 {
+                tree.register_chunk(x, y);
+            }
+        }
+
+        // Initially at (0,0), chunks within radius 1 should be simulating
+        let simulating = tree.simulating_chunks();
+        assert!(simulating.contains(&(0, 0)));
+        assert!(simulating.contains(&(1, 0)));
+        assert!(simulating.contains(&(-1, 0)));
+
+        // Chunk at (2,2) should be active, not simulating
+        assert_eq!(tree.get_state(2, 2), ChunkActivationState::Active);
+
+        // Move player to chunk (2, 2)
+        tree.update_player_position(512.0, 512.0);
+
+        // Now (2,2) should be simulating
+        assert_eq!(tree.get_state(2, 2), ChunkActivationState::Simulating);
+        // And (0,0) might be active or simulating depending on distance
+        assert_eq!(tree.get_state(-2, -2), ChunkActivationState::Active);
+    }
+
+    #[test]
+    fn test_chunk_activation_radius_change() {
+        let mut tree = ChunkActivationTree::new(10, 256, 1);
+
+        tree.register_chunk(0, 0);
+        tree.register_chunk(2, 0);
+
+        // With radius 1, chunk (2,0) is active
+        assert_eq!(tree.get_state(2, 0), ChunkActivationState::Active);
+
+        // Increase radius to 2
+        tree.set_active_radius(2);
+
+        // Now (2,0) should be simulating
+        assert_eq!(tree.get_state(2, 0), ChunkActivationState::Simulating);
+    }
+
+    #[test]
+    fn test_chunk_activation_unregister() {
+        let mut tree = ChunkActivationTree::new(10, 256, 2);
+
+        tree.register_chunk(0, 0);
+        tree.register_chunk(1, 1);
+        assert_eq!(tree.registered_count(), 2);
+
+        tree.unregister_chunk(0, 0);
+        assert_eq!(tree.registered_count(), 1);
+        assert_eq!(tree.get_state(0, 0), ChunkActivationState::Dormant);
+    }
+
+    #[test]
+    fn test_chunk_activation_query_region() {
+        let mut tree = ChunkActivationTree::new(10, 256, 2);
+
+        for x in -5..=5 {
+            for y in -5..=5 {
+                tree.register_chunk(x, y);
+            }
+        }
+
+        // Query a 3x3 region
+        let results = tree.query_region(-1, -1, 1, 1);
+        assert_eq!(results.len(), 9);
+    }
+
+    #[test]
+    fn test_simulating_count() {
+        let mut tree = ChunkActivationTree::new(10, 256, 1);
+
+        // Register 3x3 grid
+        for x in -1..=1 {
+            for y in -1..=1 {
+                tree.register_chunk(x, y);
+            }
+        }
+
+        // All 9 should be simulating (within radius 1 of (0,0))
+        assert_eq!(tree.simulating_count(), 9);
+
+        // Register chunk outside radius
+        tree.register_chunk(3, 3);
+        assert_eq!(tree.simulating_count(), 9);
+        assert_eq!(tree.registered_count(), 10);
     }
 }

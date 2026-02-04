@@ -2,7 +2,8 @@
 //!
 //! This module provides the core GPU compute infrastructure for pixel-cell simulation.
 //! It includes the WGSL compute shader and Rust bindings for cell buffers, materials,
-//! and simulation parameters.
+//! and simulation parameters. Also includes environment simulation for grass growth
+//! and weather effects.
 
 use bytemuck::{Pod, Zeroable};
 use tracing::info;
@@ -19,17 +20,68 @@ pub const WORKGROUP_SIZE: u32 = 16;
 /// Maximum number of materials supported
 pub const MAX_MATERIALS: u32 = 1024;
 
-/// Cell simulation compute shader in WGSL.
+/// Environment parameters for simulation.
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct EnvParams {
+    /// Time of day (0.0-1.0, 0=midnight, 0.5=noon).
+    pub time_of_day: f32,
+    /// Whether rain is active (0.0 or 1.0).
+    pub rain_active: f32,
+    /// Growth rate multiplier for plants.
+    pub growth_rate: f32,
+    /// Padding for alignment.
+    _padding: f32,
+}
+
+impl Default for EnvParams {
+    fn default() -> Self {
+        Self {
+            time_of_day: 0.5,
+            rain_active: 0.0,
+            growth_rate: 1.0,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl EnvParams {
+    /// Creates new environment parameters.
+    #[must_use]
+    pub const fn new(time_of_day: f32, rain_active: bool, growth_rate: f32) -> Self {
+        Self {
+            time_of_day,
+            rain_active: if rain_active { 1.0 } else { 0.0 },
+            growth_rate,
+            _padding: 0.0,
+        }
+    }
+
+    /// Sets rain active state.
+    pub fn set_rain(&mut self, active: bool) {
+        self.rain_active = if active { 1.0 } else { 0.0 };
+    }
+
+    /// Returns whether rain is active.
+    #[must_use]
+    pub fn is_raining(&self) -> bool {
+        self.rain_active > 0.5
+    }
+}
+
+/// Cell simulation compute shader in WGSL with environment simulation.
 ///
 /// This shader implements pixel-cell physics simulation:
 /// - Gravity and falling for non-solid materials
 /// - Liquid flow simulation
 /// - Temperature propagation
 /// - Collision detection
+/// - Grass lifecycle (growth stage 0-255)
+/// - Rain effects (water spawning, hydration)
 pub const CELL_SIMULATION_SHADER: &str = r"
 // Cell structure (8 bytes, matches Rust Cell struct)
 struct Cell {
-    material: u32,      // u16 material + u8 flags + u8 temperature
+    material: u32,      // u16 material + u8 flags + u8 growth/temperature
     velocity_data: u32, // i8 vel_x + i8 vel_y + u16 data
 }
 
@@ -47,12 +99,26 @@ struct SimParams {
     _padding: u32,
 }
 
+// Environment parameters
+struct EnvParams {
+    time_of_day: f32,
+    rain_active: f32,
+    growth_rate: f32,
+    _padding: f32,
+}
+
 // Cell flag bits (must match Rust CellFlags)
 const FLAG_SOLID: u32 = 1u;
 const FLAG_LIQUID: u32 = 2u;
 const FLAG_BURNING: u32 = 4u;
 const FLAG_ELECTRIC: u32 = 8u;
 const FLAG_UPDATED: u32 = 16u;
+
+// Material IDs
+const MAT_AIR: u32 = 0u;
+const MAT_WATER: u32 = 1u;
+const MAT_GRASS: u32 = 3u;
+const MAT_DIRT: u32 = 4u;
 
 // Bindings
 @group(0) @binding(0) var<storage, read> cells_in: array<Cell>;
@@ -245,6 +311,224 @@ fn simulate(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Cell didn't move, copy to output
     cells_out[idx] = pack_cell(material, flags & ~FLAG_UPDATED, temp, vel_x, vel_y, data);
+}
+";
+
+/// Environment simulation compute shader in WGSL.
+///
+/// This shader handles:
+/// - Grass lifecycle (growth stage 0-255, spreads to dirt, dies without light/water)
+/// - Rain effects (water spawning, hydration)
+pub const ENV_SIMULATION_SHADER: &str = r"
+// Cell structure
+struct Cell {
+    material: u32,      // u16 material + u8 flags + u8 growth
+    velocity_data: u32, // i8 vel_x + i8 vel_y + u16 data
+}
+
+// Material properties
+struct MaterialProps {
+    density_friction: u32,
+    conductivity_flags: u32,
+}
+
+// Simulation parameters
+struct SimParams {
+    chunk_size: u32,
+    frame: u32,
+    gravity: f32,
+    _padding: u32,
+}
+
+// Environment parameters
+struct EnvParams {
+    time_of_day: f32,
+    rain_active: f32,
+    growth_rate: f32,
+    _padding: f32,
+}
+
+// Material IDs
+const MAT_AIR: u32 = 0u;
+const MAT_WATER: u32 = 1u;
+const MAT_GRASS: u32 = 3u;
+const MAT_DIRT: u32 = 4u;
+
+// Flags
+const FLAG_SOLID: u32 = 1u;
+const FLAG_LIQUID: u32 = 2u;
+
+// Bindings
+@group(0) @binding(0) var<storage, read> cells_in: array<Cell>;
+@group(0) @binding(1) var<storage, read_write> cells_out: array<Cell>;
+@group(0) @binding(2) var<storage, read> materials: array<MaterialProps>;
+@group(0) @binding(3) var<uniform> params: SimParams;
+@group(0) @binding(4) var<uniform> env: EnvParams;
+
+fn get_material(cell: Cell) -> u32 {
+    return cell.material & 0xFFFFu;
+}
+
+fn get_flags(cell: Cell) -> u32 {
+    return (cell.material >> 16u) & 0xFFu;
+}
+
+fn get_growth(cell: Cell) -> u32 {
+    return (cell.material >> 24u) & 0xFFu;
+}
+
+fn get_data(cell: Cell) -> u32 {
+    return (cell.velocity_data >> 16u) & 0xFFFFu;
+}
+
+fn pack_cell(material: u32, flags: u32, growth: u32, vel_x: i32, vel_y: i32, data: u32) -> Cell {
+    var cell: Cell;
+    cell.material = material | (flags << 16u) | (growth << 24u);
+    let vx = u32(vel_x + 128) & 0xFFu;
+    let vy = u32(vel_y + 128) & 0xFFu;
+    cell.velocity_data = vx | (vy << 8u) | (data << 16u);
+    return cell;
+}
+
+fn coord_to_idx(x: u32, y: u32, size: u32) -> u32 {
+    return y * size + x;
+}
+
+fn in_bounds(x: i32, y: i32, size: u32) -> bool {
+    return x >= 0 && y >= 0 && u32(x) < size && u32(y) < size;
+}
+
+fn get_cell(x: i32, y: i32, size: u32) -> Cell {
+    if !in_bounds(x, y, size) {
+        return pack_cell(0u, 0u, 0u, 0, 0, 0u);
+    }
+    return cells_in[coord_to_idx(u32(x), u32(y), size)];
+}
+
+// Check if there's water nearby (including above for rain)
+fn has_water_nearby(x: i32, y: i32, size: u32) -> bool {
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let neighbor = get_cell(x + dx, y + dy, size);
+            if get_material(neighbor) == MAT_WATER {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Check if there's light (air above)
+fn has_light(x: i32, y: i32, size: u32) -> bool {
+    // Simple check: air directly above
+    let above = get_cell(x, y - 1, size);
+    return get_material(above) == MAT_AIR;
+}
+
+// Check for dirt neighbors (for grass spreading)
+fn count_grass_neighbors(x: i32, y: i32, size: u32) -> u32 {
+    var count = 0u;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            if dx == 0 && dy == 0 { continue; }
+            let neighbor = get_cell(x + dx, y + dy, size);
+            if get_material(neighbor) == MAT_GRASS {
+                count += 1u;
+            }
+        }
+    }
+    return count;
+}
+
+// Pseudo-random based on position and frame
+fn random(x: u32, y: u32, frame: u32) -> u32 {
+    return (x * 1103515245u + y * 12345u + frame * 1013904223u) % 1000u;
+}
+
+@compute @workgroup_size(16, 16)
+fn simulate_env(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let x = global_id.x;
+    let y = global_id.y;
+    let size = params.chunk_size;
+
+    if x >= size || y >= size {
+        return;
+    }
+
+    let idx = coord_to_idx(x, y, size);
+    let cell = cells_in[idx];
+    let material = get_material(cell);
+    let flags = get_flags(cell);
+    var growth = get_growth(cell);
+    let data = get_data(cell);
+    let rand = random(x, y, params.frame);
+
+    // Rain effect: spawn water in air at top of chunk
+    if env.rain_active > 0.5 && material == MAT_AIR && y < 5u {
+        // Small chance to spawn water
+        if rand < 5u {
+            cells_out[idx] = pack_cell(MAT_WATER, FLAG_LIQUID, 0u, 0, 0, 0u);
+            return;
+        }
+    }
+
+    // Grass lifecycle
+    if material == MAT_GRASS {
+        let has_water = has_water_nearby(i32(x), i32(y), size);
+        let has_sunlight = has_light(i32(x), i32(y), size);
+        
+        // Growth conditions: needs light and water
+        if has_sunlight && has_water {
+            // Grow based on growth rate and time of day (more growth during day)
+            let day_factor = max(0.0, sin(env.time_of_day * 6.283185));
+            let growth_chance = u32(env.growth_rate * day_factor * 10.0);
+            
+            if rand < growth_chance && growth < 255u {
+                growth = min(growth + 1u, 255u);
+            }
+        } else if !has_sunlight && !has_water {
+            // Grass dies slowly without resources
+            if rand < 2u && growth > 0u {
+                growth = growth - 1u;
+            }
+            
+            // Completely dead grass becomes dirt
+            if growth == 0u {
+                cells_out[idx] = pack_cell(MAT_DIRT, FLAG_SOLID, 0u, 0, 0, 0u);
+                return;
+            }
+        }
+        
+        cells_out[idx] = pack_cell(material, flags, growth, 0, 0, data);
+        return;
+    }
+
+    // Dirt can become grass if grass neighbors exist
+    if material == MAT_DIRT {
+        let grass_count = count_grass_neighbors(i32(x), i32(y), size);
+        let has_sunlight = has_light(i32(x), i32(y), size);
+        
+        // Spread chance based on number of grass neighbors
+        if grass_count > 0u && has_sunlight && rand < grass_count * 2u {
+            // Convert to grass with initial growth stage
+            cells_out[idx] = pack_cell(MAT_GRASS, FLAG_SOLID, 10u, 0, 0, 0u);
+            return;
+        }
+    }
+
+    // Rain hydration: cells near water get the hydrated data flag
+    if env.rain_active > 0.5 {
+        let has_water = has_water_nearby(i32(x), i32(y), size);
+        if has_water && material != MAT_WATER && material != MAT_AIR {
+            // Mark as hydrated in data field
+            let hydrated_data = data | 1u;
+            cells_out[idx] = pack_cell(material, flags, growth, 0, 0, hydrated_data);
+            return;
+        }
+    }
+
+    // No change
+    cells_out[idx] = cell;
 }
 ";
 
@@ -700,5 +984,39 @@ mod tests {
     fn test_simulation_params_size() {
         // Ensure params are properly aligned for GPU uniform buffers
         assert_eq!(std::mem::size_of::<SimulationParams>(), 16);
+    }
+
+    #[test]
+    fn test_env_params_default() {
+        let params = EnvParams::default();
+        assert!((params.time_of_day - 0.5).abs() < f32::EPSILON);
+        assert!(!params.is_raining());
+        assert!((params.growth_rate - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_env_params_rain() {
+        let mut params = EnvParams::default();
+        assert!(!params.is_raining());
+
+        params.set_rain(true);
+        assert!(params.is_raining());
+
+        params.set_rain(false);
+        assert!(!params.is_raining());
+    }
+
+    #[test]
+    fn test_env_params_new() {
+        let params = EnvParams::new(0.25, true, 2.0);
+        assert!((params.time_of_day - 0.25).abs() < f32::EPSILON);
+        assert!(params.is_raining());
+        assert!((params.growth_rate - 2.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_env_params_size() {
+        // Ensure params are properly aligned for GPU uniform buffers
+        assert_eq!(std::mem::size_of::<EnvParams>(), 16);
     }
 }
