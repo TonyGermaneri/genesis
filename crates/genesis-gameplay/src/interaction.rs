@@ -35,6 +35,15 @@ pub enum InteractionError {
         y: i64,
     },
 
+    /// Cell is not grass (cannot be cut)
+    #[error("cell at ({x}, {y}) is not grass")]
+    NotGrass {
+        /// X coordinate
+        x: i64,
+        /// Y coordinate
+        y: i64,
+    },
+
     /// Cell is not placeable (blocked)
     #[error("cannot place at ({x}, {y}): cell is blocked")]
     CellBlocked {
@@ -66,8 +75,10 @@ pub enum CellType {
     Sand,
     /// Water
     Water,
-    /// Grass
+    /// Grass (tall, cuttable)
     Grass,
+    /// Cut grass (recently cut, can regrow)
+    CutGrass,
     /// Wood (from trees)
     Wood,
     /// Leaves
@@ -82,7 +93,10 @@ impl CellType {
     /// Check if this cell type is solid (blocks movement).
     #[must_use]
     pub fn is_solid(self) -> bool {
-        !matches!(self, CellType::Air | CellType::Water)
+        !matches!(
+            self,
+            CellType::Air | CellType::Water | CellType::Grass | CellType::CutGrass
+        )
     }
 
     /// Check if this cell type is diggable.
@@ -94,6 +108,7 @@ impl CellType {
                 | CellType::Stone
                 | CellType::Sand
                 | CellType::Grass
+                | CellType::CutGrass
                 | CellType::Wood
                 | CellType::Leaves
                 | CellType::Ore
@@ -107,11 +122,23 @@ impl CellType {
         matches!(self, CellType::Water)
     }
 
+    /// Check if this cell type is grass (cuttable).
+    #[must_use]
+    pub fn is_grass(self) -> bool {
+        matches!(self, CellType::Grass)
+    }
+
+    /// Check if this cell type is cut grass (can regrow).
+    #[must_use]
+    pub fn is_cut_grass(self) -> bool {
+        matches!(self, CellType::CutGrass)
+    }
+
     /// Get the item type that this cell drops when mined.
     #[must_use]
     pub fn drop_item(self) -> Option<ItemTypeId> {
         match self {
-            CellType::Air | CellType::Water => None,
+            CellType::Air | CellType::Water | CellType::CutGrass => None,
             CellType::Dirt => Some(ItemTypeId::new(1)),
             CellType::Stone => Some(ItemTypeId::new(2)),
             CellType::Sand => Some(ItemTypeId::new(3)),
@@ -161,6 +188,13 @@ pub enum WorldIntent {
         /// Cell type to place
         cell_type: CellType,
     },
+    /// Cut grass (converts Grass to CutGrass)
+    CutGrass {
+        /// Entity performing the action
+        entity_id: EntityId,
+        /// World position of the grass
+        position: WorldCoord,
+    },
 }
 
 impl WorldIntent {
@@ -168,7 +202,9 @@ impl WorldIntent {
     #[must_use]
     pub fn entity_id(&self) -> EntityId {
         match self {
-            WorldIntent::Dig { entity_id, .. } | WorldIntent::Place { entity_id, .. } => *entity_id,
+            WorldIntent::Dig { entity_id, .. }
+            | WorldIntent::Place { entity_id, .. }
+            | WorldIntent::CutGrass { entity_id, .. } => *entity_id,
         }
     }
 
@@ -176,7 +212,9 @@ impl WorldIntent {
     #[must_use]
     pub fn position(&self) -> WorldCoord {
         match self {
-            WorldIntent::Dig { position, .. } | WorldIntent::Place { position, .. } => *position,
+            WorldIntent::Dig { position, .. }
+            | WorldIntent::Place { position, .. }
+            | WorldIntent::CutGrass { position, .. } => *position,
         }
     }
 }
@@ -212,6 +250,8 @@ pub struct DiggingTimes {
     pub wood: f32,
     /// Time to dig ore
     pub ore: f32,
+    /// Time to cut grass
+    pub grass: f32,
     /// Default time for other types
     pub default: f32,
 }
@@ -224,6 +264,7 @@ impl Default for DiggingTimes {
             sand: 0.2,
             wood: 0.5,
             ore: 1.5,
+            grass: 0.1,
             default: 0.5,
         }
     }
@@ -234,7 +275,8 @@ impl DiggingTimes {
     #[must_use]
     pub fn get(&self, cell: CellType) -> f32 {
         match cell {
-            CellType::Dirt | CellType::Grass => self.dirt,
+            CellType::Dirt => self.dirt,
+            CellType::Grass | CellType::CutGrass => self.grass,
             CellType::Stone => self.stone,
             CellType::Sand => self.sand,
             CellType::Wood | CellType::Leaves => self.wood,
@@ -538,6 +580,48 @@ impl InteractionManager {
         Ok(intent)
     }
 
+    /// Try to cut grass at a position (E key interaction).
+    ///
+    /// When grass is cut:
+    /// - Converts Grass cell to CutGrass
+    /// - Awards 1 grass item to the player
+    /// - The CutGrass cell can regrow over time (managed externally)
+    pub fn try_cut_grass<W: WorldQuery>(
+        &mut self,
+        player: &Player,
+        target_pos: Vec2,
+        world: &W,
+        inventory: &mut Inventory,
+    ) -> InteractionResult<WorldIntent> {
+        // Check range
+        self.check_range(player, target_pos)?;
+
+        let world_coord = Self::vec2_to_world_coord(target_pos);
+        let cell = world.get_cell(world_coord.x, world_coord.y);
+
+        // Check if it's grass
+        if !cell.is_grass() {
+            return Err(InteractionError::NotGrass {
+                x: world_coord.x,
+                y: world_coord.y,
+            });
+        }
+
+        // Award grass item to inventory
+        let grass_item = ItemTypeId::new(4); // Grass item ID
+        if inventory.add(grass_item, 1).is_err() {
+            return Err(InteractionError::InventoryFull);
+        }
+
+        let intent = WorldIntent::CutGrass {
+            entity_id: player.entity_id(),
+            position: world_coord,
+        };
+
+        self.pending_intents.push(intent.clone());
+        Ok(intent)
+    }
+
     /// Process a full interaction tick.
     /// Call this each frame with the current input state.
     pub fn update<W: WorldQuery>(
@@ -634,6 +718,15 @@ pub enum TerrainInteractionResult {
     ItemPickedUp(ItemTypeId),
     /// Object was interacted with
     ObjectInteracted(EntityId),
+    /// Grass was cut at this position
+    GrassCut {
+        /// X coordinate
+        x: i32,
+        /// Y coordinate
+        y: i32,
+        /// Item awarded to player
+        item: ItemTypeId,
+    },
     /// Cell inspection result
     CellInspected {
         /// X coordinate
@@ -894,6 +987,39 @@ impl InteractionHandler {
         }
     }
 
+    /// Handle interact action (E key) - used for cutting grass.
+    ///
+    /// This action attempts to interact with objects near the player,
+    /// primarily for cutting grass.
+    pub fn interact_action<W: WorldQuery>(
+        &mut self,
+        player: &Player,
+        world_pos: Vec2,
+        world: &W,
+        inventory: &mut crate::inventory::Inventory,
+    ) -> TerrainInteractionResult {
+        if !self.can_act() {
+            return TerrainInteractionResult::Nothing;
+        }
+
+        // Try to cut grass at the position
+        match self
+            .manager
+            .try_cut_grass(player, world_pos, world, inventory)
+        {
+            Ok(intent) => {
+                self.cooldown_timer = self.action_cooldown;
+                let pos = intent.position();
+                TerrainInteractionResult::GrassCut {
+                    x: pos.x as i32,
+                    y: pos.y as i32,
+                    item: ItemTypeId::new(4), // Grass item ID
+                }
+            },
+            Err(_) => TerrainInteractionResult::Nothing,
+        }
+    }
+
     /// Update handler (cooldowns, etc).
     pub fn update(&mut self, dt: f32) {
         self.cooldown_timer = (self.cooldown_timer - dt).max(0.0);
@@ -925,6 +1051,178 @@ impl InteractionHandler {
     #[must_use]
     pub fn is_digging(&self) -> bool {
         self.manager.digging_state().is_digging()
+    }
+}
+
+// ============================================================
+// Grass Regrowth System
+// ============================================================
+
+/// Default regrowth time for cut grass in seconds.
+pub const DEFAULT_GRASS_REGROWTH_TIME: f32 = 60.0;
+
+/// Configuration for grass regrowth.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrassRegrowthConfig {
+    /// Time in seconds for grass to regrow.
+    pub regrowth_time: f32,
+    /// Whether regrowth is affected by weather (rain speeds up).
+    pub weather_affected: bool,
+    /// Multiplier when raining (1.0 = normal, 0.5 = twice as fast).
+    pub rain_multiplier: f32,
+}
+
+impl Default for GrassRegrowthConfig {
+    fn default() -> Self {
+        Self {
+            regrowth_time: DEFAULT_GRASS_REGROWTH_TIME,
+            weather_affected: true,
+            rain_multiplier: 0.5,
+        }
+    }
+}
+
+/// Tracks a single cut grass cell's regrowth progress.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrassRegrowthTimer {
+    /// World position of the cut grass.
+    pub position: WorldCoord,
+    /// Time remaining until regrowth (in seconds).
+    pub time_remaining: f32,
+}
+
+impl GrassRegrowthTimer {
+    /// Create a new regrowth timer.
+    #[must_use]
+    pub fn new(position: WorldCoord, regrowth_time: f32) -> Self {
+        Self {
+            position,
+            time_remaining: regrowth_time,
+        }
+    }
+
+    /// Update the timer and return true if regrowth is complete.
+    pub fn update(&mut self, dt: f32, multiplier: f32) -> bool {
+        self.time_remaining -= dt * multiplier;
+        self.time_remaining <= 0.0
+    }
+
+    /// Get the regrowth progress (0.0 = just cut, 1.0 = ready to regrow).
+    #[must_use]
+    pub fn progress(&self, total_time: f32) -> f32 {
+        1.0 - (self.time_remaining / total_time).clamp(0.0, 1.0)
+    }
+}
+
+/// Manages grass regrowth across the world.
+///
+/// When grass is cut (via E key interaction), it converts to CutGrass.
+/// This manager tracks all cut grass positions and their timers.
+/// When a timer expires, it generates an intent to regrow the grass.
+#[derive(Debug, Default)]
+pub struct GrassRegrowthManager {
+    /// Configuration for regrowth behavior.
+    config: GrassRegrowthConfig,
+    /// Active regrowth timers.
+    timers: Vec<GrassRegrowthTimer>,
+    /// Pending regrowth intents (positions that should convert back to grass).
+    pending_regrowth: Vec<WorldCoord>,
+}
+
+impl GrassRegrowthManager {
+    /// Create a new grass regrowth manager with default config.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            config: GrassRegrowthConfig::default(),
+            timers: Vec::new(),
+            pending_regrowth: Vec::new(),
+        }
+    }
+
+    /// Create with custom configuration.
+    #[must_use]
+    pub fn with_config(config: GrassRegrowthConfig) -> Self {
+        Self {
+            config,
+            timers: Vec::new(),
+            pending_regrowth: Vec::new(),
+        }
+    }
+
+    /// Register a new cut grass position for regrowth tracking.
+    pub fn register_cut_grass(&mut self, position: WorldCoord) {
+        // Don't register duplicates
+        if self.timers.iter().any(|t| t.position == position) {
+            return;
+        }
+        self.timers
+            .push(GrassRegrowthTimer::new(position, self.config.regrowth_time));
+    }
+
+    /// Update all regrowth timers.
+    ///
+    /// # Arguments
+    /// * `dt` - Delta time in seconds.
+    /// * `is_raining` - Whether it's currently raining (affects regrowth speed).
+    pub fn update(&mut self, dt: f32, is_raining: bool) {
+        let multiplier = if self.config.weather_affected && is_raining {
+            1.0 / self.config.rain_multiplier
+        } else {
+            1.0
+        };
+
+        // Update timers and collect completed ones
+        let mut completed_indices = Vec::new();
+        for (idx, timer) in self.timers.iter_mut().enumerate() {
+            if timer.update(dt, multiplier) {
+                completed_indices.push(idx);
+                self.pending_regrowth.push(timer.position);
+            }
+        }
+
+        // Remove completed timers (in reverse to preserve indices)
+        for idx in completed_indices.into_iter().rev() {
+            self.timers.swap_remove(idx);
+        }
+    }
+
+    /// Take pending regrowth positions (clears the list).
+    pub fn take_pending_regrowth(&mut self) -> Vec<WorldCoord> {
+        std::mem::take(&mut self.pending_regrowth)
+    }
+
+    /// Get the number of active regrowth timers.
+    #[must_use]
+    pub fn active_count(&self) -> usize {
+        self.timers.len()
+    }
+
+    /// Check if a position has an active regrowth timer.
+    #[must_use]
+    pub fn has_timer(&self, position: WorldCoord) -> bool {
+        self.timers.iter().any(|t| t.position == position)
+    }
+
+    /// Get regrowth progress for a position (0.0 to 1.0, or None if not tracked).
+    #[must_use]
+    pub fn get_progress(&self, position: WorldCoord) -> Option<f32> {
+        self.timers
+            .iter()
+            .find(|t| t.position == position)
+            .map(|t| t.progress(self.config.regrowth_time))
+    }
+
+    /// Get reference to configuration.
+    #[must_use]
+    pub fn config(&self) -> &GrassRegrowthConfig {
+        &self.config
+    }
+
+    /// Clear all timers.
+    pub fn clear(&mut self) {
+        self.timers.clear();
+        self.pending_regrowth.clear();
     }
 }
 
@@ -1305,5 +1603,131 @@ mod tests {
             0.1,
         );
         assert!(manager.digging_state().progress < 0.5); // Reset to small value
+    }
+
+    #[test]
+    fn test_grass_cell_properties() {
+        assert!(CellType::Grass.is_grass());
+        assert!(!CellType::CutGrass.is_grass());
+        assert!(CellType::CutGrass.is_cut_grass());
+        assert!(!CellType::Grass.is_cut_grass());
+
+        // Grass is not solid (player can walk through)
+        assert!(!CellType::Grass.is_solid());
+        assert!(!CellType::CutGrass.is_solid());
+
+        // Grass drops an item, cut grass does not
+        assert!(CellType::Grass.drop_item().is_some());
+        assert!(CellType::CutGrass.drop_item().is_none());
+    }
+
+    #[test]
+    fn test_cut_grass_success() {
+        let mut manager = InteractionManager::new();
+        let player = create_test_player();
+        let mut inventory = create_test_inventory();
+        let mut world = MockWorld::new();
+        world.set_cell(100, 110, CellType::Grass);
+
+        let result =
+            manager.try_cut_grass(&player, Vec2::new(100.0, 110.0), &world, &mut inventory);
+        assert!(result.is_ok());
+
+        // Player should have received grass item
+        assert_eq!(inventory.count(ItemTypeId::new(4)), 1);
+
+        // Should have generated CutGrass intent
+        let intents = manager.take_intents();
+        assert_eq!(intents.len(), 1);
+        assert!(matches!(intents[0], WorldIntent::CutGrass { .. }));
+    }
+
+    #[test]
+    fn test_cut_grass_not_grass() {
+        let mut manager = InteractionManager::new();
+        let player = create_test_player();
+        let mut inventory = create_test_inventory();
+        let mut world = MockWorld::new();
+        world.set_cell(100, 110, CellType::Dirt);
+
+        let result =
+            manager.try_cut_grass(&player, Vec2::new(100.0, 110.0), &world, &mut inventory);
+        assert!(matches!(result, Err(InteractionError::NotGrass { .. })));
+    }
+
+    #[test]
+    fn test_cut_grass_out_of_range() {
+        let mut manager = InteractionManager::new();
+        let player = create_test_player();
+        let mut inventory = create_test_inventory();
+        let mut world = MockWorld::new();
+        world.set_cell(500, 500, CellType::Grass);
+
+        let result =
+            manager.try_cut_grass(&player, Vec2::new(500.0, 500.0), &world, &mut inventory);
+        assert!(matches!(result, Err(InteractionError::OutOfRange { .. })));
+    }
+
+    #[test]
+    fn test_grass_regrowth_timer() {
+        let mut timer = GrassRegrowthTimer::new(WorldCoord::new(10, 20), 10.0);
+        assert!(!timer.update(5.0, 1.0)); // Not complete
+        assert!((timer.progress(10.0) - 0.5).abs() < 0.01);
+
+        assert!(timer.update(5.0, 1.0)); // Complete
+        assert!((timer.progress(10.0) - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_grass_regrowth_manager() {
+        let mut manager = GrassRegrowthManager::with_config(GrassRegrowthConfig {
+            regrowth_time: 10.0,
+            weather_affected: false,
+            rain_multiplier: 1.0,
+        });
+
+        let pos = WorldCoord::new(10, 20);
+        manager.register_cut_grass(pos);
+        assert_eq!(manager.active_count(), 1);
+        assert!(manager.has_timer(pos));
+
+        // Update but not complete
+        manager.update(5.0, false);
+        assert_eq!(manager.active_count(), 1);
+        assert!(manager.take_pending_regrowth().is_empty());
+
+        // Update to completion
+        manager.update(5.0, false);
+        assert_eq!(manager.active_count(), 0);
+        let regrown = manager.take_pending_regrowth();
+        assert_eq!(regrown.len(), 1);
+        assert_eq!(regrown[0], pos);
+    }
+
+    #[test]
+    fn test_grass_regrowth_rain_speedup() {
+        let mut manager = GrassRegrowthManager::with_config(GrassRegrowthConfig {
+            regrowth_time: 10.0,
+            weather_affected: true,
+            rain_multiplier: 0.5, // Rain makes regrowth 2x faster
+        });
+
+        let pos = WorldCoord::new(10, 20);
+        manager.register_cut_grass(pos);
+
+        // With rain, 5 seconds should complete (effective 10 seconds)
+        manager.update(5.0, true);
+        assert_eq!(manager.active_count(), 0);
+        assert_eq!(manager.take_pending_regrowth().len(), 1);
+    }
+
+    #[test]
+    fn test_grass_regrowth_no_duplicates() {
+        let mut manager = GrassRegrowthManager::new();
+        let pos = WorldCoord::new(10, 20);
+
+        manager.register_cut_grass(pos);
+        manager.register_cut_grass(pos); // Duplicate
+        assert_eq!(manager.active_count(), 1);
     }
 }

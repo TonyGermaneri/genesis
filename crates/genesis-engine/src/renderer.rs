@@ -373,22 +373,22 @@ fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
     // - Stone at the bottom
     // - A cave system
     // - A pond of water
-    
+
     let ground_base = chunk_size / 2; // Ground level at middle
-    
+
     for x in 0..chunk_size {
         // Create rolling hills using sine waves
         let hill1 = ((x as f32 * 0.05).sin() * 15.0) as i32;
         let hill2 = ((x as f32 * 0.02 + 1.0).sin() * 25.0) as i32;
         let ground_y = (ground_base as i32 + hill1 + hill2) as usize;
-        
+
         for y in 0..chunk_size {
             let idx = y * chunk_size + x;
-            
+
             // Below ground
             if y > ground_y {
                 let depth = y - ground_y;
-                
+
                 // Grass layer (top 2 cells)
                 if depth <= 2 {
                     cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID); // Grass
@@ -401,7 +401,7 @@ fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
                 else {
                     cells[idx] = Cell::new(5).with_flag(CellFlags::SOLID); // Stone
                 }
-                
+
                 // Create a cave in the stone layer
                 let cave_center_x = chunk_size / 3;
                 let cave_center_y = ground_y + 30;
@@ -413,7 +413,7 @@ fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
                 }
             }
         }
-        
+
         // Create a water pond in a depression
         let pond_start = chunk_size * 2 / 3;
         let pond_end = pond_start + 40;
@@ -427,13 +427,14 @@ fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
                 }
             }
         }
-        
+
         // Add some sand near the water
         if x >= pond_start.saturating_sub(5) && x < pond_end + 5 {
             let sand_ground = (ground_base as i32 + hill1 + hill2) as usize;
             for y in sand_ground..sand_ground.saturating_add(3).min(chunk_size) {
                 let idx = y * chunk_size + x;
-                if cells[idx].material != 1 { // Don't overwrite water
+                if cells[idx].material != 1 {
+                    // Don't overwrite water
                     cells[idx] = Cell::new(2).with_flag(CellFlags::SOLID); // Sand
                 }
             }
