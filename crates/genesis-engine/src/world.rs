@@ -402,7 +402,11 @@ impl TerrainGenerationService {
     #[must_use]
     pub fn get_biome_at(&self, world_x: f32, world_y: f32) -> String {
         let coord = WorldCoord::new(world_x as i64, world_y as i64);
-        let biome_id = self.seed_manager.world_gen().biome_manager().get_biome_at(coord);
+        let biome_id = self
+            .seed_manager
+            .world_gen()
+            .biome_manager()
+            .get_biome_at(coord);
         // Convert biome ID to name
         #[allow(clippy::match_same_arms)]
         match biome_id {

@@ -80,9 +80,9 @@
 
 // Re-export the backend module's public API
 pub use crate::audio_backend::{
-    AudioConfig, AudioDevice, AudioEngine, AudioError, AudioResult, AudioSinkPool,
-    CachedBuffer, DistanceModel, Environment, Listener, SoundBufferId, SoundCategory,
-    SoundHandle, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE, MAX_CACHED_BUFFERS, MAX_SINKS,
+    AudioConfig, AudioDevice, AudioEngine, AudioError, AudioResult, AudioSinkPool, CachedBuffer,
+    DistanceModel, Environment, Listener, SoundBufferId, SoundCategory, SoundHandle,
+    DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE, MAX_CACHED_BUFFERS, MAX_SINKS,
 };
 
 // Re-export spatial audio types
@@ -95,12 +95,15 @@ pub use crate::audio_spatial::{
 // Re-export resource types
 pub use crate::audio_resource::{
     AudioBuffer, AudioBufferCache, AudioCategory, AudioControls, AudioHandle, AudioSource,
-    AudioSourceType, BufferId, HandleGenerator, PlaybackState, PlayingSound,
-    VolumeSettings, DEFAULT_CROSSFADE_DURATION, MAX_CACHEABLE_SIZE,
+    AudioSourceType, BufferId, HandleGenerator, PlaybackState, PlayingSound, VolumeSettings,
+    DEFAULT_CROSSFADE_DURATION, MAX_CACHEABLE_SIZE,
 };
 
 // Legacy compatibility: re-export the old module for existing code
 pub use crate::audio_legacy::{
-    AudioListener, SoundSource, SoundSourceId, SpatialAudioManager,
+    AudioListener,
+    SoundSource,
+    SoundSourceId,
+    SpatialAudioManager,
     // Note: AttenuationModel and AudioEnvironment are already exported from audio_spatial
 };

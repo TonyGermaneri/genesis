@@ -53,7 +53,7 @@ impl RecipeSearchMetrics {
         match self.min_search_time {
             Some(min) if duration < min => self.min_search_time = Some(duration),
             None => self.min_search_time = Some(duration),
-            _ => {}
+            _ => {},
         }
 
         let bucket = self.by_query_length.entry(query_length).or_default();
@@ -362,18 +362,38 @@ impl CraftingProfiler {
 
         // Search metrics
         report.push_str("Search Performance:\n");
-        let _ = writeln!(report, "  Total searches: {}", self.search_metrics.total_searches);
-        let _ = writeln!(report, "  Average search time: {:?}", self.search_metrics.average_search_time());
-        let _ = writeln!(report, "  Max search time: {:?}", self.search_metrics.max_search_time);
+        let _ = writeln!(
+            report,
+            "  Total searches: {}",
+            self.search_metrics.total_searches
+        );
+        let _ = writeln!(
+            report,
+            "  Average search time: {:?}",
+            self.search_metrics.average_search_time()
+        );
+        let _ = writeln!(
+            report,
+            "  Max search time: {:?}",
+            self.search_metrics.max_search_time
+        );
         if let Some(min) = self.search_metrics.min_search_time {
             let _ = writeln!(report, "  Min search time: {min:?}");
         }
-        let _ = writeln!(report, "  Searches/second: {:.2}", self.search_metrics.searches_per_second());
+        let _ = writeln!(
+            report,
+            "  Searches/second: {:.2}",
+            self.search_metrics.searches_per_second()
+        );
         report.push('\n');
 
         // Frequency stats
         report.push_str("Crafting Frequency:\n");
-        let _ = writeln!(report, "  Crafts per hour: {:.2}", self.frequency_stats.crafts_per_hour);
+        let _ = writeln!(
+            report,
+            "  Crafts per hour: {:.2}",
+            self.frequency_stats.crafts_per_hour
+        );
         if let Some((id, count)) = self.frequency_stats.most_popular {
             let _ = writeln!(report, "  Most popular recipe: {id} ({count} crafts)");
         }
@@ -386,8 +406,17 @@ impl CraftingProfiler {
         // Memory usage
         report.push_str("Memory Usage:\n");
         let _ = writeln!(report, "  Recipe count: {}", self.memory_usage.recipe_count);
-        let _ = writeln!(report, "  Total memory: {:.2} KB ({:.3} MB)", self.memory_usage.total_kb(), self.memory_usage.total_mb());
-        let _ = writeln!(report, "  Bytes per recipe: {:.1}", self.memory_usage.bytes_per_recipe());
+        let _ = writeln!(
+            report,
+            "  Total memory: {:.2} KB ({:.3} MB)",
+            self.memory_usage.total_kb(),
+            self.memory_usage.total_mb()
+        );
+        let _ = writeln!(
+            report,
+            "  Bytes per recipe: {:.1}",
+            self.memory_usage.bytes_per_recipe()
+        );
 
         report
     }

@@ -55,12 +55,11 @@ use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
 use crate::audio_resource::{
-    AudioBufferCache, AudioCategory, AudioControls, AudioHandle, AudioSource,
-    BufferId, HandleGenerator, VolumeSettings,
+    AudioBufferCache, AudioCategory, AudioControls, AudioHandle, AudioSource, BufferId,
+    HandleGenerator, VolumeSettings,
 };
 use crate::audio_spatial::{
-    AudioEnvironment, EnvironmentParams, SoundSourceData,
-    SpatialAudioProcessor, SpatialParams,
+    AudioEnvironment, EnvironmentParams, SoundSourceData, SpatialAudioProcessor, SpatialParams,
 };
 
 // Re-export commonly used types from submodules
@@ -69,8 +68,7 @@ pub use crate::audio_resource::{
     BufferId as SoundBufferId,
 };
 pub use crate::audio_spatial::{
-    AttenuationModel as DistanceModel, AudioEnvironment as Environment,
-    ListenerData as Listener,
+    AttenuationModel as DistanceModel, AudioEnvironment as Environment, ListenerData as Listener,
 };
 
 /// Maximum number of simultaneous audio sinks.
@@ -217,8 +215,8 @@ impl std::fmt::Debug for AudioDevice {
 impl AudioDevice {
     /// Create a new audio device using the default output.
     pub fn new() -> AudioResult<Self> {
-        let (stream, handle) = OutputStream::try_default()
-            .map_err(|e| AudioError::DeviceInitFailed(e.to_string()))?;
+        let (stream, handle) =
+            OutputStream::try_default().map_err(|e| AudioError::DeviceInitFailed(e.to_string()))?;
 
         info!("Audio device initialized");
 
@@ -243,8 +241,7 @@ impl AudioDevice {
 
     /// Create a new sink for audio playback.
     pub fn create_sink(&self) -> AudioResult<Sink> {
-        Sink::try_new(&self.handle)
-            .map_err(|e| AudioError::SinkCreationFailed(e.to_string()))
+        Sink::try_new(&self.handle).map_err(|e| AudioError::SinkCreationFailed(e.to_string()))
     }
 }
 
@@ -321,7 +318,7 @@ impl AudioSinkPool {
             match device.create_sink() {
                 Ok(sink) => {
                     sinks.push(Mutex::new(SinkState::new(sink)));
-                }
+                },
                 Err(e) => {
                     if i == 0 {
                         // Need at least one sink
@@ -329,7 +326,7 @@ impl AudioSinkPool {
                     }
                     warn!("Could only create {} audio sinks", i);
                     break;
-                }
+                },
             }
         }
 
@@ -600,9 +597,7 @@ impl AudioEngine {
         let channels = decoder.channels();
 
         // Collect samples
-        let samples: Vec<f32> = decoder
-            .convert_samples::<f32>()
-            .collect();
+        let samples: Vec<f32> = decoder.convert_samples::<f32>().collect();
 
         // Cache the buffer
         let mut cache = self.cache.write();
@@ -618,14 +613,9 @@ impl AudioEngine {
     }
 
     /// Load a sound from memory.
-    pub fn load_sound_from_memory(
-        &self,
-        data: &[u8],
-        name: Option<&str>,
-    ) -> AudioResult<BufferId> {
+    pub fn load_sound_from_memory(&self, data: &[u8], name: Option<&str>) -> AudioResult<BufferId> {
         let cursor = Cursor::new(data.to_vec());
-        let decoder = Decoder::new(cursor)
-            .map_err(|e| AudioError::DecodeFailed(e.to_string()))?;
+        let decoder = Decoder::new(cursor).map_err(|e| AudioError::DecodeFailed(e.to_string()))?;
 
         let sample_rate = decoder.sample_rate();
         let channels = decoder.channels();
@@ -688,7 +678,9 @@ impl AudioEngine {
         let sink_idx = self
             .pool
             .acquire(handle, category)
-            .ok_or(AudioError::NoFreeSinks { max: self.pool.capacity() })?;
+            .ok_or(AudioError::NoFreeSinks {
+                max: self.pool.capacity(),
+            })?;
 
         // Create source from cached samples
         let source = rodio::buffer::SamplesBuffer::new(
@@ -720,25 +712,23 @@ impl AudioEngine {
             .with_controls(controls)
             .with_category(category);
 
-        self.playing.write().insert(handle, PlayingSoundData {
-            sink_idx,
-            source: source_info,
-            is_spatial: false,
-            world_position: None,
-            spatial_params: None,
-        });
+        self.playing.write().insert(
+            handle,
+            PlayingSoundData {
+                sink_idx,
+                source: source_info,
+                is_spatial: false,
+                world_position: None,
+                spatial_params: None,
+            },
+        );
 
         debug!("Playing sound {:?} on sink {}", buffer_id, sink_idx);
         Ok(handle)
     }
 
     /// Play a spatial sound at a world position.
-    pub fn play_sound_at(
-        &self,
-        buffer_id: BufferId,
-        x: f32,
-        y: f32,
-    ) -> AudioResult<AudioHandle> {
+    pub fn play_sound_at(&self, buffer_id: BufferId, x: f32, y: f32) -> AudioResult<AudioHandle> {
         self.play_sound_at_with_controls(buffer_id, x, y, AudioControls::default())
     }
 
@@ -764,7 +754,10 @@ impl AudioEngine {
         let spatial_params = self.spatial.read().calculate(&source_data);
 
         if !spatial_params.audible {
-            debug!("Spatial sound {:?} not audible at ({}, {})", buffer_id, x, y);
+            debug!(
+                "Spatial sound {:?} not audible at ({}, {})",
+                buffer_id, x, y
+            );
             return Ok(AudioHandle::null());
         }
 
@@ -774,7 +767,9 @@ impl AudioEngine {
         let sink_idx = self
             .pool
             .acquire(handle, category)
-            .ok_or(AudioError::NoFreeSinks { max: self.pool.capacity() })?;
+            .ok_or(AudioError::NoFreeSinks {
+                max: self.pool.capacity(),
+            })?;
 
         // Create source
         let source = rodio::buffer::SamplesBuffer::new(
@@ -806,13 +801,16 @@ impl AudioEngine {
             .with_controls(controls)
             .with_category(category);
 
-        self.playing.write().insert(handle, PlayingSoundData {
-            sink_idx,
-            source: source_info,
-            is_spatial: true,
-            world_position: Some((x, y)),
-            spatial_params: Some(spatial_params),
-        });
+        self.playing.write().insert(
+            handle,
+            PlayingSoundData {
+                sink_idx,
+                source: source_info,
+                is_spatial: true,
+                world_position: Some((x, y)),
+                spatial_params: Some(spatial_params),
+            },
+        );
 
         debug!("Playing spatial sound {:?} at ({}, {})", buffer_id, x, y);
         Ok(handle)
@@ -848,7 +846,9 @@ impl AudioEngine {
         let sink_idx = self
             .pool
             .acquire(handle, category)
-            .ok_or(AudioError::NoFreeSinks { max: self.pool.capacity() })?;
+            .ok_or(AudioError::NoFreeSinks {
+                max: self.pool.capacity(),
+            })?;
 
         self.pool.with_sink_idx(sink_idx, |state| {
             state.volume = controls.volume;
@@ -873,13 +873,16 @@ impl AudioEngine {
             .with_controls(controls)
             .with_category(category);
 
-        self.playing.write().insert(handle, PlayingSoundData {
-            sink_idx,
-            source: source_info,
-            is_spatial: false,
-            world_position: None,
-            spatial_params: None,
-        });
+        self.playing.write().insert(
+            handle,
+            PlayingSoundData {
+                sink_idx,
+                source: source_info,
+                is_spatial: false,
+                world_position: None,
+                spatial_params: None,
+            },
+        );
 
         info!("Playing music: {:?}", path);
         Ok(handle)
@@ -937,7 +940,9 @@ impl AudioEngine {
     #[must_use]
     pub fn is_playing(&self, handle: AudioHandle) -> bool {
         self.pool
-            .with_sink(handle, |state| !state.sink.empty() && !state.sink.is_paused())
+            .with_sink(handle, |state| {
+                !state.sink.empty() && !state.sink.is_paused()
+            })
             .unwrap_or(false)
     }
 
@@ -1060,8 +1065,8 @@ impl AudioEngine {
             }
 
             if let Some((x, y)) = data.world_position {
-                let source_data = SoundSourceData::new(x, y)
-                    .with_volume(data.source.controls.volume);
+                let source_data =
+                    SoundSourceData::new(x, y).with_volume(data.source.controls.volume);
                 let params = spatial.calculate(&source_data);
 
                 if !params.audible {

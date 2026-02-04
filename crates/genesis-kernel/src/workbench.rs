@@ -684,7 +684,11 @@ impl StationRegistry {
         let id = self.next_id;
         self.next_id += 1;
         self.stations.push(station);
-        debug!("Registered station {} at index {}", id, self.stations.len() - 1);
+        debug!(
+            "Registered station {} at index {}",
+            id,
+            self.stations.len() - 1
+        );
         id
     }
 
@@ -914,14 +918,8 @@ mod tests {
     fn test_station_registry() {
         let mut registry = StationRegistry::new();
 
-        let id1 = registry.register(CraftingStation::new(
-            WorkbenchType::Basic,
-            [0.0, 0.0, 0.0],
-        ));
-        let id2 = registry.register(CraftingStation::new(
-            WorkbenchType::Forge,
-            [10.0, 0.0, 0.0],
-        ));
+        let id1 = registry.register(CraftingStation::new(WorkbenchType::Basic, [0.0, 0.0, 0.0]));
+        let id2 = registry.register(CraftingStation::new(WorkbenchType::Forge, [10.0, 0.0, 0.0]));
 
         assert_eq!(id1, 0);
         assert_eq!(id2, 1);

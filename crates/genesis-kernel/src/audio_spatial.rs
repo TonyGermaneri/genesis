@@ -108,22 +108,22 @@ impl AttenuationModel {
                 } else {
                     1.0
                 }
-            }
+            },
             Self::Inverse => {
                 // Classic inverse distance
                 ref_distance / d
-            }
+            },
             Self::Exponential => {
                 // Exponential decay: e^(-k * (d - ref) / ref)
                 // At d=ref: 1.0, at d=2*ref: ~0.37, at d=3*ref: ~0.14
                 let normalized = (d - ref_distance) / ref_distance;
                 (-normalized).exp()
-            }
+            },
             Self::InverseCustom { rolloff } => {
                 // Inverse with custom rolloff factor
                 let r = f32::from(*rolloff);
                 1.0 / (1.0 + r * ((d - ref_distance) / ref_distance))
-            }
+            },
         }
     }
 
@@ -574,11 +574,10 @@ impl SpatialAudioProcessor {
         }
 
         // Calculate distance attenuation
-        let attenuation = source.attenuation_model.calculate(
-            distance,
-            source.ref_distance,
-            source.max_distance,
-        );
+        let attenuation =
+            source
+                .attenuation_model
+                .calculate(distance, source.ref_distance, source.max_distance);
 
         // Calculate base volume
         let mono_volume = source.volume * attenuation * self.listener.volume;
@@ -599,8 +598,8 @@ impl SpatialAudioProcessor {
             let to_source = (dx / distance, dy / distance);
 
             // Cross product gives sin of angle (positive = right, negative = left)
-            let cross = self.listener.direction.0 * to_source.1
-                - self.listener.direction.1 * to_source.0;
+            let cross =
+                self.listener.direction.0 * to_source.1 - self.listener.direction.1 * to_source.0;
 
             // Clamp to valid pan range
             cross.clamp(-1.0, 1.0)
@@ -633,13 +632,7 @@ impl SpatialAudioProcessor {
     }
 
     /// Calculate Doppler pitch shift.
-    fn calculate_doppler(
-        &self,
-        source: &SoundSourceData,
-        dx: f32,
-        dy: f32,
-        distance: f32,
-    ) -> f32 {
+    fn calculate_doppler(&self, source: &SoundSourceData, dx: f32, dy: f32, distance: f32) -> f32 {
         // Direction from listener to source
         let direction = (dx / distance, dy / distance);
 
@@ -684,7 +677,11 @@ impl SpatialAudioProcessor {
     }
 
     /// Calculate spatial params and return the N loudest.
-    pub fn calculate_loudest(&self, sources: &[SoundSourceData], count: usize) -> Vec<SpatialParams> {
+    pub fn calculate_loudest(
+        &self,
+        sources: &[SoundSourceData],
+        count: usize,
+    ) -> Vec<SpatialParams> {
         let mut results = self.calculate_batch(sources);
         results.truncate(count);
         results

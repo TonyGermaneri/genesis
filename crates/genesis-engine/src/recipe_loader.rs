@@ -197,10 +197,8 @@ impl RecipeDefinition {
     /// Converts to gameplay Recipe.
     #[must_use]
     pub fn to_gameplay_recipe(&self) -> genesis_gameplay::crafting::Recipe {
-        let mut builder = genesis_gameplay::crafting::Recipe::builder(
-            RecipeId::new(self.id),
-            &self.name,
-        );
+        let mut builder =
+            genesis_gameplay::crafting::Recipe::builder(RecipeId::new(self.id), &self.name);
 
         for ingredient in &self.ingredients {
             builder = builder.ingredient(ItemTypeId::new(ingredient.item_id), ingredient.quantity);
@@ -433,13 +431,16 @@ impl RecipeLoader {
     /// Loads all recipes from the base path.
     pub fn load_all(&mut self) -> RecipeLoadResult<()> {
         if !self.base_path.exists() {
-            info!("Recipe directory does not exist, creating: {:?}", self.base_path);
+            info!(
+                "Recipe directory does not exist, creating: {:?}",
+                self.base_path
+            );
             fs::create_dir_all(&self.base_path)?;
             return Ok(());
         }
 
         let entries = fs::read_dir(&self.base_path)?;
-        
+
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().is_some_and(|ext| ext == "toml") {
@@ -485,7 +486,7 @@ impl RecipeLoader {
                 Err(e) => {
                     warn!("Failed to register recipe from {:?}: {}", path, e);
                     self.stats.validation_errors += 1;
-                }
+                },
             }
         }
 
@@ -669,16 +670,16 @@ mod tests {
     #[test]
     fn test_registry_get_by_category() {
         let mut registry = RecipeRegistry::new();
-        
+
         let mut recipe1 = sample_recipe();
         recipe1.id = 1;
         recipe1.category = "weapons".to_string();
-        
+
         let mut recipe2 = sample_recipe();
         recipe2.id = 2;
         recipe2.name = "Recipe 2".to_string();
         recipe2.category = "weapons".to_string();
-        
+
         let mut recipe3 = sample_recipe();
         recipe3.id = 3;
         recipe3.name = "Recipe 3".to_string();
@@ -696,15 +697,15 @@ mod tests {
     #[test]
     fn test_registry_search() {
         let mut registry = RecipeRegistry::new();
-        
+
         let mut recipe1 = sample_recipe();
         recipe1.id = 1;
         recipe1.name = "Iron Sword".to_string();
-        
+
         let mut recipe2 = sample_recipe();
         recipe2.id = 2;
         recipe2.name = "Iron Shield".to_string();
-        
+
         let mut recipe3 = sample_recipe();
         recipe3.id = 3;
         recipe3.name = "Wooden Staff".to_string();
@@ -723,7 +724,7 @@ mod tests {
     fn test_recipe_to_gameplay() {
         let recipe = sample_recipe();
         let gameplay_recipe = recipe.to_gameplay_recipe();
-        
+
         assert_eq!(gameplay_recipe.name, "Test Recipe");
         assert_eq!(gameplay_recipe.output.raw(), 300);
         assert_eq!(gameplay_recipe.output_quantity, 1);
@@ -761,7 +762,7 @@ quantity = 1
         let recipe_file: RecipeFile = toml::from_str(toml_content).expect("parse");
         assert_eq!(recipe_file.version, "1.0.0");
         assert_eq!(recipe_file.recipes.len(), 1);
-        
+
         let recipe = &recipe_file.recipes[0];
         assert_eq!(recipe.id, 1);
         assert_eq!(recipe.name, "Basic Repair Kit");
