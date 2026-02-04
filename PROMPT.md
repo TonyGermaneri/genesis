@@ -1,63 +1,90 @@
-# Iteration 7: Kernel Agent Tasks
+# Kernel Agent — Iteration 8 Prompt
 
 ## Context
-You are the Kernel Agent responsible for GPU compute, rendering, and low-level systems.
-The game now has working top-down movement with static terrain and egui UI.
-This iteration adds multi-chunk streaming and environment simulation.
 
-## Tasks
+You are the **Kernel Agent** for Project Genesis, a 2D top-down game engine built with Rust/wgpu.
 
-### K-28: Multi-Chunk Streaming Render (P0)
-**Goal:** Render multiple chunks around the player, streaming new chunks as player moves.
+**Current State:**
+- Multi-chunk streaming render is working (K-28)
+- Quadtree chunk activation for simulation (K-29)
+- Environment simulation shader for grass/rain (K-30)
+- Day/night cycle rendering (K-31)
+- Biome system exists in biome.rs with SimplexNoise, BiomeManager, BiomeConfig
+- WorldGenerator uses biomes for material selection
 
-**Location:** `crates/genesis-kernel/src/render.rs` + `chunk_manager.rs`
+**Iteration 8 Focus:** Enhance biome rendering with visual distinction and smooth transitions.
 
-**Requirements:**
-1. Modify render shader to support multiple chunk buffers
-2. Create a `ChunkRenderManager` that:
-   - Tracks which chunks are visible based on camera viewport
-   - Uploads dirty chunks to GPU
-   - Renders all visible chunks in correct world positions
-3. Shader needs to accept chunk offset uniforms for world positioning
-4. Support render distance of at least 3x3 chunks (9 total)
+---
 
-### K-29: Quadtree Chunk Activation (P0)
-**Goal:** Use quadtree to efficiently determine which chunks need simulation.
+## Assigned Tasks
 
-**Location:** `crates/genesis-kernel/src/quadtree.rs` + `chunk_manager.rs`
+### K-32: Biome-aware cell coloring (P0)
 
-**Requirements:**
-1. Create `ChunkActivationTree` using existing Quadtree
-2. Only chunks in player's "active radius" run GPU simulation
-3. Chunks outside active radius are frozen (no compute dispatch)
-4. Active radius configurable (default: 2 chunks from player)
-5. Track chunk state: Dormant, Active, Simulating
+**Goal:** Modify the render shader to use biome-specific color palettes.
 
-### K-30: Environment Simulation Shader (P1)
-**Goal:** Add grass growth, weather effects to compute shader.
+**Implementation:**
+1. Add biome_id field to RenderParams or compute from noise in shader
+2. Create color palettes for each biome:
+   - Forest: Lush greens (grass #4a7c23, dirt #8b6914)
+   - Desert: Warm yellows/oranges (sand #c2a655, sandstone #b8956e)
+   - Lake/Ocean: Blues (water #3a7ca5, deep #1e4d6b)
+   - Plains: Light greens/yellows (grass #7cb342, dirt #a08060)
+   - Mountain: Grays/whites (stone #7a7a7a, snow #e8e8e8)
+3. Use material_id AND biome_id to determine final color
 
-**Location:** `crates/genesis-kernel/src/compute.rs`
-
-**Requirements:**
-1. Grass lifecycle: growth stage 0-255, spreads to dirt, dies without light/water
-2. Rain effect: when rain_active, water cells spawn, hydrates nearby
-3. Add EnvParams uniform with time_of_day, rain_active, growth_rate
-
-### K-31: Day/Night Cycle Rendering (P1)
-**Goal:** Visual day/night cycle with lighting changes.
-
-**Location:** `crates/genesis-kernel/src/render.rs`
-
-**Requirements:**
-1. Add time_of_day to render params (0.0-1.0)
-2. Modulate ambient light: Dawn orange, Day bright, Dusk purple, Night blue
-3. Grass color varies by growth stage
-4. Water reflects sky color
-
-## Files to Modify
+**Files to modify:**
 - crates/genesis-kernel/src/render.rs
-- crates/genesis-kernel/src/compute.rs
-- crates/genesis-kernel/src/chunk_manager.rs
-- crates/genesis-kernel/src/lib.rs
+- Inline WGSL shader code
 
-## Commit Format: [kernel] feat: K-XX description
+---
+
+### K-33: Biome transition blending (P0)
+
+**Goal:** Smooth visual transitions between adjacent biomes.
+
+**Implementation:**
+1. Sample biome at neighboring cells in shader
+2. Apply gradient blending using noise-based weights
+3. Blend over 3-5 cells for natural transition
+4. Use dithering or noise for organic boundary appearance
+
+---
+
+### K-34: Lake/water rendering (P0)
+
+**Goal:** Add animated water shader for lake biomes.
+
+**Implementation:**
+1. Detect water material cells in render shader (material_id == 4)
+2. Add wave animation using time uniform and sine functions
+3. Add subtle color variation based on depth
+4. Water should have slight transparency (alpha < 1.0)
+
+---
+
+### K-35: Mountain/elevation rendering (P1)
+
+**Goal:** Add elevation-based rendering for mountain biomes.
+
+**Implementation:**
+1. Use noise to generate elevation values
+2. Higher elevations get snow-capped appearance
+3. Add shadow/highlight based on light direction
+
+---
+
+## Constraints
+
+1. Performance: Biome calculations must not exceed 1ms per chunk
+2. GPU-friendly: Use uniforms, not per-cell CPU computation
+3. No gameplay logic: Only rendering
+4. Existing APIs: Use existing SimplexNoise and BiomeManager
+5. Backward compatible: Existing cell rendering must still work
+
+---
+
+## Commit Format
+
+```
+[kernel] feat: K-32..K-35 Biome rendering with transitions and water animation
+```
