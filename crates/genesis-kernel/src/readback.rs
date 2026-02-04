@@ -233,7 +233,11 @@ impl ReadbackManager {
 
     /// Marks a readback as submitted (copy command encoded).
     pub fn mark_submitted(&mut self, chunk_id: ChunkId) {
-        if let Some(pending) = self.pending_reads.iter_mut().find(|r| r.chunk_id == chunk_id) {
+        if let Some(pending) = self
+            .pending_reads
+            .iter_mut()
+            .find(|r| r.chunk_id == chunk_id)
+        {
             pending.status = ReadbackStatus::Submitted;
             debug!("Marked {chunk_id:?} as submitted");
         }
@@ -253,7 +257,11 @@ impl ReadbackManager {
         source_buffer: &Buffer,
         encoder: &mut wgpu::CommandEncoder,
     ) -> bool {
-        if let Some(pending) = self.pending_reads.iter_mut().find(|r| r.chunk_id == chunk_id) {
+        if let Some(pending) = self
+            .pending_reads
+            .iter_mut()
+            .find(|r| r.chunk_id == chunk_id)
+        {
             let staging = &self.staging_buffers[pending.staging_index];
             let size = staging.byte_size();
 
@@ -276,7 +284,11 @@ impl ReadbackManager {
     /// * `device` - The wgpu device
     /// * `current_frame` - Current frame number for timeout detection
     #[must_use]
-    pub fn poll_readbacks(&mut self, device: &Device, current_frame: u64) -> Vec<(ChunkId, Vec<Cell>)> {
+    pub fn poll_readbacks(
+        &mut self,
+        device: &Device,
+        current_frame: u64,
+    ) -> Vec<(ChunkId, Vec<Cell>)> {
         let mut completed = Vec::new();
         let mut to_remove = Vec::new();
 
@@ -336,7 +348,11 @@ impl ReadbackManager {
 
     /// Cancels a pending readback.
     pub fn cancel(&mut self, chunk_id: ChunkId) -> bool {
-        if let Some(pos) = self.pending_reads.iter().position(|r| r.chunk_id == chunk_id) {
+        if let Some(pos) = self
+            .pending_reads
+            .iter()
+            .position(|r| r.chunk_id == chunk_id)
+        {
             let removed = self.pending_reads.remove(pos);
             if let Some(removed) = removed {
                 self.staging_buffers[removed.staging_index].in_use = false;
@@ -359,8 +375,16 @@ impl ReadbackManager {
     /// Returns statistics about the readback manager.
     #[must_use]
     pub fn stats(&self) -> ReadbackStats {
-        let submitted = self.pending_reads.iter().filter(|r| r.status == ReadbackStatus::Submitted).count();
-        let pending = self.pending_reads.iter().filter(|r| r.status == ReadbackStatus::Pending).count();
+        let submitted = self
+            .pending_reads
+            .iter()
+            .filter(|r| r.status == ReadbackStatus::Submitted)
+            .count();
+        let pending = self
+            .pending_reads
+            .iter()
+            .filter(|r| r.status == ReadbackStatus::Pending)
+            .count();
         let buffers_in_use = self.staging_buffers.iter().filter(|b| b.in_use).count();
 
         ReadbackStats {
@@ -397,18 +421,15 @@ mod tests {
         // Try to create a wgpu device for testing
         let instance = create_validated_instance();
 
-        let adapter = pollster::block_on(instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
-                compatible_surface: None,
-                force_fallback_adapter: true,
-            },
-        ))?;
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            compatible_surface: None,
+            force_fallback_adapter: true,
+        }))?;
 
-        let (device, _queue) = pollster::block_on(
-            adapter.request_device(&wgpu::DeviceDescriptor::default(), None),
-        )
-        .ok()?;
+        let (device, _queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .ok()?;
 
         Some(device)
     }

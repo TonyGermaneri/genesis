@@ -106,8 +106,8 @@ impl BiomeConfig {
             material_ids::GRASS,
             material_ids::DIRT,
             material_ids::STONE,
-            1,  // 1 cell of grass
-            8,  // 8 cells of dirt
+            1, // 1 cell of grass
+            8, // 8 cells of dirt
         )
     }
 
@@ -209,7 +209,9 @@ impl SimplexNoise {
 
         // Fisher-Yates shuffle with simple LCG random
         for i in (1..256).rev() {
-            rng_state = rng_state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            rng_state = rng_state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
             #[allow(clippy::cast_possible_truncation)]
             let j = ((rng_state >> 32) as usize) % (i + 1);
             p.swap(i, j);
@@ -337,8 +339,8 @@ impl BiomeManager {
     pub fn new(seed: u64) -> Self {
         Self {
             biomes: HashMap::new(),
-            noise: SimplexNoise::new(seed, 0.005),       // Large-scale biome noise
-            noise2: SimplexNoise::new(seed + 1, 0.02),  // Small-scale variation
+            noise: SimplexNoise::new(seed, 0.005), // Large-scale biome noise
+            noise2: SimplexNoise::new(seed + 1, 0.02), // Small-scale variation
             default_biome: biome_ids::FOREST,
         }
     }
@@ -542,7 +544,10 @@ mod tests {
         for x in -100..100 {
             for y in -100..100 {
                 let n = noise.noise2d(f64::from(x), f64::from(y));
-                assert!((-1.0..=1.0).contains(&n), "Noise {n} out of range at ({x}, {y})");
+                assert!(
+                    (-1.0..=1.0).contains(&n),
+                    "Noise {n} out of range at ({x}, {y})"
+                );
             }
         }
     }
@@ -652,8 +657,14 @@ mod tests {
         }
 
         // Should find all 4 biomes
-        assert!(found_biomes.contains(&biome_ids::FOREST), "Forest not found");
-        assert!(found_biomes.contains(&biome_ids::DESERT), "Desert not found");
+        assert!(
+            found_biomes.contains(&biome_ids::FOREST),
+            "Forest not found"
+        );
+        assert!(
+            found_biomes.contains(&biome_ids::DESERT),
+            "Desert not found"
+        );
         // Cave and Ocean may be rarer, so we don't strictly require them
     }
 }

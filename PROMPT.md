@@ -1,87 +1,166 @@
-# Tools Agent — Current Prompt
+# PROMPT — Kernel Agent — Iteration 3
 
-> Updated: 2026-02-03 — Iteration 2 by Orchestrator
+> **Branch**: `kernel-agent`
+> **Focus**: Chunk streaming, collision queries, biome material generation
 
-## Status
+## Your Mission
 
-✅ **Iteration 1 Complete!** T-1 through T-7 merged to main.
+Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
 
-Branch synced with main. Ready for Iteration 2.
+---
 
-## Next Priority Tasks
+## Tasks
 
-| ID | Task | Priority |
-|----|------|----------|
-| T-8 | Integration test harness | P0 |
-| T-9 | Automated screenshot tests | P1 |
-| T-10 | Memory profiler integration | P1 |
-| T-11 | Hot reload support | P2 |
+### K-12: Chunk Streaming System (P0)
+**File**: `crates/genesis-kernel/src/streaming.rs`
 
-### T-8: Integration Test Harness
-
-Create a harness for end-to-end testing:
-- Headless mode (no window, software renderer)
-- Simulate N frames with scripted inputs
-- Assert on world state after simulation
-- Compare against golden files
+Implement chunk streaming based on camera/player position:
 
 ```rust
-pub struct TestHarness {
-    world: World,
-    kernel: Kernel,
-    gameplay: Gameplay,
+pub struct ChunkStreamer {
+    load_radius: u32,      // chunks to keep loaded
+    unload_radius: u32,    // chunks to unload when outside
+    pending_loads: VecDeque<ChunkId>,
+    pending_unloads: VecDeque<ChunkId>,
 }
 
-impl TestHarness {
-    pub fn new_headless() -> Self;
-    pub fn load_scenario(&mut self, path: &Path);
-    pub fn simulate(&mut self, frames: u32, inputs: &[Input]);
-    pub fn assert_cell(&self, pos: (u32, u32), expected: Cell);
-    pub fn assert_entity_exists(&self, id: EntityId);
-    pub fn snapshot(&self) -> WorldSnapshot;
+impl ChunkStreamer {
+    pub fn new(load_radius: u32, unload_radius: u32) -> Self;
+    pub fn update(&mut self, center: WorldCoord, manager: &mut ChunkManager);
+    pub fn get_pending_loads(&self) -> &[ChunkId];
+    pub fn get_pending_unloads(&self) -> &[ChunkId];
 }
 ```
 
-### T-9: Automated Screenshot Tests
+Requirements:
+- Stream chunks in spiral pattern from center
+- Prioritize chunks in view frustum
+- Track loading/unloading state
+- Budget: max 2 chunk loads per frame
 
-Visual regression testing:
-- Render frame to image buffer
-- Compare against golden screenshot
-- Report pixel differences
-- Store golden images in `tests/golden/`
+### K-13: Collision Query System (P0)
+**File**: `crates/genesis-kernel/src/collision.rs`
+
+Implement collision queries for gameplay use:
 
 ```rust
-pub fn screenshot_test(name: &str, harness: &TestHarness) -> TestResult {
-    let actual = harness.render_to_image();
-    let golden = load_golden(name)?;
-    compare_images(&actual, &golden, threshold: 0.01)
+pub struct CollisionQuery {
+    buffer: Arc<CellBuffer>,
+}
+
+impl CollisionQuery {
+    pub fn is_solid(&self, coord: WorldCoord) -> bool;
+    pub fn raycast(&self, origin: Vec2, direction: Vec2, max_dist: f32) -> Option<RayHit>;
+    pub fn box_query(&self, min: WorldCoord, max: WorldCoord) -> Vec<WorldCoord>;
+    pub fn find_ground(&self, x: i32, start_y: i32) -> Option<i32>;
+}
+
+pub struct RayHit {
+    pub coord: WorldCoord,
+    pub distance: f32,
+    pub normal: Vec2,
 }
 ```
 
-### T-10: Memory Profiler Integration
+Requirements:
+- Read from cell buffer (GPU readback or CPU shadow)
+- Bresenham line algorithm for raycast
+- Solid = material flag check
+- Used by gameplay for player physics
 
-Track memory usage:
-- Allocator wrapper that counts allocations
-- Per-system memory tracking (kernel, gameplay, world)
-- Memory usage in perf HUD
-- Detect memory leaks in tests
+### K-14: Biome Material Assignment (P1)
+**File**: `crates/genesis-kernel/src/biome.rs`
 
-### T-11: Hot Reload Support (stretch)
+Implement biome-based material generation:
 
-Reload assets without restart:
-- Watch material definitions
-- Watch shader files
-- Reload on file change
-- Useful for rapid iteration
+```rust
+pub struct BiomeConfig {
+    pub id: BiomeId,
+    pub name: String,
+    pub surface_material: MaterialId,
+    pub subsurface_material: MaterialId,
+    pub deep_material: MaterialId,
+    pub surface_depth: u32,
+    pub subsurface_depth: u32,
+}
 
-## Rules
+pub struct BiomeManager {
+    biomes: HashMap<BiomeId, BiomeConfig>,
+    noise: SimplexNoise,
+}
 
-1. Work ONLY in `crates/genesis-tools`
-2. Run validation after EVERY change
-3. Commit only when validation passes
+impl BiomeManager {
+    pub fn register_biome(&mut self, config: BiomeConfig);
+    pub fn get_biome_at(&self, coord: WorldCoord) -> BiomeId;
+    pub fn get_material_at(&self, coord: WorldCoord, depth: u32) -> MaterialId;
+}
+```
 
-## Validation Command
+Requirements:
+- At least 3 biomes: Forest, Desert, Cave
+- Simplex noise for biome boundaries
+- Smooth transitions at edges
+- Depth-based material layers
+
+### K-15: GPU Readback Optimization (P1)
+**File**: `crates/genesis-kernel/src/readback.rs`
+
+Optimize GPU→CPU data transfer:
+
+```rust
+pub struct ReadbackManager {
+    staging_buffer: wgpu::Buffer,
+    pending_reads: Vec<PendingRead>,
+}
+
+pub struct PendingRead {
+    pub chunk_id: ChunkId,
+    pub frame_submitted: u64,
+}
+
+impl ReadbackManager {
+    pub fn request_readback(&mut self, chunk_id: ChunkId);
+    pub fn poll_readbacks(&mut self, device: &wgpu::Device) -> Vec<(ChunkId, Vec<Cell>)>;
+    pub fn is_pending(&self, chunk_id: ChunkId) -> bool;
+}
+```
+
+Requirements:
+- Double-buffered staging for async
+- Track which chunks have pending reads
+- Coalesce nearby chunk reads
+- Timeout handling for stalled reads
+
+---
+
+## Validation Loop
+
+After each task:
 
 ```bash
-cargo fmt && cargo clippy -- -D warnings && cargo test
+cargo fmt
+cargo clippy -- -D warnings
+cargo test --workspace
 ```
+
+If ANY step fails, FIX IT before committing.
+
+---
+
+## Commit Convention
+
+```
+[kernel] feat: K-12 chunk streaming system
+[kernel] feat: K-13 collision query system
+[kernel] feat: K-14 biome material assignment
+[kernel] feat: K-15 GPU readback optimization
+```
+
+---
+
+## Integration Notes
+
+- K-13 collision will be used by gameplay-agent's player controller
+- K-14 biome will be used by world generation
+- Coordinate with genesis-common types
+- Export new modules in lib.rs
