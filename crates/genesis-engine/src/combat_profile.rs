@@ -56,7 +56,7 @@ impl HitboxMetrics {
         match self.min_time {
             Some(min) if duration < min => self.min_time = Some(duration),
             None => self.min_time = Some(duration),
-            _ => {}
+            _ => {},
         }
 
         if hit_found {
@@ -130,7 +130,13 @@ impl ProjectileMetrics {
     }
 
     /// Records a projectile update frame.
-    pub fn record_update(&mut self, projectile_count: usize, duration: Duration, hits: u64, expired: u64) {
+    pub fn record_update(
+        &mut self,
+        projectile_count: usize,
+        duration: Duration,
+        hits: u64,
+        expired: u64,
+    ) {
         self.total_updates += 1;
         self.total_time += duration;
         self.total_projectiles += projectile_count as u64;
@@ -144,10 +150,13 @@ impl ProjectileMetrics {
         match self.min_time {
             Some(min) if duration < min => self.min_time = Some(duration),
             None if projectile_count > 0 => self.min_time = Some(duration),
-            _ => {}
+            _ => {},
         }
 
-        let bucket = self.by_projectile_count.entry(projectile_count).or_default();
+        let bucket = self
+            .by_projectile_count
+            .entry(projectile_count)
+            .or_default();
         bucket.count += 1;
         bucket.total_time += duration;
     }
@@ -231,8 +240,12 @@ impl CombatEventMetrics {
 
     /// Records an individual event.
     pub fn record_event(&mut self, event_type: &str, duration: Duration) {
-        *self.by_event_type.entry(event_type.to_string()).or_insert(0) += 1;
-        *self.time_by_event_type
+        *self
+            .by_event_type
+            .entry(event_type.to_string())
+            .or_insert(0) += 1;
+        *self
+            .time_by_event_type
             .entry(event_type.to_string())
             .or_insert(Duration::ZERO) += duration;
     }
@@ -313,7 +326,10 @@ impl DamageCalculationMetrics {
         self.total_time += duration;
         self.total_damage += f64::from(damage);
 
-        *self.by_damage_type.entry(damage_type.to_string()).or_insert(0) += 1;
+        *self
+            .by_damage_type
+            .entry(damage_type.to_string())
+            .or_insert(0) += 1;
 
         if critical {
             self.criticals += 1;
@@ -584,7 +600,8 @@ impl CombatProfiler {
     pub fn end_hitbox_check(&mut self, entity_count: usize, hit_found: bool) {
         if self.enabled {
             let duration = self.end_timer("hitbox");
-            self.hitbox_metrics.record_check(entity_count, duration, hit_found);
+            self.hitbox_metrics
+                .record_check(entity_count, duration, hit_found);
             self.frame_timings.hitbox_time += duration;
         }
     }
@@ -598,7 +615,8 @@ impl CombatProfiler {
     pub fn end_projectile_update(&mut self, projectile_count: usize, hits: u64, expired: u64) {
         if self.enabled {
             let duration = self.end_timer("projectile");
-            self.projectile_metrics.record_update(projectile_count, duration, hits, expired);
+            self.projectile_metrics
+                .record_update(projectile_count, duration, hits, expired);
             self.frame_timings.projectile_time += duration;
         }
     }
@@ -630,10 +648,22 @@ impl CombatProfiler {
     }
 
     /// Ends timing damage calculation.
-    pub fn end_damage_calc(&mut self, damage_type: &str, damage: f32, critical: bool, blocked: bool) {
+    pub fn end_damage_calc(
+        &mut self,
+        damage_type: &str,
+        damage: f32,
+        critical: bool,
+        blocked: bool,
+    ) {
         if self.enabled {
             let duration = self.end_timer("damage");
-            self.damage_metrics.record_calculation(damage_type, damage, critical, blocked, duration);
+            self.damage_metrics.record_calculation(
+                damage_type,
+                damage,
+                critical,
+                blocked,
+                duration,
+            );
             self.frame_timings.damage_calc_time += duration;
         }
     }
@@ -647,7 +677,12 @@ impl CombatProfiler {
         weapon_count: usize,
     ) {
         if self.enabled {
-            self.memory_usage.update(entity_count, projectile_count, status_effect_count, weapon_count);
+            self.memory_usage.update(
+                entity_count,
+                projectile_count,
+                status_effect_count,
+                weapon_count,
+            );
         }
     }
 

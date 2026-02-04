@@ -17,6 +17,11 @@ use genesis_gameplay::input::KeyCode;
 use genesis_gameplay::GameState as GameplayState;
 use genesis_kernel::Camera;
 
+use crate::audio_assets::AudioCategory;
+use crate::audio_integration::{AudioIntegration, SoundEvent};
+use crate::combat_events::CombatEventHandler;
+use crate::combat_profile::CombatProfiler;
+use crate::combat_save::CombatPersistence;
 use crate::config::EngineConfig;
 use crate::crafting_events::CraftingEventHandler;
 use crate::crafting_profile::CraftingProfiler;
@@ -27,13 +32,8 @@ use crate::perf::PerfMetrics;
 use crate::recipe_loader::RecipeLoader;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
-use crate::world::TerrainGenerationService;
-use crate::audio_integration::{AudioIntegration, SoundEvent};
-use crate::audio_assets::AudioCategory;
-use crate::combat_events::CombatEventHandler;
-use crate::combat_save::CombatPersistence;
-use crate::combat_profile::CombatProfiler;
 use crate::weapon_loader::WeaponLoader;
+use crate::world::TerrainGenerationService;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -425,7 +425,8 @@ impl GenesisApp {
             for dy in -render_distance..=render_distance {
                 let old_visible_chunk = (old_chunk.0 + dx, old_chunk.1 + dy);
                 // Check if this chunk is still visible from new position
-                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs() <= render_distance
+                let still_visible = (old_visible_chunk.0 - current_chunk.0).abs()
+                    <= render_distance
                     && (old_visible_chunk.1 - current_chunk.1).abs() <= render_distance;
 
                 if !still_visible && self.npc_spawner.get_chunk_npcs(old_visible_chunk).is_some() {
@@ -436,10 +437,9 @@ impl GenesisApp {
 
         // Load new chunks
         for chunk_pos in chunks_to_load {
-            let count = self.npc_spawner.on_chunk_loaded(
-                chunk_pos,
-                self.gameplay.npc_manager_mut(),
-            );
+            let count = self
+                .npc_spawner
+                .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
             if count > 0 {
                 debug!("Spawned {} NPCs in chunk {:?}", count, chunk_pos);
             }
@@ -447,10 +447,9 @@ impl GenesisApp {
 
         // Unload old chunks
         for chunk_pos in chunks_to_unload {
-            let count = self.npc_spawner.on_chunk_unloaded(
-                chunk_pos,
-                self.gameplay.npc_manager_mut(),
-            );
+            let count = self
+                .npc_spawner
+                .on_chunk_unloaded(chunk_pos, self.gameplay.npc_manager_mut());
             if count > 0 {
                 debug!("Despawned {} NPCs from chunk {:?}", count, chunk_pos);
             }
@@ -474,10 +473,9 @@ impl GenesisApp {
         for dx in -render_distance..=render_distance {
             for dy in -render_distance..=render_distance {
                 let chunk_pos = (current_chunk.0 + dx, current_chunk.1 + dy);
-                let count = self.npc_spawner.on_chunk_loaded(
-                    chunk_pos,
-                    self.gameplay.npc_manager_mut(),
-                );
+                let count = self
+                    .npc_spawner
+                    .on_chunk_loaded(chunk_pos, self.gameplay.npc_manager_mut());
                 total_spawned += count;
             }
         }
@@ -506,7 +504,9 @@ impl GenesisApp {
     fn update_biome_music(&mut self) {
         // Get current biome from player position
         let player_pos = self.gameplay.player_position();
-        let biome = self.terrain_service.get_biome_at(player_pos.0, player_pos.1);
+        let biome = self
+            .terrain_service
+            .get_biome_at(player_pos.0, player_pos.1);
 
         // Map biome to music track (if different from current)
         #[allow(clippy::match_same_arms)]
@@ -540,12 +540,14 @@ impl GenesisApp {
 
         // Day/night ambient layers
         if is_night {
-            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
+            self.audio
+                .fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
             self.audio.fade_out_ambient("day", 2.0);
         } else if is_dawn_dusk {
             // Dawn/dusk transition - both layers at reduced volume
             self.audio.fade_in_ambient("day", "ambient/birds", 0.3, 2.0);
-            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
+            self.audio
+                .fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
         } else {
             self.audio.fade_in_ambient("day", "ambient/birds", 0.5, 2.0);
             self.audio.fade_out_ambient("night", 2.0);
@@ -554,13 +556,15 @@ impl GenesisApp {
         // Weather-based ambient
         if self.environment.weather.is_raining() {
             let rain_volume = self.environment.weather.rain_intensity();
-            self.audio.fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
+            self.audio
+                .fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
         } else {
             self.audio.fade_out_ambient("rain", 2.0);
         }
 
         if self.environment.weather.is_stormy() {
-            self.audio.fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
+            self.audio
+                .fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
         } else {
             self.audio.fade_out_ambient("thunder", 1.0);
         }
@@ -568,7 +572,8 @@ impl GenesisApp {
         // Wind based on weather intensity
         let wind_volume = self.environment.weather.wind_strength() * 0.4;
         if wind_volume > 0.1 {
-            self.audio.fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
+            self.audio
+                .fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
         } else {
             self.audio.fade_out_ambient("wind", 2.0);
         }
@@ -936,22 +941,20 @@ fn render_interaction_prompt(ctx: &egui::Context, data: &InteractionData) {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .resizable(false)
             .collapsible(false)
-            .show(ctx, |ui| {
-                match data.mode {
-                    NPCInteractionMode::Trading => {
-                        ui.label("Trading with Merchant");
-                        ui.separator();
-                        ui.label("(Trade UI coming soon...)");
-                        ui.separator();
-                        ui.label("Press [E] to close");
-                    },
-                    NPCInteractionMode::Dialogue => {
-                        ui.label("NPC says: Hello, traveler!");
-                        ui.separator();
-                        ui.label("Press [E] to close");
-                    },
-                    NPCInteractionMode::None => {},
-                }
+            .show(ctx, |ui| match data.mode {
+                NPCInteractionMode::Trading => {
+                    ui.label("Trading with Merchant");
+                    ui.separator();
+                    ui.label("(Trade UI coming soon...)");
+                    ui.separator();
+                    ui.label("Press [E] to close");
+                },
+                NPCInteractionMode::Dialogue => {
+                    ui.label("NPC says: Hello, traveler!");
+                    ui.separator();
+                    ui.label("Press [E] to close");
+                },
+                NPCInteractionMode::None => {},
             });
     } else if data.can_interact {
         // Show interaction prompt

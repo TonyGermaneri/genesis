@@ -45,6 +45,7 @@ pub mod needs;
 pub mod npc;
 pub mod npc_save;
 pub mod npc_spawning;
+pub mod pause;
 pub mod physics;
 pub mod plants;
 pub mod player;
@@ -54,6 +55,8 @@ pub mod quest;
 pub mod ranged_combat;
 pub mod recipes;
 pub mod save;
+pub mod session;
+pub mod settings;
 pub mod sound_events;
 pub mod sound_triggers;
 pub mod spawn;
@@ -62,6 +65,7 @@ pub mod time;
 pub mod vehicle;
 pub mod weather;
 pub mod workbench_types;
+pub mod world_creation;
 pub mod world_state_save;
 
 /// Prelude for convenient imports
@@ -92,6 +96,7 @@ pub mod prelude {
     pub use crate::npc::*;
     pub use crate::npc_save::*;
     pub use crate::npc_spawning::*;
+    pub use crate::pause::*;
     pub use crate::physics::*;
     pub use crate::plants::*;
     pub use crate::player::*;
@@ -101,6 +106,8 @@ pub mod prelude {
     pub use crate::ranged_combat::*;
     pub use crate::recipes::*;
     pub use crate::save::*;
+    pub use crate::session::*;
+    pub use crate::settings::*;
     pub use crate::sound_events::*;
     pub use crate::sound_triggers::*;
     pub use crate::spawn::*;
@@ -109,6 +116,7 @@ pub mod prelude {
     pub use crate::vehicle::*;
     pub use crate::weather::*;
     pub use crate::workbench_types::*;
+    pub use crate::world_creation::*;
     pub use crate::world_state_save::*;
 }
 

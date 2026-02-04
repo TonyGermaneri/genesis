@@ -121,7 +121,12 @@ impl WeaponCategory {
     pub const fn is_two_handed(&self) -> bool {
         matches!(
             self,
-            Self::Greatsword | Self::Greataxe | Self::Warhammer | Self::Bow | Self::Crossbow | Self::Staff
+            Self::Greatsword
+                | Self::Greataxe
+                | Self::Warhammer
+                | Self::Bow
+                | Self::Crossbow
+                | Self::Staff
         )
     }
 
@@ -366,10 +371,7 @@ impl WeaponDefinition {
 
         // Ranged weapons must have projectile config
         if self.category.is_ranged() && self.projectile.is_none() {
-            warn!(
-                "Weapon {} is ranged but has no projectile config",
-                self.id
-            );
+            warn!("Weapon {} is ranged but has no projectile config", self.id);
         }
 
         Ok(())
@@ -625,10 +627,10 @@ impl WeaponLoader {
                     Ok(n) => {
                         count += n;
                         debug!("Loaded {} weapons from {:?}", n, file_path);
-                    }
+                    },
                     Err(e) => {
                         warn!("Failed to load weapon file {:?}: {}", file_path, e);
-                    }
+                    },
                 }
             }
         }

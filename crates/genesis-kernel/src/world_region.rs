@@ -248,9 +248,8 @@ impl RegionFile {
     const TIMESTAMP_TABLE_SIZE: usize = TOTAL_CHUNKS_PER_REGION * ChunkTimestamp::SIZE;
 
     /// Start of chunk data (after header and tables).
-    const DATA_START: u64 = (RegionHeader::SIZE
-        + Self::OFFSET_TABLE_SIZE
-        + Self::TIMESTAMP_TABLE_SIZE) as u64;
+    const DATA_START: u64 =
+        (RegionHeader::SIZE + Self::OFFSET_TABLE_SIZE + Self::TIMESTAMP_TABLE_SIZE) as u64;
 
     /// Create or open a region file.
     pub fn open(path: &Path, coord: RegionCoord) -> Result<Self, RegionError> {
@@ -406,11 +405,7 @@ impl RegionFile {
         }
 
         self.dirty = true;
-        self.header.chunk_count = self
-            .locations
-            .iter()
-            .filter(|l| !l.is_empty())
-            .count() as u32;
+        self.header.chunk_count = self.locations.iter().filter(|l| !l.is_empty()).count() as u32;
 
         Ok(())
     }
@@ -448,11 +443,7 @@ impl RegionFile {
         self.timestamps[local_index] = ChunkTimestamp::default();
         self.dirty = true;
 
-        self.header.chunk_count = self
-            .locations
-            .iter()
-            .filter(|l| !l.is_empty())
-            .count() as u32;
+        self.header.chunk_count = self.locations.iter().filter(|l| !l.is_empty()).count() as u32;
 
         Ok(())
     }
@@ -484,8 +475,7 @@ impl RegionFile {
         self.file.write_all(bytemuck::bytes_of(&self.header))?;
 
         // Update location table
-        self.file
-            .write_all(bytemuck::cast_slice(&self.locations))?;
+        self.file.write_all(bytemuck::cast_slice(&self.locations))?;
 
         // Update timestamp table
         self.file
@@ -564,7 +554,7 @@ impl RegionManager {
                 let path = self.base_path.join(coord.filename());
                 let region = RegionFile::open(&path, coord)?;
                 Ok(e.insert(region))
-            }
+            },
         }
     }
 

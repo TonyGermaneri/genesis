@@ -155,8 +155,8 @@ pub mod prelude {
         SerializedChunk,
     };
     pub use crate::incremental_save::{
-        ChunkDelta, DeltaOp, IncrementalSaver, SaveConfig, SavePriority, SaveRequest,
-        SaveResponse, SaveStats,
+        ChunkDelta, DeltaOp, IncrementalSaver, SaveConfig, SavePriority, SaveRequest, SaveResponse,
+        SaveStats,
     };
     pub use crate::save_compression::{
         CompressionConfig, CompressionError, CompressionLevel, CompressionStats, CompressionType,
