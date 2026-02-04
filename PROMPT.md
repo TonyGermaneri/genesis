@@ -1,33 +1,68 @@
-# Iteration 13: Kernel Agent - Save/Load Infrastructure
+# Kernel Agent — Iteration 14: Main Menu & Options
 
-## Objective
-Implement chunk serialization, region files, compression, and incremental saves.
+## Branch: `kernel-agent`
 
-## Tasks
+You are implementing GPU-side rendering support for the main menu and options system.
 
-### 1. Chunk Serialization (chunk_serialize.rs)
-- ChunkData binary format (cell states, metadata)
-- Version header for format migration
-- Efficient encoding for sparse data
-- Checksum for corruption detection
+---
 
-### 2. World Region Files (world_region.rs)
-- Region file format (32x32 chunks per file)
-- Chunk offset table for fast lookup
-- Memory-mapped file access option
-- Region file creation/loading
+## Your Tasks
 
-### 3. Compression Support (save_compression.rs)
-- LZ4 for fast compression/decompression
-- Zstd for better ratio (optional)
-- Streaming compression for large chunks
-- Compression level configuration
+| ID | Task | Priority | Description |
+|----|------|----------|-------------|
+| K-56 | Menu background rendering | P0 | Animated/static menu backdrop |
+| K-57 | Transition effects | P1 | Fade in/out between screens |
+| K-58 | Screenshot capture | P1 | For save slot thumbnails |
+| K-59 | Resolution switching | P1 | Apply resolution changes live |
 
-### 4. Incremental Saves (incremental_save.rs)
-- Dirty chunk tracking
-- Delta encoding for changes
-- Background save thread
-- Save queue management
+---
 
-### 5. Update lib.rs
-Export: chunk_serialize, world_region, save_compression, incremental_save
+## Detailed Requirements
+
+### K-56: Menu Background Rendering
+**File:** `crates/genesis-kernel/src/menu_backdrop.rs`
+
+Create an animated background for the main menu:
+- Slowly moving clouds/particles
+- Subtle parallax effect
+- Low-GPU-cost shader effect
+- Support for static fallback image
+- Day/night cycle ambient effect
+
+### K-57: Transition Effects
+**File:** `crates/genesis-kernel/src/transitions.rs`
+
+Screen transitions for smooth UX:
+- Fade to black / fade from black
+- Crossfade between scenes
+- Configurable duration (default 0.3s)
+- GPU-based alpha blending
+
+### K-58: Screenshot Capture
+**File:** `crates/genesis-kernel/src/screenshot.rs`
+
+Capture framebuffer for save thumbnails:
+- Capture current frame to CPU buffer
+- Downsample to thumbnail size (256x144)
+- Return as byte array (PNG-ready)
+- Async to avoid frame stalls
+
+### K-59: Resolution Switching
+**File:** `crates/genesis-kernel/src/resolution.rs`
+
+Handle runtime resolution changes:
+- Resize all render targets
+- Maintain aspect ratio
+- Update projection matrices
+- Support fullscreen toggle
+
+---
+
+## Definition of Done
+
+- [ ] Menu backdrop renders with animation
+- [ ] Transitions work for fade in/out
+- [ ] Screenshots capture to thumbnail size
+- [ ] Resolution can be changed at runtime
+- [ ] All tests pass
+- [ ] No clippy warnings
