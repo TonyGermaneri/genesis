@@ -164,6 +164,58 @@ impl EguiIntegration {
             .render(render_pass, paint_jobs, screen_descriptor);
     }
 
+    /// Render egui directly to a texture view.
+    ///
+    /// This is a convenience method that creates a render pass internally.
+    /// Call this AFTER the main game rendering to render UI on top.
+    ///
+    /// # Arguments
+    /// * `device` - The wgpu device
+    /// * `queue` - The wgpu queue
+    /// * `encoder` - The command encoder
+    /// * `view` - The texture view to render to (typically the surface view)
+    /// * `screen_descriptor` - Screen size and scale information
+    /// * `output` - The egui output from `end_frame`
+    pub fn render_to_view(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        output: FullOutput,
+    ) {
+        // Prepare paint jobs
+        let paint_jobs = self.prepare(device, queue, encoder, screen_descriptor, output);
+
+        // Create render pass that renders on top (no clear)
+        {
+            #[allow(unused_mut)]
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // Load existing content - UI renders on top of game
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Use forget_lifetime as required by egui_wgpu
+            self.renderer.render(
+                &mut render_pass.forget_lifetime(),
+                &paint_jobs,
+                screen_descriptor,
+            );
+        }
+    }
+
     /// Get a reference to the underlying egui-wgpu renderer for advanced usage.
     #[must_use]
     pub fn renderer(&self) -> &egui_wgpu::Renderer {

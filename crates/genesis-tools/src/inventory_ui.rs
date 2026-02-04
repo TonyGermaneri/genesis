@@ -220,6 +220,480 @@ impl Default for InventoryUIConfig {
     }
 }
 
+/// Item stack for drag operations.
+#[derive(Debug, Clone)]
+pub struct ItemStack {
+    /// Item type ID
+    pub item_type: ItemTypeId,
+    /// Item name
+    pub name: String,
+    /// Item count
+    pub count: u32,
+    /// Icon color
+    pub icon_color: [u8; 4],
+}
+
+impl ItemStack {
+    /// Creates a new item stack from a slot.
+    #[must_use]
+    pub fn from_slot(slot: &SlotUIData) -> Option<Self> {
+        slot.item_type.map(|item_type| Self {
+            item_type,
+            name: slot.item_name.clone(),
+            count: slot.count,
+            icon_color: slot.icon_color,
+        })
+    }
+}
+
+/// Sort mode for inventory items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InventorySortMode {
+    /// No sorting
+    #[default]
+    None,
+    /// Sort by item name
+    ByName,
+    /// Sort by item count (descending)
+    ByCount,
+    /// Sort by item type ID
+    ByType,
+}
+
+/// Inventory panel with drag-drop, search, and filtering.
+#[derive(Debug)]
+pub struct InventoryPanel {
+    /// Currently dragging item (slot index, item stack)
+    pub dragging: Option<(usize, ItemStack)>,
+    /// Currently hovered slot index
+    pub hovered_slot: Option<usize>,
+    /// Search/filter text
+    pub filter_text: String,
+    /// Current sort mode
+    pub sort_mode: InventorySortMode,
+    /// Configuration
+    pub config: InventoryUIConfig,
+    /// Whether the panel is open
+    pub is_open: bool,
+}
+
+impl Default for InventoryPanel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InventoryPanel {
+    /// Creates a new inventory panel.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            dragging: None,
+            hovered_slot: None,
+            filter_text: String::new(),
+            sort_mode: InventorySortMode::None,
+            config: InventoryUIConfig::default(),
+            is_open: false,
+        }
+    }
+
+    /// Creates with custom configuration.
+    #[must_use]
+    pub fn with_config(config: InventoryUIConfig) -> Self {
+        Self {
+            dragging: None,
+            hovered_slot: None,
+            filter_text: String::new(),
+            sort_mode: InventorySortMode::None,
+            config,
+            is_open: false,
+        }
+    }
+
+    /// Renders the inventory panel and returns any actions.
+    pub fn render(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction> {
+        let mut actions = Vec::new();
+
+        if !self.is_open {
+            return actions;
+        }
+
+        Window::new("Inventory")
+            .resizable(false)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                // Search bar
+                ui.horizontal(|ui| {
+                    ui.label("Search:");
+                    ui.text_edit_singleline(&mut self.filter_text);
+                    if ui.button("✕").clicked() {
+                        self.filter_text.clear();
+                    }
+                });
+
+                // Sort controls
+                ui.horizontal(|ui| {
+                    ui.label("Sort:");
+                    if ui
+                        .selectable_label(self.sort_mode == InventorySortMode::None, "None")
+                        .clicked()
+                    {
+                        self.sort_mode = InventorySortMode::None;
+                    }
+                    if ui
+                        .selectable_label(self.sort_mode == InventorySortMode::ByName, "Name")
+                        .clicked()
+                    {
+                        self.sort_mode = InventorySortMode::ByName;
+                    }
+                    if ui
+                        .selectable_label(self.sort_mode == InventorySortMode::ByCount, "Count")
+                        .clicked()
+                    {
+                        self.sort_mode = InventorySortMode::ByCount;
+                    }
+                    if ui
+                        .selectable_label(self.sort_mode == InventorySortMode::ByType, "Type")
+                        .clicked()
+                    {
+                        self.sort_mode = InventorySortMode::ByType;
+                    }
+                });
+
+                ui.separator();
+
+                // Inventory grid
+                self.render_grid(ctx, ui, model, &mut actions);
+            });
+
+        // Render drag preview
+        if let Some((_, ref stack)) = self.dragging {
+            self.render_drag_preview(ctx, stack);
+        }
+
+        actions
+    }
+
+    /// Renders the inventory grid with filtering.
+    fn render_grid(
+        &mut self,
+        ctx: &Context,
+        ui: &mut Ui,
+        model: &mut InventoryUIModel,
+        actions: &mut Vec<InventoryAction>,
+    ) {
+        let cols = self.config.columns;
+        let filter_lower = self.filter_text.to_lowercase();
+
+        egui::Grid::new("inventory_panel_grid")
+            .spacing(Vec2::splat(self.config.slot_padding))
+            .show(ui, |ui| {
+                for (idx, slot) in model.slots.iter().enumerate() {
+                    // Filter slots
+                    let matches_filter = filter_lower.is_empty()
+                        || slot.item_name.to_lowercase().contains(&filter_lower);
+
+                    let is_valid_drop_target = self.is_valid_drop_target(idx, slot);
+                    let response = self.render_slot(ui, slot, is_valid_drop_target, matches_filter);
+
+                    // Track hover
+                    if response.hovered() {
+                        self.hovered_slot = Some(idx);
+                    }
+
+                    // Handle interactions
+                    if response.clicked() && matches_filter {
+                        actions.push(InventoryAction::Select(idx));
+                    }
+
+                    // Drag start
+                    if response.drag_started() && !slot.is_empty() && matches_filter {
+                        if let Some(stack) = ItemStack::from_slot(slot) {
+                            self.dragging = Some((idx, stack));
+                            model.dragging = Some(idx);
+                        }
+                    }
+
+                    // Drop handling
+                    if response.hovered() && ctx.input(|i| i.pointer.any_released()) {
+                        if let Some((from_idx, _)) = self.dragging.take() {
+                            if from_idx != idx {
+                                actions.push(InventoryAction::Move {
+                                    from: from_idx,
+                                    to: idx,
+                                });
+                            }
+                            model.dragging = None;
+                        }
+                    }
+
+                    // Tooltip
+                    if response.hovered() && !slot.is_empty() && matches_filter {
+                        let tooltip = TooltipData::from_slot(slot);
+                        response.on_hover_ui(|ui| {
+                            self.render_tooltip(ui, &tooltip);
+                        });
+                    }
+
+                    // End row
+                    if (idx + 1) % cols == 0 {
+                        ui.end_row();
+                    }
+                }
+            });
+    }
+
+    /// Checks if a slot is a valid drop target.
+    fn is_valid_drop_target(&self, slot_idx: usize, slot: &SlotUIData) -> bool {
+        if let Some((from_idx, ref stack)) = self.dragging {
+            if from_idx == slot_idx {
+                return false;
+            }
+            // Valid if slot is empty or has same item type
+            slot.is_empty() || slot.item_type == Some(stack.item_type)
+        } else {
+            false
+        }
+    }
+
+    /// Renders a single slot with drag-drop visual feedback.
+    fn render_slot(
+        &self,
+        ui: &mut Ui,
+        slot: &SlotUIData,
+        is_drop_target: bool,
+        matches_filter: bool,
+    ) -> Response {
+        let size = Vec2::splat(self.config.slot_size);
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+
+        if ui.is_rect_visible(rect) {
+            let painter = ui.painter();
+
+            // Determine background color
+            let bg_color = if !matches_filter {
+                // Dimmed for filtered out slots
+                Color32::from_rgba_unmultiplied(30, 30, 30, 150)
+            } else if is_drop_target && response.hovered() {
+                // Green highlight for valid drop target
+                Color32::from_rgba_unmultiplied(60, 150, 60, 255)
+            } else if slot.is_selected {
+                Color32::from_rgba_unmultiplied(
+                    self.config.selected_color[0],
+                    self.config.selected_color[1],
+                    self.config.selected_color[2],
+                    self.config.selected_color[3],
+                )
+            } else if slot.is_highlighted {
+                Color32::from_rgba_unmultiplied(
+                    self.config.highlight_color[0],
+                    self.config.highlight_color[1],
+                    self.config.highlight_color[2],
+                    self.config.highlight_color[3],
+                )
+            } else {
+                Color32::from_rgba_unmultiplied(
+                    self.config.slot_color[0],
+                    self.config.slot_color[1],
+                    self.config.slot_color[2],
+                    self.config.slot_color[3],
+                )
+            };
+
+            painter.rect_filled(rect, Rounding::same(4.0), bg_color);
+
+            // Border - thicker for drop targets
+            let (border_width, border_color) = if is_drop_target && response.hovered() {
+                (2.0, Color32::GREEN)
+            } else if response.hovered() && matches_filter {
+                (1.5, Color32::WHITE)
+            } else {
+                (1.0, Color32::from_gray(80))
+            };
+            painter.rect_stroke(
+                rect,
+                Rounding::same(4.0),
+                Stroke::new(border_width, border_color),
+            );
+
+            // Item icon
+            if !slot.is_empty() {
+                let icon_rect = rect.shrink(8.0);
+                let alpha = if matches_filter { 255 } else { 100 };
+                let icon_color = Color32::from_rgba_unmultiplied(
+                    slot.icon_color[0],
+                    slot.icon_color[1],
+                    slot.icon_color[2],
+                    alpha,
+                );
+                painter.rect_filled(icon_rect, Rounding::same(2.0), icon_color);
+
+                // Item count
+                if slot.count > 1 {
+                    painter.text(
+                        rect.right_bottom() - Vec2::new(4.0, 4.0),
+                        Align2::RIGHT_BOTTOM,
+                        slot.count.to_string(),
+                        FontId::proportional(12.0),
+                        if matches_filter {
+                            Color32::WHITE
+                        } else {
+                            Color32::GRAY
+                        },
+                    );
+                }
+            }
+        }
+
+        response
+    }
+
+    /// Renders the drag preview following the cursor.
+    fn render_drag_preview(&self, ctx: &Context, stack: &ItemStack) {
+        if let Some(pos) = ctx.pointer_hover_pos() {
+            egui::Area::new(Id::new("drag_preview"))
+                .fixed_pos(pos + Vec2::new(8.0, 8.0))
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    let size = Vec2::splat(self.config.slot_size * 0.75);
+                    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+
+                    let painter = ui.painter();
+                    let icon_color = Color32::from_rgba_unmultiplied(
+                        stack.icon_color[0],
+                        stack.icon_color[1],
+                        stack.icon_color[2],
+                        200,
+                    );
+                    painter.rect_filled(rect, Rounding::same(4.0), icon_color);
+
+                    if stack.count > 1 {
+                        painter.text(
+                            rect.right_bottom() - Vec2::new(2.0, 2.0),
+                            Align2::RIGHT_BOTTOM,
+                            stack.count.to_string(),
+                            FontId::proportional(10.0),
+                            Color32::WHITE,
+                        );
+                    }
+                });
+        }
+    }
+
+    /// Renders item tooltip.
+    #[allow(clippy::unused_self)]
+    fn render_tooltip(&self, ui: &mut Ui, tooltip: &TooltipData) {
+        ui.vertical(|ui| {
+            let name_color = Color32::from_rgba_unmultiplied(
+                tooltip.rarity_color[0],
+                tooltip.rarity_color[1],
+                tooltip.rarity_color[2],
+                tooltip.rarity_color[3],
+            );
+            ui.label(RichText::new(&tooltip.name).color(name_color).strong());
+
+            if !tooltip.description.is_empty() {
+                ui.label(&tooltip.description);
+            }
+
+            if !tooltip.stats.is_empty() {
+                ui.separator();
+                for (key, value) in &tooltip.stats {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(key).weak());
+                        ui.label(value);
+                    });
+                }
+            }
+        });
+    }
+
+    /// Sorts the inventory according to the current sort mode.
+    pub fn apply_sort(&self, model: &mut InventoryUIModel) {
+        match self.sort_mode {
+            InventorySortMode::None => {},
+            InventorySortMode::ByName => {
+                model
+                    .slots
+                    .sort_by(|a, b| match (a.is_empty(), b.is_empty()) {
+                        (true, true) => std::cmp::Ordering::Equal,
+                        (true, false) => std::cmp::Ordering::Greater,
+                        (false, true) => std::cmp::Ordering::Less,
+                        (false, false) => a.item_name.cmp(&b.item_name),
+                    });
+            },
+            InventorySortMode::ByCount => {
+                model.slots.sort_by(|a, b| {
+                    match (a.is_empty(), b.is_empty()) {
+                        (true, true) => std::cmp::Ordering::Equal,
+                        (true, false) => std::cmp::Ordering::Greater,
+                        (false, true) => std::cmp::Ordering::Less,
+                        (false, false) => b.count.cmp(&a.count), // Descending
+                    }
+                });
+            },
+            InventorySortMode::ByType => {
+                model
+                    .slots
+                    .sort_by(|a, b| match (&a.item_type, &b.item_type) {
+                        (None, None) => std::cmp::Ordering::Equal,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (Some(a_type), Some(b_type)) => a_type.raw().cmp(&b_type.raw()),
+                    });
+            },
+        }
+        // Re-index slots after sorting
+        for (idx, slot) in model.slots.iter_mut().enumerate() {
+            slot.slot_index = idx;
+        }
+    }
+
+    /// Filters slots matching the current filter text.
+    #[must_use]
+    pub fn filter_slots<'a>(&self, slots: &'a [SlotUIData]) -> Vec<&'a SlotUIData> {
+        if self.filter_text.is_empty() {
+            return slots.iter().collect();
+        }
+        let filter_lower = self.filter_text.to_lowercase();
+        slots
+            .iter()
+            .filter(|s| s.item_name.to_lowercase().contains(&filter_lower))
+            .collect()
+    }
+
+    /// Toggles the panel open/closed.
+    pub fn toggle(&mut self) {
+        self.is_open = !self.is_open;
+        if !self.is_open {
+            self.dragging = None;
+            self.hovered_slot = None;
+        }
+    }
+
+    /// Opens the panel.
+    pub fn open(&mut self) {
+        self.is_open = true;
+    }
+
+    /// Closes the panel.
+    pub fn close(&mut self) {
+        self.is_open = false;
+        self.dragging = None;
+        self.hovered_slot = None;
+    }
+
+    /// Clears the filter.
+    pub fn clear_filter(&mut self) {
+        self.filter_text.clear();
+    }
+
+    /// Sets the filter text.
+    pub fn set_filter(&mut self, filter: impl Into<String>) {
+        self.filter_text = filter.into();
+    }
+}
+
 /// Inventory UI renderer.
 #[derive(Debug)]
 pub struct InventoryUI {
@@ -628,5 +1102,104 @@ mod tests {
             InventoryAction::Move { from: 1, to: 2 },
             InventoryAction::Move { from: 1, to: 2 }
         );
+    }
+
+    #[test]
+    fn test_inventory_panel_new() {
+        let panel = InventoryPanel::new();
+        assert!(!panel.is_open);
+        assert!(panel.dragging.is_none());
+        assert!(panel.hovered_slot.is_none());
+        assert!(panel.filter_text.is_empty());
+        assert_eq!(panel.sort_mode, InventorySortMode::None);
+    }
+
+    #[test]
+    fn test_inventory_panel_toggle() {
+        let mut panel = InventoryPanel::new();
+        assert!(!panel.is_open);
+        panel.toggle();
+        assert!(panel.is_open);
+        panel.toggle();
+        assert!(!panel.is_open);
+    }
+
+    #[test]
+    fn test_inventory_panel_filter() {
+        let mut panel = InventoryPanel::new();
+        panel.set_filter("sword");
+        assert_eq!(panel.filter_text, "sword");
+        panel.clear_filter();
+        assert!(panel.filter_text.is_empty());
+    }
+
+    #[test]
+    fn test_inventory_panel_filter_slots() {
+        let panel = InventoryPanel {
+            filter_text: "sw".to_string(),
+            ..Default::default()
+        };
+        let slots = vec![
+            SlotUIData::with_item(0, ItemTypeId::new(1), "Sword", 1),
+            SlotUIData::with_item(1, ItemTypeId::new(2), "Shield", 1),
+            SlotUIData::with_item(2, ItemTypeId::new(3), "Swamp Boots", 1),
+        ];
+        let filtered = panel.filter_slots(&slots);
+        assert_eq!(filtered.len(), 2); // Sword and Swamp Boots
+    }
+
+    #[test]
+    fn test_inventory_panel_sort_by_name() {
+        let mut panel = InventoryPanel::new();
+        panel.sort_mode = InventorySortMode::ByName;
+        let mut model = InventoryUIModel::new(3, 0);
+        model.slots[0] = SlotUIData::with_item(0, ItemTypeId::new(1), "Zelda", 1);
+        model.slots[1] = SlotUIData::with_item(1, ItemTypeId::new(2), "Apple", 1);
+        model.slots[2] = SlotUIData::with_item(2, ItemTypeId::new(3), "Banana", 1);
+
+        panel.apply_sort(&mut model);
+
+        assert_eq!(model.slots[0].item_name, "Apple");
+        assert_eq!(model.slots[1].item_name, "Banana");
+        assert_eq!(model.slots[2].item_name, "Zelda");
+    }
+
+    #[test]
+    fn test_inventory_panel_sort_by_count() {
+        let mut panel = InventoryPanel::new();
+        panel.sort_mode = InventorySortMode::ByCount;
+        let mut model = InventoryUIModel::new(3, 0);
+        model.slots[0] = SlotUIData::with_item(0, ItemTypeId::new(1), "A", 5);
+        model.slots[1] = SlotUIData::with_item(1, ItemTypeId::new(2), "B", 20);
+        model.slots[2] = SlotUIData::with_item(2, ItemTypeId::new(3), "C", 10);
+
+        panel.apply_sort(&mut model);
+
+        assert_eq!(model.slots[0].count, 20); // Descending order
+        assert_eq!(model.slots[1].count, 10);
+        assert_eq!(model.slots[2].count, 5);
+    }
+
+    #[test]
+    fn test_item_stack_from_slot() {
+        let slot = SlotUIData::with_item(0, ItemTypeId::new(42), "Test", 5);
+        let stack = ItemStack::from_slot(&slot);
+        assert!(stack.is_some());
+        let stack = stack.unwrap();
+        assert_eq!(stack.item_type, ItemTypeId::new(42));
+        assert_eq!(stack.name, "Test");
+        assert_eq!(stack.count, 5);
+    }
+
+    #[test]
+    fn test_item_stack_from_empty_slot() {
+        let slot = SlotUIData::empty(0);
+        let stack = ItemStack::from_slot(&slot);
+        assert!(stack.is_none());
+    }
+
+    #[test]
+    fn test_inventory_sort_mode_default() {
+        assert_eq!(InventorySortMode::default(), InventorySortMode::None);
     }
 }
