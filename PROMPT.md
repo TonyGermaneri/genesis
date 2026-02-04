@@ -1,31 +1,33 @@
-# Iteration 11: Kernel Agent - Crafting Infrastructure
+# Iteration 12: Kernel Agent - Combat Infrastructure
 
 ## Objective
-Implement low-level crafting grid computation, item stack management, and workbench spatial detection.
+Implement hitbox/hurtbox collision, projectile physics, damage rendering, and combat effects.
 
 ## Tasks
 
-### 1. Crafting Grid Compute (crafting_grid.rs)
-- CraftingGrid: 3x3 or configurable grid of ItemSlot
-- RecipePattern: GPU-friendly pattern representation
-- Pattern matching via compute shader or CPU fallback
-- Shapeless vs shaped recipe distinction
+### 1. Hitbox/Hurtbox Collision (combat_collision.rs)
+- Hitbox struct with shape, offset, active frames
+- Hurtbox for damageable entities
+- Overlap detection between hitbox and hurtbox
+- Layer masks (player vs enemy, friendly fire)
 
-### 2. Item Stack Management (item_stack.rs)
-- ItemStack: item_id, count, metadata, durability
-- Stack combining with max stack size limits
-- Stack splitting (shift-click, drag splitting)
-- Serialization for save/load
+### 2. Projectile Physics (projectile.rs)
+- Projectile struct: position, velocity, gravity, lifetime
+- Arc trajectory for arrows
+- Straight trajectory for spells
+- Collision with terrain and entities
 
-### 3. Workbench Zones (workbench.rs)
-- WorkbenchType enum (Basic, Forge, Anvil, Alchemy)
-- Interaction radius detection
-- Station capabilities (recipe categories)
+### 3. Damage Number Rendering (damage_render.rs)
+- FloatingText: position, text, color, lifetime
+- Rising animation with fade-out
+- Color coding (white=normal, yellow=crit, red=player damage)
+- Batch rendering for multiple hits
 
-### 4. Crafting Animation Data (crafting_anim.rs)
-- CraftingProgress: 0.0 to 1.0 completion
-- ParticleEmitter positions for effects
-- Sound trigger points
+### 4. Combat Particle Effects (combat_particles.rs)
+- HitSpark: position, direction, intensity
+- BloodSplatter: for creature hits
+- ImpactDust: for terrain hits
+- Particle pooling for performance
 
 ### 5. Update lib.rs
-Export: crafting_grid, item_stack, workbench, crafting_anim
+Export: combat_collision, projectile, damage_render, combat_particles
