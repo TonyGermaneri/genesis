@@ -1,33 +1,33 @@
-# Iteration 12: Tools Agent - Combat UI
+# Iteration 13: Tools Agent - Save/Load UI
 
 ## Objective
-Create health/stamina bars, combat HUD, equipment stats, and debug overlays.
+Create save/load menu, slot previews, auto-save indicator, and save management.
 
 ## Tasks
 
-### 1. Health/Stamina Bars (ui/health_bars.rs)
-- Player health bar (top-left)
-- Stamina bar below health
-- Target health bar (when locked on)
-- Smooth interpolation on damage
+### 1. Save/Load Menu UI (ui/save_menu.rs)
+- Main menu save/load buttons
+- Save slot grid (5-10 slots)
+- New game button
+- Continue last save button
 
-### 2. Combat HUD (ui/combat_hud.rs)
-- Combo counter display
-- Damage taken flash indicator
-- Low health warning effect
-- Status effect icons
+### 2. Save Slot Previews (ui/save_preview.rs)
+- Screenshot thumbnail per slot
+- Player name and level
+- Playtime and last played date
+- World name and seed
 
-### 3. Equipment Stats Panel (ui/equipment_stats.rs)
-- Weapon damage display
-- Armor/defense values
-- Stat comparison on hover
-- DPS calculation display
+### 3. Auto-save Indicator (ui/autosave_indicator.rs)
+- Spinning icon during save
+- Configurable position (corner)
+- Fade in/out animation
+- Error indicator on fail
 
-### 4. Combat Debug Overlay (ui/combat_debug.rs)
-- Hitbox/hurtbox visualization
-- Damage log scrolling list
-- Combat frame data display
-- Invincibility frame indicator
+### 4. Save Management UI (ui/save_management.rs)
+- Delete save confirmation dialog
+- Copy save to new slot
+- Export save to file
+- Import save from file
 
 ### 5. Update ui/mod.rs
-Export: health_bars, combat_hud, equipment_stats, combat_debug
+Export: save_menu, save_preview, autosave_indicator, save_management
