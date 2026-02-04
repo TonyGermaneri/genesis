@@ -1,7 +1,7 @@
 //! Frame timing and performance tracking.
 //!
 //! Provides smooth delta time calculation, fixed timestep for physics,
-//! and FPS limiting.
+//! FPS limiting, and chunk-specific metrics.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -258,6 +258,112 @@ impl FpsCounter {
     }
 }
 
+/// Metrics for chunk loading and simulation performance.
+#[derive(Debug, Clone)]
+pub struct ChunkMetrics {
+    /// Recent chunk load times
+    load_times: VecDeque<Duration>,
+    /// Recent simulation times per frame
+    sim_times: VecDeque<Duration>,
+    /// Maximum samples to keep
+    max_samples: usize,
+    /// Current chunk count
+    chunk_count: u32,
+    /// Frame time budget in milliseconds
+    frame_budget_ms: f64,
+}
+
+impl Default for ChunkMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
+impl ChunkMetrics {
+    /// Creates a new chunk metrics tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            load_times: VecDeque::with_capacity(60),
+            sim_times: VecDeque::with_capacity(60),
+            max_samples: 60,
+            chunk_count: 0,
+            frame_budget_ms: 16.67, // 60 FPS target
+        }
+    }
+
+    /// Records a chunk load time.
+    pub fn record_load_time(&mut self, duration: Duration) {
+        self.load_times.push_back(duration);
+        if self.load_times.len() > self.max_samples {
+            self.load_times.pop_front();
+        }
+    }
+
+    /// Records simulation time for a frame.
+    pub fn record_sim_time(&mut self, duration: Duration) {
+        self.sim_times.push_back(duration);
+        if self.sim_times.len() > self.max_samples {
+            self.sim_times.pop_front();
+        }
+    }
+
+    /// Sets the current chunk count.
+    pub fn set_chunk_count(&mut self, count: u32) {
+        self.chunk_count = count;
+    }
+
+    /// Returns the current chunk count.
+    #[must_use]
+    pub fn chunk_count(&self) -> u32 {
+        self.chunk_count
+    }
+
+    /// Returns the average load time in milliseconds.
+    #[must_use]
+    pub fn avg_load_time_ms(&self) -> f64 {
+        if self.load_times.is_empty() {
+            return 0.0;
+        }
+        let total: Duration = self.load_times.iter().sum();
+        total.as_secs_f64() * 1000.0 / self.load_times.len() as f64
+    }
+
+    /// Returns the average simulation time in milliseconds.
+    #[must_use]
+    pub fn avg_sim_time_ms(&self) -> f64 {
+        if self.sim_times.is_empty() {
+            return 0.0;
+        }
+        let total: Duration = self.sim_times.iter().sum();
+        total.as_secs_f64() * 1000.0 / self.sim_times.len() as f64
+    }
+
+    /// Returns the total average chunk processing time in milliseconds.
+    #[must_use]
+    pub fn total_chunk_time_ms(&self) -> f64 {
+        self.avg_load_time_ms() + self.avg_sim_time_ms()
+    }
+
+    /// Returns whether chunk processing exceeds the frame budget.
+    #[must_use]
+    pub fn exceeds_budget(&self) -> bool {
+        self.total_chunk_time_ms() > self.frame_budget_ms * 0.5 // 50% of frame budget
+    }
+
+    /// Sets the frame budget (based on target FPS).
+    pub fn set_frame_budget(&mut self, target_fps: u32) {
+        self.frame_budget_ms = 1000.0 / f64::from(target_fps.max(1));
+    }
+
+    /// Clears all recorded metrics.
+    pub fn clear(&mut self) {
+        self.load_times.clear();
+        self.sim_times.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,5 +453,82 @@ mod tests {
 
         assert_eq!(timing.accumulator, 0.0);
         assert!(timing.frame_times.is_empty());
+    }
+
+    #[test]
+    fn test_chunk_metrics_default() {
+        let metrics = ChunkMetrics::new();
+        assert_eq!(metrics.chunk_count(), 0);
+        assert_eq!(metrics.avg_load_time_ms(), 0.0);
+        assert_eq!(metrics.avg_sim_time_ms(), 0.0);
+        assert!(!metrics.exceeds_budget());
+    }
+
+    #[test]
+    fn test_chunk_metrics_recording() {
+        let mut metrics = ChunkMetrics::new();
+
+        metrics.record_load_time(Duration::from_millis(5));
+        metrics.record_load_time(Duration::from_millis(10));
+        metrics.record_load_time(Duration::from_millis(15));
+
+        // Average should be 10ms
+        let avg = metrics.avg_load_time_ms();
+        assert!((avg - 10.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_chunk_metrics_sim_time() {
+        let mut metrics = ChunkMetrics::new();
+
+        metrics.record_sim_time(Duration::from_millis(2));
+        metrics.record_sim_time(Duration::from_millis(4));
+
+        // Average should be 3ms
+        let avg = metrics.avg_sim_time_ms();
+        assert!((avg - 3.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_chunk_metrics_chunk_count() {
+        let mut metrics = ChunkMetrics::new();
+        metrics.set_chunk_count(9);
+        assert_eq!(metrics.chunk_count(), 9);
+    }
+
+    #[test]
+    fn test_chunk_metrics_exceeds_budget() {
+        let mut metrics = ChunkMetrics::new();
+
+        // Record many long times to exceed budget (8.33ms = 50% of 16.67ms)
+        for _ in 0..10 {
+            metrics.record_load_time(Duration::from_millis(5));
+            metrics.record_sim_time(Duration::from_millis(5));
+        }
+
+        // Total = 10ms > 8.33ms threshold
+        assert!(metrics.exceeds_budget());
+    }
+
+    #[test]
+    fn test_chunk_metrics_clear() {
+        let mut metrics = ChunkMetrics::new();
+        metrics.record_load_time(Duration::from_millis(10));
+        metrics.record_sim_time(Duration::from_millis(5));
+
+        metrics.clear();
+
+        assert_eq!(metrics.avg_load_time_ms(), 0.0);
+        assert_eq!(metrics.avg_sim_time_ms(), 0.0);
+    }
+
+    #[test]
+    fn test_chunk_metrics_total_time() {
+        let mut metrics = ChunkMetrics::new();
+        metrics.record_load_time(Duration::from_millis(4));
+        metrics.record_sim_time(Duration::from_millis(6));
+
+        let total = metrics.total_chunk_time_ms();
+        assert!((total - 10.0).abs() < 0.1);
     }
 }
