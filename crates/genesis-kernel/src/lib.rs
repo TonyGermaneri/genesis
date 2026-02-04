@@ -97,8 +97,8 @@ pub mod prelude {
     pub use crate::collision::*;
     // Combat modules use explicit imports to avoid conflicts
     pub use crate::combat_collision::{
-        CombatBoxManager, CombatCollider, CollisionResult, FrameRange, Hitbox, HitboxSequenceBuilder,
-        HitboxShape, Hurtbox,
+        CollisionResult, CombatBoxManager, CombatCollider, FrameRange, Hitbox,
+        HitboxSequenceBuilder, HitboxShape, Hurtbox,
     };
     pub use crate::combat_particles::{
         BloodSplatterEffect, CombatEffectType, CombatParticle, CombatParticleInstance,

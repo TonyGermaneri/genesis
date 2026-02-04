@@ -747,7 +747,8 @@ impl ProjectileManager {
                         velocity: projectile.velocity,
                         entity_id: Some(entity_id),
                         damage: projectile.effective_damage(),
-                        destroyed: !projectile.piercing || projectile.pierce_count >= projectile.max_pierce,
+                        destroyed: !projectile.piercing
+                            || projectile.pierce_count >= projectile.max_pierce,
                     };
 
                     // Callback to handle hit
@@ -786,7 +787,10 @@ impl ProjectileManager {
 
     /// Get all active projectiles for rendering.
     #[must_use]
-    pub fn get_render_instances(&self, sprite_lookup: impl Fn(&Projectile) -> (f32, f32, f32, f32)) -> Vec<ProjectileInstance> {
+    pub fn get_render_instances(
+        &self,
+        sprite_lookup: impl Fn(&Projectile) -> (f32, f32, f32, f32),
+    ) -> Vec<ProjectileInstance> {
         self.projectiles
             .values()
             .filter(|p| p.is_active())
@@ -974,8 +978,7 @@ mod tests {
 
     #[test]
     fn test_projectile_bounce() {
-        let mut proj = Projectile::new((0.0, 0.0), (100.0, 100.0))
-            .with_bounces(2, 0.8);
+        let mut proj = Projectile::new((0.0, 0.0), (100.0, 100.0)).with_bounces(2, 0.8);
 
         proj.bounce((0.0, -1.0));
         assert_eq!(proj.bounces_remaining, 1);
@@ -984,8 +987,7 @@ mod tests {
 
     #[test]
     fn test_projectile_pierce() {
-        let mut proj = Projectile::new((0.0, 0.0), (100.0, 0.0))
-            .with_piercing(2);
+        let mut proj = Projectile::new((0.0, 0.0), (100.0, 0.0)).with_piercing(2);
 
         assert!(proj.pierce());
         assert_eq!(proj.pierce_count, 1);
@@ -1029,13 +1031,8 @@ mod tests {
 
     #[test]
     fn test_trajectory_points() {
-        let points = TrajectoryPredictor::get_trajectory_points(
-            (0.0, 0.0),
-            (100.0, -50.0),
-            980.0,
-            0.1,
-            10,
-        );
+        let points =
+            TrajectoryPredictor::get_trajectory_points((0.0, 0.0), (100.0, -50.0), 980.0, 0.1, 10);
         assert_eq!(points.len(), 10);
         assert_eq!(points[0], (0.0, 0.0));
     }
@@ -1052,8 +1049,7 @@ mod tests {
 
     #[test]
     fn test_effective_damage() {
-        let proj = Projectile::new((0.0, 0.0), (0.0, 0.0))
-            .with_damage(100.0);
+        let proj = Projectile::new((0.0, 0.0), (0.0, 0.0)).with_damage(100.0);
         assert_eq!(proj.effective_damage(), 100.0);
     }
 

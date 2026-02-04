@@ -142,7 +142,7 @@ impl HitboxShape {
             Self::Circle { radius } | Self::Sector { radius, .. } => *radius,
             Self::Rectangle { width, height } | Self::Capsule { width, height } => {
                 (width * width + height * height).sqrt() * 0.5
-            }
+            },
         }
     }
 
@@ -156,7 +156,7 @@ impl HitboxShape {
                 // Rectangle + two semicircles
                 let r = width.min(*height) * 0.5;
                 (width - 2.0 * r).max(0.0) * height + std::f32::consts::PI * r * r
-            }
+            },
             Self::Sector { radius, angle, .. } => 0.5 * radius * radius * angle,
         }
     }
@@ -562,12 +562,8 @@ impl CombatCollider {
         let hurtbox_world = hurtbox.world_position(hurtbox_pos);
 
         // Perform shape-specific collision detection
-        let collision = self.check_shapes_overlap(
-            &hitbox.shape,
-            hitbox_world,
-            &hurtbox.shape,
-            hurtbox_world,
-        )?;
+        let collision =
+            self.check_shapes_overlap(&hitbox.shape, hitbox_world, &hurtbox.shape, hurtbox_world)?;
 
         // Calculate knockback direction
         let knockback = if hitbox.knockback_from_center {
@@ -607,22 +603,18 @@ impl CombatCollider {
         match (shape_a, shape_b) {
             (HitboxShape::Circle { radius: r1 }, HitboxShape::Circle { radius: r2 }) => {
                 self.circle_circle_overlap(pos_a, *r1, pos_b, *r2)
-            }
-            (
-                HitboxShape::Circle { radius },
-                HitboxShape::Rectangle { width, height },
-            ) => self.circle_rect_overlap(pos_a, *radius, pos_b, *width, *height),
-            (
-                HitboxShape::Rectangle { width, height },
-                HitboxShape::Circle { radius },
-            ) => {
+            },
+            (HitboxShape::Circle { radius }, HitboxShape::Rectangle { width, height }) => {
+                self.circle_rect_overlap(pos_a, *radius, pos_b, *width, *height)
+            },
+            (HitboxShape::Rectangle { width, height }, HitboxShape::Circle { radius }) => {
                 // Swap and invert normal
                 self.circle_rect_overlap(pos_b, *radius, pos_a, *width, *height)
                     .map(|mut o| {
                         o.normal = (-o.normal.0, -o.normal.1);
                         o
                     })
-            }
+            },
             (
                 HitboxShape::Rectangle {
                     width: w1,
@@ -633,39 +625,58 @@ impl CombatCollider {
                     height: h2,
                 },
             ) => self.rect_rect_overlap(pos_a, *w1, *h1, pos_b, *w2, *h2),
-            (HitboxShape::Sector { radius, angle, direction }, _) => {
-                self.sector_shape_overlap(pos_a, *radius, *angle, *direction, shape_b, pos_b)
-            }
-            (_, HitboxShape::Sector { radius, angle, direction }) => {
-                self.sector_shape_overlap(pos_b, *radius, *angle, *direction, shape_a, pos_a)
-                    .map(|mut o| {
-                        o.normal = (-o.normal.0, -o.normal.1);
-                        o
-                    })
-            }
+            (
+                HitboxShape::Sector {
+                    radius,
+                    angle,
+                    direction,
+                },
+                _,
+            ) => self.sector_shape_overlap(pos_a, *radius, *angle, *direction, shape_b, pos_b),
+            (
+                _,
+                HitboxShape::Sector {
+                    radius,
+                    angle,
+                    direction,
+                },
+            ) => self
+                .sector_shape_overlap(pos_b, *radius, *angle, *direction, shape_a, pos_a)
+                .map(|mut o| {
+                    o.normal = (-o.normal.0, -o.normal.1);
+                    o
+                }),
             // Capsules treated as rectangles for simplicity
-            (HitboxShape::Capsule { width: w1, height: h1 }, shape_b) => {
-                self.check_shapes_overlap(
-                    &HitboxShape::Rectangle {
-                        width: *w1,
-                        height: *h1,
-                    },
-                    pos_a,
-                    shape_b,
-                    pos_b,
-                )
-            }
-            (shape_a, HitboxShape::Capsule { width: w2, height: h2 }) => {
-                self.check_shapes_overlap(
-                    shape_a,
-                    pos_a,
-                    &HitboxShape::Rectangle {
-                        width: *w2,
-                        height: *h2,
-                    },
-                    pos_b,
-                )
-            }
+            (
+                HitboxShape::Capsule {
+                    width: w1,
+                    height: h1,
+                },
+                shape_b,
+            ) => self.check_shapes_overlap(
+                &HitboxShape::Rectangle {
+                    width: *w1,
+                    height: *h1,
+                },
+                pos_a,
+                shape_b,
+                pos_b,
+            ),
+            (
+                shape_a,
+                HitboxShape::Capsule {
+                    width: w2,
+                    height: h2,
+                },
+            ) => self.check_shapes_overlap(
+                shape_a,
+                pos_a,
+                &HitboxShape::Rectangle {
+                    width: *w2,
+                    height: *h2,
+                },
+                pos_b,
+            ),
         }
     }
 
@@ -881,7 +892,10 @@ impl CombatBoxManager {
     }
 
     /// Process all collisions for the current frame.
-    pub fn process_collisions(&mut self, current_frame: u16) -> Vec<(EntityId, EntityId, CollisionResult)> {
+    pub fn process_collisions(
+        &mut self,
+        current_frame: u16,
+    ) -> Vec<(EntityId, EntityId, CollisionResult)> {
         let mut results = Vec::new();
 
         for (attacker_id, hitbox, hitbox_pos) in &self.hitboxes {
@@ -899,7 +913,8 @@ impl CombatBoxManager {
                     current_frame,
                 ) {
                     // Record the hit
-                    self.collider.record_hit(hitbox.id, hurtbox.id, current_frame);
+                    self.collider
+                        .record_hit(hitbox.id, hurtbox.id, current_frame);
                     results.push((*attacker_id, *defender_id, result));
                 }
             }
@@ -1009,25 +1024,13 @@ mod tests {
             .with_layer(CollisionLayer::ENEMY);
 
         // Overlapping
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (30.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (30.0, 0.0), 0);
         assert!(result.is_some());
         let r = result.expect("should have result");
         assert!(r.penetration > 0.0);
 
         // Not overlapping
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (50.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (50.0, 0.0), 0);
         assert!(result.is_none());
     }
 
@@ -1042,23 +1045,11 @@ mod tests {
             .with_layer(CollisionLayer::ENEMY);
 
         // Overlapping
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (30.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (30.0, 0.0), 0);
         assert!(result.is_some());
 
         // Not overlapping
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (50.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (50.0, 0.0), 0);
         assert!(result.is_none());
     }
 
@@ -1073,13 +1064,7 @@ mod tests {
             .with_layer(CollisionLayer::PLAYER); // Player, not enemy
 
         // Should not collide due to layer mismatch
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (10.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (10.0, 0.0), 0);
         assert!(result.is_none());
     }
 
@@ -1094,24 +1079,12 @@ mod tests {
             .with_layer(CollisionLayer::ENEMY);
 
         // First hit should succeed
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (10.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (10.0, 0.0), 0);
         assert!(result.is_some());
         collider.record_hit(hitbox.id, hurtbox.id, 0);
 
         // Second hit should fail (already hit)
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (10.0, 0.0),
-            1,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (10.0, 0.0), 1);
         assert!(result.is_none());
     }
 
@@ -1169,13 +1142,7 @@ mod tests {
             .with_id(1)
             .with_layer(CollisionLayer::ENEMY);
 
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (30.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (30.0, 0.0), 0);
         assert!(result.is_some());
         let r = result.expect("should have result");
         assert!(r.knockback.0 > 0.0); // Knockback pushes right
@@ -1193,23 +1160,11 @@ mod tests {
             .with_layer(CollisionLayer::ENEMY);
 
         // Target in front (within sector)
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (30.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (30.0, 0.0), 0);
         assert!(result.is_some());
 
         // Target behind (outside sector)
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (-30.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (-30.0, 0.0), 0);
         assert!(result.is_none());
     }
 
@@ -1226,13 +1181,7 @@ mod tests {
         hurtbox.apply_invincibility(5);
 
         // Should not hit due to invincibility
-        let result = collider.check_collision(
-            &hitbox,
-            (0.0, 0.0),
-            &hurtbox,
-            (10.0, 0.0),
-            0,
-        );
+        let result = collider.check_collision(&hitbox, (0.0, 0.0), &hurtbox, (10.0, 0.0), 0);
         assert!(result.is_none());
     }
 
