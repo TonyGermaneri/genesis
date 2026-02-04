@@ -1,90 +1,212 @@
-# Kernel Agent — Iteration 8 Prompt
+# Gameplay Agent — Iteration 9 Prompt
 
 ## Context
 
-You are the **Kernel Agent** for Project Genesis, a 2D top-down game engine built with Rust/wgpu.
+You are the **Gameplay Agent** for Project Genesis, a 2D top-down game engine built with Rust.
 
 **Current State:**
-- Multi-chunk streaming render is working (K-28)
-- Quadtree chunk activation for simulation (K-29)
-- Environment simulation shader for grass/rain (K-30)
-- Day/night cycle rendering (K-31)
-- Biome system exists in biome.rs with SimplexNoise, BiomeManager, BiomeConfig
-- WorldGenerator uses biomes for material selection
+- Biome terrain generation complete (G-33 to G-36)
+- Player movement and interaction systems
+- Weather and time systems
+- Plant growth system
 
-**Iteration 8 Focus:** Enhance biome rendering with visual distinction and smooth transitions.
+**Iteration 9 Focus:** NPC entity system, AI behaviors, spawning, and dialogue.
 
 ---
 
 ## Assigned Tasks
 
-### K-32: Biome-aware cell coloring (P0)
+### G-37: NPC entity system (P0)
 
-**Goal:** Modify the render shader to use biome-specific color palettes.
+**Goal:** Define NPC data structures and management.
 
 **Implementation:**
-1. Add biome_id field to RenderParams or compute from noise in shader
-2. Create color palettes for each biome:
-   - Forest: Lush greens (grass #4a7c23, dirt #8b6914)
-   - Desert: Warm yellows/oranges (sand #c2a655, sandstone #b8956e)
-   - Lake/Ocean: Blues (water #3a7ca5, deep #1e4d6b)
-   - Plains: Light greens/yellows (grass #7cb342, dirt #a08060)
-   - Mountain: Grays/whites (stone #7a7a7a, snow #e8e8e8)
-3. Use material_id AND biome_id to determine final color
+1. Create `crates/genesis-gameplay/src/npc.rs`
+2. Define NPC types:
 
-**Files to modify:**
-- crates/genesis-kernel/src/render.rs
-- Inline WGSL shader code
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NpcType {
+    Villager,
+    Merchant,
+    Guard,
+    Animal(AnimalType),
+    Monster(MonsterType),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AnimalType {
+    Chicken, Cow, Pig, Sheep, Wolf, Bear,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MonsterType {
+    Slime, Skeleton, Goblin, Orc,
+}
+
+pub struct Npc {
+    pub id: u32,
+    pub npc_type: NpcType,
+    pub position: Vec2,
+    pub velocity: Vec2,
+    pub facing: Direction,
+    pub state: NpcState,
+    pub health: f32,
+    pub max_health: f32,
+    pub name: Option<String>,
+    pub dialogue_id: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NpcState {
+    Idle,
+    Walking,
+    Running,
+    Attacking,
+    Fleeing,
+    Talking,
+    Dead,
+}
+```
+
+3. NpcManager to track all NPCs:
+
+```rust
+pub struct NpcManager {
+    npcs: HashMap<u32, Npc>,
+    next_id: u32,
+    spatial_index: QuadTree<u32>, // For efficient lookup
+}
+```
 
 ---
 
-### K-33: Biome transition blending (P0)
+### G-38: NPC AI behavior trees (P0)
 
-**Goal:** Smooth visual transitions between adjacent biomes.
+**Goal:** Implement simple behavior trees for NPC AI.
 
 **Implementation:**
-1. Sample biome at neighboring cells in shader
-2. Apply gradient blending using noise-based weights
-3. Blend over 3-5 cells for natural transition
-4. Use dithering or noise for organic boundary appearance
+1. Create `crates/genesis-gameplay/src/ai.rs`
+2. Behavior types:
+
+```rust
+pub enum Behavior {
+    Idle { duration: f32 },
+    Patrol { waypoints: Vec<Vec2>, current: usize },
+    Wander { radius: f32, center: Vec2 },
+    Follow { target_id: u32, distance: f32 },
+    Flee { from: Vec2, speed: f32 },
+    Attack { target_id: u32 },
+}
+
+pub struct BehaviorTree {
+    root: BehaviorNode,
+}
+
+pub enum BehaviorNode {
+    Selector(Vec<BehaviorNode>),  // Try children until one succeeds
+    Sequence(Vec<BehaviorNode>), // Run children in order
+    Action(Behavior),
+    Condition(Box<dyn Fn(&Npc, &World) -> bool>),
+}
+```
+
+3. Default behaviors per NPC type:
+   - Villager: Wander during day, go home at night
+   - Merchant: Stay at shop location
+   - Guard: Patrol, chase hostiles
+   - Animal: Wander, flee from player if wild
+   - Monster: Wander, chase player if in range
 
 ---
 
-### K-34: Lake/water rendering (P0)
+### G-39: NPC spawning system (P0)
 
-**Goal:** Add animated water shader for lake biomes.
+**Goal:** Spawn NPCs based on biome and rules.
 
 **Implementation:**
-1. Detect water material cells in render shader (material_id == 4)
-2. Add wave animation using time uniform and sine functions
-3. Add subtle color variation based on depth
-4. Water should have slight transparency (alpha < 1.0)
+1. Spawn rules per biome:
+
+```rust
+pub struct SpawnRule {
+    pub npc_type: NpcType,
+    pub biomes: Vec<BiomeType>,
+    pub min_density: f32,  // Per chunk
+    pub max_density: f32,
+    pub group_size: (u32, u32), // Min, max
+    pub time_of_day: Option<(f32, f32)>, // Active hours
+}
+```
+
+2. Default spawn rules:
+   - Forest: Deer, Wolf, Villager
+   - Desert: Scorpion, Merchant (rare)
+   - Plains: Cow, Sheep, Chicken, Villager
+   - Mountain: Goat, Bear
+   - Swamp: Slime, Frog
+
+3. Spawn on chunk load, despawn on chunk unload
+4. Respect max NPC count per chunk (e.g., 20)
 
 ---
 
-### K-35: Mountain/elevation rendering (P1)
+### G-40: Dialogue system (P1)
 
-**Goal:** Add elevation-based rendering for mountain biomes.
+**Goal:** Support NPC dialogue with branching conversations.
 
 **Implementation:**
-1. Use noise to generate elevation values
-2. Higher elevations get snow-capped appearance
-3. Add shadow/highlight based on light direction
+1. Create `crates/genesis-gameplay/src/dialogue.rs`
+
+```rust
+pub struct DialogueNode {
+    pub id: u32,
+    pub speaker: String,
+    pub text: String,
+    pub choices: Vec<DialogueChoice>,
+}
+
+pub struct DialogueChoice {
+    pub text: String,
+    pub next_node: Option<u32>,
+    pub condition: Option<DialogueCondition>,
+    pub effect: Option<DialogueEffect>,
+}
+
+pub enum DialogueCondition {
+    HasItem(ItemId, u32),
+    QuestComplete(QuestId),
+    ReputationAbove(i32),
+}
+
+pub enum DialogueEffect {
+    GiveItem(ItemId, u32),
+    TakeItem(ItemId, u32),
+    StartQuest(QuestId),
+    AddReputation(i32),
+}
+
+pub struct DialogueManager {
+    dialogues: HashMap<u32, DialogueNode>,
+    active_dialogue: Option<ActiveDialogue>,
+}
+```
+
+2. Load dialogues from data files (JSON or RON)
+3. Support variables in text: "Hello, {player_name}!"
 
 ---
 
 ## Constraints
 
-1. Performance: Biome calculations must not exceed 1ms per chunk
-2. GPU-friendly: Use uniforms, not per-cell CPU computation
-3. No gameplay logic: Only rendering
-4. Existing APIs: Use existing SimplexNoise and BiomeManager
-5. Backward compatible: Existing cell rendering must still work
+1. **No rendering:** Only game logic, data structures
+2. **Deterministic:** Same seed = same NPC spawns
+3. **Performance:** AI updates < 1ms for 100 NPCs
+4. **Modular:** Easy to add new NPC types
 
 ---
 
 ## Commit Format
 
 ```
-[kernel] feat: K-32..K-35 Biome rendering with transitions and water animation
+[gameplay] feat: G-37..G-40 NPC entity system, AI behaviors, spawning, dialogue
 ```
