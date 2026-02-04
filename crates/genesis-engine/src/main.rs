@@ -58,6 +58,16 @@ pub mod save_manager;
 /// Save file versioning
 pub mod save_version;
 
+// === Menu & Settings ===
+/// Exit handling and cleanup
+pub mod exit_handler;
+/// Input rebinding system
+pub mod input_rebind;
+/// Menu state machine
+pub mod menu_state;
+/// Settings persistence
+pub mod settings_persistence;
+
 use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
