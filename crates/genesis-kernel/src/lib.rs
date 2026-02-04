@@ -71,6 +71,7 @@ pub mod quadtree;
 pub mod readback;
 pub mod render;
 pub mod streaming;
+pub mod streaming_terrain;
 pub mod terrain_render;
 pub mod topdown_physics;
 pub mod validation;
@@ -141,6 +142,10 @@ pub mod prelude {
     pub use crate::readback::*;
     pub use crate::render::*;
     pub use crate::streaming::*;
+    pub use crate::streaming_terrain::{
+        StreamingChunk, StreamingConfig, StreamingStats, StreamingTerrain,
+        DEFAULT_LOAD_RADIUS, DEFAULT_SIMULATION_RADIUS, DEFAULT_UNLOAD_RADIUS,
+    };
     pub use crate::terrain_render::*;
     pub use crate::topdown_physics::*;
     pub use crate::validation::*;

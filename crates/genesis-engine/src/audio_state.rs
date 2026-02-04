@@ -547,6 +547,8 @@ pub struct AudioState {
     pub active_sfx_count: u32,
     /// Missing audio indicator (for debug UI).
     pub missing_audio_count: u32,
+    /// Tracks that failed to load (prevents repeated attempts).
+    pub failed_tracks: std::collections::HashSet<String>,
 }
 
 impl Default for AudioState {
@@ -568,6 +570,7 @@ impl AudioState {
             device_available: false,
             active_sfx_count: 0,
             missing_audio_count: 0,
+            failed_tracks: std::collections::HashSet::new(),
         }
     }
 

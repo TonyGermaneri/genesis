@@ -68,6 +68,10 @@ pub mod menu_state;
 /// Settings persistence
 pub mod settings_persistence;
 
+// === Testing ===
+#[cfg(test)]
+mod e2e_tests;
+
 use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

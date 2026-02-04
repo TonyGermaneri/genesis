@@ -495,6 +495,11 @@ impl AudioIntegration {
             return;
         }
 
+        // Skip if this track already failed to load
+        if self.state.failed_tracks.contains(track_name) {
+            return;
+        }
+
         let stream_handle = match &self.stream_handle {
             Some(h) => h,
             None => return,
@@ -511,6 +516,7 @@ impl AudioIntegration {
             Err(e) => {
                 warn!("Failed to load music {}: {}", track_name, e);
                 self.state.missing_audio_count += 1;
+                self.state.failed_tracks.insert(track_name.to_string());
                 return;
             },
         };
@@ -565,6 +571,11 @@ impl AudioIntegration {
             return;
         }
 
+        // Skip if this track already failed to load
+        if self.state.failed_tracks.contains(track_name) {
+            return;
+        }
+
         let stream_handle = match &self.stream_handle {
             Some(h) => h,
             None => return,
@@ -575,6 +586,7 @@ impl AudioIntegration {
             Ok(asset) => asset,
             Err(e) => {
                 warn!("Failed to load music for crossfade {}: {}", track_name, e);
+                self.state.failed_tracks.insert(track_name.to_string());
                 return;
             },
         };

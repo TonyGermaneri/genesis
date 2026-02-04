@@ -16,6 +16,11 @@ use winit::{
 use genesis_gameplay::input::KeyCode;
 use genesis_gameplay::GameState as GameplayState;
 use genesis_kernel::Camera;
+use genesis_tools::ui::{
+    MainMenu, MainMenuAction,
+    OptionsMenu, OptionsMenuAction,
+    PauseMenu, PauseMenuAction,
+};
 
 use crate::audio_assets::AudioCategory;
 use crate::audio_integration::{AudioIntegration, SoundEvent};
@@ -42,11 +47,11 @@ use crate::world::TerrainGenerationService;
 #[allow(dead_code)]
 pub enum AppMode {
     /// Normal gameplay
-    #[default]
     Playing,
     /// Game is paused
     Paused,
     /// In main menu
+    #[default]
     Menu,
 }
 
@@ -140,8 +145,20 @@ struct GenesisApp {
     show_debug: bool,
     /// Whether inventory is open
     show_inventory: bool,
+    /// Whether map is open
+    show_map: bool,
     /// Currently selected hotbar slot
     hotbar_slot: u8,
+
+    // === Menu State ===
+    /// Main menu UI
+    main_menu: MainMenu,
+    /// Pause menu UI
+    pause_menu: PauseMenu,
+    /// Options menu UI
+    options_menu: OptionsMenu,
+    /// Whether showing controls help overlay
+    show_controls_help: bool,
 
     // === Debug Info ===
     /// Current FPS
@@ -261,7 +278,13 @@ impl GenesisApp {
             camera,
             app_mode: AppMode::default(),
             show_inventory: false,
+            show_map: false,
             hotbar_slot: 0,
+
+            main_menu: MainMenu::with_defaults(),
+            pause_menu: PauseMenu::with_defaults(),
+            options_menu: OptionsMenu::with_defaults(),
+            show_controls_help: false,
 
             current_fps: 0.0,
             current_frame_time: 0.0,
@@ -290,8 +313,8 @@ impl GenesisApp {
             );
         }
 
-        // Handle inventory toggle (Tab)
-        if self.input.is_key_just_pressed(KeyCode::Tab) {
+        // Handle inventory toggle (Tab or I)
+        if self.input.is_key_just_pressed(KeyCode::Tab) || self.input.is_key_just_pressed(KeyCode::I) {
             self.show_inventory = !self.show_inventory;
             info!(
                 "Inventory: {}",
@@ -316,18 +339,51 @@ impl GenesisApp {
             );
         }
 
-        // Handle pause toggle (Escape)
+        // Handle map toggle (M key)
+        if self.input.is_key_just_pressed(KeyCode::M) {
+            self.show_map = !self.show_map;
+            info!(
+                "Map: {}",
+                if self.show_map {
+                    "OPEN"
+                } else {
+                    "CLOSED"
+                }
+            );
+        }
+
+        // Handle controls help toggle (F1 key)
+        if self.input.is_key_just_pressed(KeyCode::F1) {
+            self.show_controls_help = !self.show_controls_help;
+            info!(
+                "Controls help: {}",
+                if self.show_controls_help {
+                    "SHOWN"
+                } else {
+                    "HIDDEN"
+                }
+            );
+        }
+
+        // Handle pause/menu toggle (Escape)
         if self.input.pause_pressed() {
-            self.app_mode = match self.app_mode {
+            match self.app_mode {
                 AppMode::Playing => {
                     info!("Game paused");
-                    AppMode::Paused
+                    self.app_mode = AppMode::Paused;
+                    self.pause_menu.show();
                 },
                 AppMode::Paused => {
-                    info!("Game resumed");
-                    AppMode::Playing
+                    // Toggle pause menu or close to resume
+                    self.pause_menu.toggle();
+                    if !self.pause_menu.is_visible() {
+                        info!("Game resumed");
+                        self.app_mode = AppMode::Playing;
+                    }
                 },
-                AppMode::Menu => AppMode::Menu,
+                AppMode::Menu => {
+                    // ESC in main menu - do nothing (or could quit confirmation)
+                },
             };
         }
 
@@ -442,6 +498,23 @@ impl GenesisApp {
                 // Update chunk metrics
                 self.chunk_metrics
                     .set_chunk_count(renderer.visible_chunk_count() as u32);
+            }
+
+            // Update streaming terrain with player position (player-centered streaming)
+            if renderer.is_streaming_terrain_enabled() {
+                let start = Instant::now();
+                renderer.update_player_position_streaming(player_pos.x, player_pos.y);
+                self.chunk_metrics.record_load_time(start.elapsed());
+
+                let start = Instant::now();
+                renderer.step_streaming_terrain();
+                self.chunk_metrics.record_sim_time(start.elapsed());
+
+                // Update chunk metrics from streaming terrain
+                if let Some(stats) = renderer.streaming_stats() {
+                    self.chunk_metrics
+                        .set_chunk_count(stats.simulating_count as u32);
+                }
             }
         }
 
@@ -600,18 +673,19 @@ impl GenesisApp {
         let is_night = !(6..20).contains(&hour);
         let is_dawn_dusk = (5..7).contains(&hour) || (18..20).contains(&hour);
 
-        // Day/night ambient layers
+        // Day/night ambient layers (use actual filenames without extension)
         if is_night {
+            // Use crickets for night, owls would also work
             self.audio
-                .fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
+                .fade_in_ambient("night", "crickets", 0.5, 2.0);
             self.audio.fade_out_ambient("day", 2.0);
         } else if is_dawn_dusk {
             // Dawn/dusk transition - both layers at reduced volume
-            self.audio.fade_in_ambient("day", "ambient/birds", 0.3, 2.0);
+            self.audio.fade_in_ambient("day", "birds", 0.3, 2.0);
             self.audio
-                .fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
+                .fade_in_ambient("night", "crickets", 0.2, 2.0);
         } else {
-            self.audio.fade_in_ambient("day", "ambient/birds", 0.5, 2.0);
+            self.audio.fade_in_ambient("day", "birds", 0.5, 2.0);
             self.audio.fade_out_ambient("night", 2.0);
         }
 
@@ -619,14 +693,14 @@ impl GenesisApp {
         if self.environment.weather.is_raining() {
             let rain_volume = self.environment.weather.rain_intensity();
             self.audio
-                .fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
+                .fade_in_ambient("rain", "rain", rain_volume, 1.0);
         } else {
             self.audio.fade_out_ambient("rain", 2.0);
         }
 
         if self.environment.weather.is_stormy() {
             self.audio
-                .fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
+                .fade_in_ambient("thunder", "thunder", 0.7, 0.5);
         } else {
             self.audio.fade_out_ambient("thunder", 1.0);
         }
@@ -635,7 +709,7 @@ impl GenesisApp {
         let wind_volume = self.environment.weather.wind_strength() * 0.4;
         if wind_volume > 0.1 {
             self.audio
-                .fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
+                .fade_in_ambient("wind", "wind_light", wind_volume, 1.5);
         } else {
             self.audio.fade_out_ambient("wind", 2.0);
         }
@@ -994,7 +1068,10 @@ impl GenesisApp {
         // Extract all data needed for UI before borrowing renderer
         let show_debug = self.show_debug;
         let show_inventory = self.show_inventory;
+        let show_crafting = self.show_crafting;
+        let show_map = self.show_map;
         let hotbar_slot = self.hotbar_slot;
+        let app_mode = self.app_mode;
         let biome_metrics = self.terrain_service.metrics();
         let debug_data = DebugOverlayData {
             perf: self.perf_metrics.summary(),
@@ -1026,27 +1103,179 @@ impl GenesisApp {
             mode: npc_interaction.mode,
         };
 
+        // Get mutable refs to menus for the closure
+        let main_menu = &mut self.main_menu;
+        let pause_menu = &mut self.pause_menu;
+        let options_menu = &mut self.options_menu;
+        let show_controls_help = self.show_controls_help;
+
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             // Use render_with_ui to draw world + egui overlay
             let result = renderer.render_with_ui(window, &self.camera, |ctx| {
-                // Only show UI elements when needed
-                if show_debug {
-                    render_debug_overlay(ctx, &debug_data);
+                // Render options menu on top if visible (works from any mode)
+                if options_menu.is_visible() {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none().fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 200)))
+                        .show(ctx, |ui| {
+                            options_menu.render(ui);
+                        });
+                    return; // Don't render underlying menu when options is open
                 }
 
-                if show_inventory {
-                    render_inventory(ctx, hotbar_slot);
+                // Render controls help overlay if visible
+                if show_controls_help {
+                    render_controls_help(ctx);
                 }
 
-                // Always show HUD elements (hotbar, vitals, minimap)
-                render_hud(ctx, hotbar_slot, &environment_time, &environment_weather);
+                match app_mode {
+                    AppMode::Menu => {
+                        // Render main menu (full screen)
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::none().fill(egui::Color32::from_rgb(20, 20, 30)))
+                            .show(ctx, |ui| {
+                                main_menu.render(ui);
+                            });
+                    }
+                    AppMode::Paused => {
+                        // Render game world behind with overlay
+                        // Show HUD elements
+                        render_hud(ctx, hotbar_slot, &environment_time, &environment_weather);
 
-                // Show interaction prompt if near an NPC
-                render_interaction_prompt(ctx, &interaction_data);
+                        // Render pause menu overlay
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::none().fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 180)))
+                            .show(ctx, |ui| {
+                                pause_menu.render(ui);
+                            });
+
+                        if show_debug {
+                            render_debug_overlay(ctx, &debug_data);
+                        }
+                    }
+                    AppMode::Playing => {
+                        // Normal gameplay UI
+                        if show_debug {
+                            render_debug_overlay(ctx, &debug_data);
+                        }
+
+                        if show_inventory {
+                            render_inventory(ctx, hotbar_slot);
+                        }
+
+                        if show_crafting {
+                            render_crafting(ctx);
+                        }
+
+                        if show_map {
+                            render_map(ctx);
+                        }
+
+                        // Always show HUD elements (hotbar, vitals, minimap)
+                        render_hud(ctx, hotbar_slot, &environment_time, &environment_weather);
+
+                        // Show interaction prompt if near an NPC
+                        render_interaction_prompt(ctx, &interaction_data);
+                    }
+                }
             });
 
             if let Err(e) = result {
                 warn!("Render error: {e}");
+            }
+        }
+
+        // Process menu actions after rendering
+        self.process_menu_actions();
+    }
+
+    /// Process any pending menu actions
+    fn process_menu_actions(&mut self) {
+        // Process main menu actions
+        let actions = self.main_menu.drain_actions();
+        if !actions.is_empty() {
+            debug!("Processing {} main menu actions", actions.len());
+        }
+        for action in actions {
+            info!("Main menu action: {:?}", action);
+            match action {
+                MainMenuAction::NewGame => {
+                    info!("Starting new game...");
+                    self.app_mode = AppMode::Playing;
+                    self.main_menu.hide();
+                }
+                MainMenuAction::Continue => {
+                    info!("Continuing game...");
+                    self.quickload();
+                    self.app_mode = AppMode::Playing;
+                    self.main_menu.hide();
+                }
+                MainMenuAction::OpenLoadMenu => {
+                    info!("Opening load menu...");
+                    // TODO: Show load game menu
+                }
+                MainMenuAction::OpenOptions => {
+                    info!("Opening options menu...");
+                    self.options_menu.show();
+                }
+                MainMenuAction::Exit => {
+                    info!("Exit requested from menu");
+                    // Exit is handled by the window close event
+                    std::process::exit(0);
+                }
+                _ => {}
+            }
+        }
+
+        // Process pause menu actions
+        for action in self.pause_menu.drain_actions() {
+            match action {
+                PauseMenuAction::Resume => {
+                    info!("Resuming game...");
+                    self.app_mode = AppMode::Playing;
+                    self.pause_menu.hide();
+                }
+                PauseMenuAction::OpenSaveMenu => {
+                    info!("Opening save menu...");
+                    // TODO: Show save menu
+                }
+                PauseMenuAction::OpenLoadMenu => {
+                    info!("Opening load menu...");
+                    // TODO: Show load menu
+                }
+                PauseMenuAction::OpenOptions => {
+                    info!("Opening options menu...");
+                    self.options_menu.show();
+                }
+                PauseMenuAction::QuitToMenu => {
+                    info!("Quitting to main menu...");
+                    self.app_mode = AppMode::Menu;
+                    self.pause_menu.hide();
+                    self.main_menu.show();
+                }
+                PauseMenuAction::QuitToDesktop => {
+                    info!("Quitting to desktop...");
+                    std::process::exit(0);
+                }
+                _ => {}
+            }
+        }
+
+        // Process options menu actions
+        for action in self.options_menu.drain_actions() {
+            match action {
+                OptionsMenuAction::Apply => {
+                    info!("Applying options...");
+                    // TODO: Apply settings to engine config
+                    self.options_menu.hide();
+                }
+                OptionsMenuAction::Cancel => {
+                    info!("Cancelling options...");
+                    self.options_menu.hide();
+                }
+                OptionsMenuAction::ResetToDefaults => {
+                    info!("Resetting options to defaults...");
+                }
+                _ => {}
             }
         }
     }
@@ -1184,7 +1413,7 @@ fn render_inventory(ctx: &egui::Context, hotbar_slot: u8) {
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
-            ui.label("Inventory (Tab to close)");
+            ui.label("Inventory (Tab/I to close)");
             ui.separator();
 
             // Display inventory slots in a grid
@@ -1214,6 +1443,108 @@ fn render_inventory(ctx: &egui::Context, hotbar_slot: u8) {
                         ui.end_row();
                     }
                 });
+        });
+}
+
+/// Renders the crafting panel.
+fn render_crafting(ctx: &egui::Context) {
+    egui::Window::new("Crafting")
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .resizable(false)
+        .collapsible(false)
+        .min_width(400.0)
+        .show(ctx, |ui| {
+            ui.label("Crafting (C to close)");
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                // Left side: Recipe categories
+                ui.vertical(|ui| {
+                    ui.set_min_width(120.0);
+                    ui.heading("Categories");
+                    ui.separator();
+                    for category in &["All", "Tools", "Weapons", "Armor", "Materials", "Food"] {
+                        if ui.selectable_label(false, *category).clicked() {
+                            // Category selection would be handled here
+                        }
+                    }
+                });
+
+                ui.separator();
+
+                // Right side: Recipe list
+                ui.vertical(|ui| {
+                    ui.set_min_width(250.0);
+                    ui.heading("Recipes");
+                    ui.separator();
+                    
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            ui.label("No recipes available yet.");
+                            ui.label("");
+                            ui.label("Gather materials and discover");
+                            ui.label("new crafting recipes!");
+                        });
+                });
+            });
+        });
+}
+
+/// Renders the map panel.
+fn render_map(ctx: &egui::Context) {
+    egui::Window::new("World Map")
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .resizable(true)
+        .collapsible(false)
+        .default_size([500.0, 400.0])
+        .show(ctx, |ui| {
+            ui.label("Map (M to close)");
+            ui.separator();
+
+            // Map display area
+            let available = ui.available_size();
+            let (rect, _response) = ui.allocate_exact_size(
+                egui::vec2(available.x.min(480.0), available.y.min(360.0)),
+                egui::Sense::drag(),
+            );
+
+            // Draw map background
+            ui.painter().rect_filled(
+                rect,
+                egui::Rounding::same(4.0),
+                egui::Color32::from_rgb(30, 40, 30),
+            );
+
+            // Draw grid lines
+            let grid_spacing = 40.0;
+            for i in 0..=(rect.width() / grid_spacing) as i32 {
+                let x = rect.left() + i as f32 * grid_spacing;
+                ui.painter().line_segment(
+                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 100, 100, 50)),
+                );
+            }
+            for i in 0..=(rect.height() / grid_spacing) as i32 {
+                let y = rect.top() + i as f32 * grid_spacing;
+                ui.painter().line_segment(
+                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 100, 100, 50)),
+                );
+            }
+
+            // Draw player marker at center
+            let center = rect.center();
+            ui.painter().circle_filled(center, 6.0, egui::Color32::from_rgb(100, 200, 100));
+            ui.painter().circle_stroke(center, 6.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
+
+            // Legend
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.label("🟢 You");
+                ui.separator();
+                ui.label("Drag to pan • Scroll to zoom");
+            });
         });
 }
 
@@ -1348,16 +1679,32 @@ impl ApplicationHandler for GenesisApp {
             Ok(window) => {
                 info!("Window created successfully");
 
+                // Get actual window size and scale factor
+                let actual_size = window.inner_size();
+                let scale_factor = window.scale_factor() as f32;
+                info!("Window actual size: {}x{}, scale factor: {}", actual_size.width, actual_size.height, scale_factor);
+
                 // Initialize renderer
                 match pollster::block_on(Renderer::new(&window)) {
-                    Ok(renderer) => {
+                    Ok(mut renderer) => {
                         info!("Renderer initialized");
+                        // Trigger initial resize to ensure surface is properly configured
+                        renderer.resize(actual_size);
+                        // Ensure egui scale factor matches window
+                        renderer.set_scale_factor(scale_factor);
+                        // Enable streaming terrain with world seed
+                        renderer.enable_streaming_terrain(self.terrain_service.seed());
                         self.renderer = Some(renderer);
                     },
                     Err(e) => {
                         warn!("Failed to initialize renderer: {e}");
                     },
                 }
+
+                // Update camera viewport to match actual window size
+                self.camera.set_viewport(actual_size.width, actual_size.height);
+                self.config.window_width = actual_size.width;
+                self.config.window_height = actual_size.height;
 
                 self.window = Some(window);
 
@@ -1386,7 +1733,14 @@ impl ApplicationHandler for GenesisApp {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // Let input handler process the event first
+        // Let egui process the event first for UI interaction
+        let egui_consumed = if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+            renderer.handle_event(window, &event)
+        } else {
+            false
+        };
+
+        // Let input handler process the event (for game controls)
         let handled = self.input.handle_event(&event);
 
         match event {
@@ -1399,13 +1753,20 @@ impl ApplicationHandler for GenesisApp {
                 event_loop.exit();
             },
             WindowEvent::Resized(new_size) => {
-                if let Some(renderer) = &mut self.renderer {
+                if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     renderer.resize(new_size);
+                    // Update egui scale factor to match window
+                    renderer.set_scale_factor(window.scale_factor() as f32);
                 }
                 // Update config and camera viewport
                 self.config.window_width = new_size.width;
                 self.config.window_height = new_size.height;
                 self.camera.set_viewport(new_size.width, new_size.height);
+            },
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.set_scale_factor(scale_factor as f32);
+                }
             },
             WindowEvent::RedrawRequested => {
                 self.update_and_render();
@@ -1416,8 +1777,8 @@ impl ApplicationHandler for GenesisApp {
                 }
             },
             _ => {
-                if !handled {
-                    // Event wasn't handled by input or above
+                if !handled && !egui_consumed {
+                    // Event wasn't handled by input, egui, or above
                 }
             },
         }
@@ -1458,4 +1819,231 @@ fn format_cells(n: u64) -> String {
         result.push(c);
     }
     result.chars().rev().collect()
+}
+
+/// Renders the controls help overlay.
+fn render_controls_help(ctx: &egui::Context) {
+    egui::Window::new("Controls")
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .resizable(false)
+        .collapsible(false)
+        .frame(
+            egui::Frame::window(&ctx.style())
+                .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 30, 240)),
+        )
+        .show(ctx, |ui| {
+            ui.heading("Keyboard Controls");
+            ui.add_space(10.0);
+
+            egui::Grid::new("controls_grid")
+                .num_columns(2)
+                .spacing([40.0, 8.0])
+                .show(ui, |ui| {
+                    // Movement
+                    ui.strong("Movement");
+                    ui.label("");
+                    ui.end_row();
+
+                    ui.label("W / ↑");
+                    ui.label("Move Up");
+                    ui.end_row();
+
+                    ui.label("S / ↓");
+                    ui.label("Move Down");
+                    ui.end_row();
+
+                    ui.label("A / ←");
+                    ui.label("Move Left");
+                    ui.end_row();
+
+                    ui.label("D / →");
+                    ui.label("Move Right");
+                    ui.end_row();
+
+                    ui.label("Shift");
+                    ui.label("Sprint");
+                    ui.end_row();
+
+                    ui.label("");
+                    ui.label("");
+                    ui.end_row();
+
+                    // Interaction
+                    ui.strong("Interaction");
+                    ui.label("");
+                    ui.end_row();
+
+                    ui.label("E");
+                    ui.label("Interact / Use");
+                    ui.end_row();
+
+                    ui.label("Left Click");
+                    ui.label("Primary Action / Attack");
+                    ui.end_row();
+
+                    ui.label("Right Click");
+                    ui.label("Secondary Action");
+                    ui.end_row();
+
+                    ui.label("");
+                    ui.label("");
+                    ui.end_row();
+
+                    // UI Panels
+                    ui.strong("UI Panels");
+                    ui.label("");
+                    ui.end_row();
+
+                    ui.label("Tab / I");
+                    ui.label("Toggle Inventory");
+                    ui.end_row();
+
+                    ui.label("C");
+                    ui.label("Toggle Crafting");
+                    ui.end_row();
+
+                    ui.label("M");
+                    ui.label("Toggle Map");
+                    ui.end_row();
+
+                    ui.label("1-0");
+                    ui.label("Select Hotbar Slot");
+                    ui.end_row();
+
+                    ui.label("");
+                    ui.label("");
+                    ui.end_row();
+
+                    // System
+                    ui.strong("System");
+                    ui.label("");
+                    ui.end_row();
+
+                    ui.label("Escape");
+                    ui.label("Pause Menu");
+                    ui.end_row();
+
+                    ui.label("F1");
+                    ui.label("Toggle This Help");
+                    ui.end_row();
+
+                    ui.label("F3");
+                    ui.label("Toggle Debug Overlay");
+                    ui.end_row();
+
+                    ui.label("F5");
+                    ui.label("Quick Save");
+                    ui.end_row();
+
+                    ui.label("F9");
+                    ui.label("Quick Load");
+                    ui.end_row();
+                });
+
+            ui.add_space(15.0);
+            ui.separator();
+            ui.add_space(5.0);
+            ui.centered_and_justified(|ui| {
+                ui.label("Press F1 to close");
+            });
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_mode_default_is_menu() {
+        let mode = AppMode::default();
+        assert_eq!(mode, AppMode::Menu, "App should start in Menu mode");
+    }
+
+    #[test]
+    fn test_app_mode_variants() {
+        assert_ne!(AppMode::Menu, AppMode::Playing);
+        assert_ne!(AppMode::Menu, AppMode::Paused);
+        assert_ne!(AppMode::Playing, AppMode::Paused);
+    }
+
+    #[test]
+    fn test_format_cells_with_commas() {
+        assert_eq!(format_cells(0), "0");
+        assert_eq!(format_cells(123), "123");
+        assert_eq!(format_cells(1234), "1,234");
+        assert_eq!(format_cells(1_000_000), "1,000,000");
+        assert_eq!(format_cells(1_234_567_890), "1,234,567,890");
+    }
+
+    #[test]
+    fn test_main_menu_new_game_action() {
+        use genesis_tools::ui::{MainMenu, MainMenuAction, MainMenuButton};
+
+        let mut menu = MainMenu::with_defaults();
+        assert!(menu.is_visible(), "Menu should start visible");
+
+        // Simulate clicking new game
+        menu.click_button(MainMenuButton::NewGame);
+
+        let actions = menu.drain_actions();
+        assert!(!actions.is_empty(), "Should have pending action");
+        assert!(actions.contains(&MainMenuAction::NewGame), "Should have NewGame action");
+    }
+
+    #[test]
+    fn test_main_menu_exit_action() {
+        use genesis_tools::ui::{MainMenu, MainMenuAction, MainMenuButton};
+
+        let mut menu = MainMenu::with_defaults();
+
+        // Simulate clicking exit
+        menu.click_button(MainMenuButton::Exit);
+
+        let actions = menu.drain_actions();
+        assert!(!actions.is_empty(), "Should have pending action");
+        assert!(actions.contains(&MainMenuAction::Exit), "Should have Exit action");
+    }
+
+    #[test]
+    fn test_main_menu_visibility() {
+        use genesis_tools::ui::MainMenu;
+
+        let mut menu = MainMenu::with_defaults();
+        assert!(menu.is_visible(), "Menu should start visible");
+
+        menu.hide();
+        assert!(!menu.is_visible(), "Menu should be hidden");
+
+        menu.show();
+        assert!(menu.is_visible(), "Menu should be visible again");
+    }
+
+    #[test]
+    fn test_pause_menu_visibility() {
+        use genesis_tools::ui::PauseMenu;
+
+        let mut menu = PauseMenu::with_defaults();
+        assert!(!menu.is_visible(), "Pause menu should start hidden");
+
+        menu.show();
+        assert!(menu.is_visible(), "Pause menu should be visible after show()");
+
+        menu.hide();
+        assert!(!menu.is_visible(), "Pause menu should be hidden after hide()");
+    }
+
+    #[test]
+    fn test_pause_menu_toggle() {
+        use genesis_tools::ui::PauseMenu;
+
+        let mut menu = PauseMenu::with_defaults();
+        assert!(!menu.is_visible(), "Should start hidden");
+
+        menu.toggle();
+        assert!(menu.is_visible(), "Should be visible after first toggle");
+
+        menu.toggle();
+        // After toggle while visible, it may close or stay (depends on implementation)
+        // Just ensure toggle works without panic
+    }
 }

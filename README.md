@@ -356,7 +356,7 @@ weight = "Weight: {current}/{max}"
    version = "1.0.0"
    author = "Your Name"
    description = "Adds cool stuff"
-   
+
    [dependencies]
    genesis = ">=0.1.0"
    ```
@@ -450,7 +450,66 @@ See [WORKTREE_SETUP.md](docs/WORKTREE_SETUP.md) for details.
 
 ---
 
-## 🐛 Troubleshooting
+## � Coordinate System & UI Integration
+
+### High-DPI / Retina Display Support
+
+The game uses three coordinate systems that must be kept in sync for UI interaction to work correctly:
+
+1. **Physical Pixels** — Actual screen pixels (what wgpu renders to)
+2. **Logical Pixels** — Window coordinates (used by winit for events)
+3. **Egui Points** — UI coordinates (used by egui for hit testing)
+
+On high-DPI displays (like macOS Retina), the scale factor relates these:
+- `physical_pixels = logical_pixels × scale_factor`
+- `egui_points = physical_pixels ÷ pixels_per_point`
+
+### Critical Implementation Details
+
+For mouse clicks to be detected correctly by egui UI elements:
+
+1. **On Window Creation**: Set egui's `pixels_per_point` to match the window's scale factor
+   ```rust
+   renderer.set_scale_factor(window.scale_factor() as f32);
+   ```
+
+2. **On Window Resize**: Update egui's scale factor along with surface configuration
+   ```rust
+   renderer.resize(new_size);
+   renderer.set_scale_factor(window.scale_factor() as f32);
+   ```
+
+3. **On Scale Factor Change**: Handle `WindowEvent::ScaleFactorChanged` explicitly
+   ```rust
+   WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+       renderer.set_scale_factor(scale_factor as f32);
+   }
+   ```
+
+4. **During Rendering**: Use consistent scale factor in `ScreenDescriptor`
+   ```rust
+   let screen_descriptor = egui_wgpu::ScreenDescriptor {
+       size_in_pixels: [self.size.width, self.size.height],
+       pixels_per_point: window.scale_factor() as f32,
+   };
+   ```
+
+### Why This Matters
+
+Without proper scale factor synchronization:
+- Mouse hover detection works (uses relative coordinates)
+- Mouse click detection fails (egui's hit test uses absolute coordinates)
+- UI appears correct but is not interactive
+- Issue manifests differently at different window sizes
+
+This is implemented in:
+- `crates/genesis-engine/src/app.rs` — Window event handling
+- `crates/genesis-engine/src/renderer.rs` — `set_scale_factor()` method
+- `crates/genesis-tools/src/egui_integration.rs` — `set_pixels_per_point()` method
+
+---
+
+## �🐛 Troubleshooting
 
 ### Common Issues
 

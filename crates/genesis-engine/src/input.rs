@@ -61,6 +61,18 @@ fn convert_key(key: WinitKeyCode) -> Option<KeyCode> {
         WinitKeyCode::ArrowDown => KeyCode::Down,
         WinitKeyCode::ArrowLeft => KeyCode::Left,
         WinitKeyCode::ArrowRight => KeyCode::Right,
+        WinitKeyCode::F1 => KeyCode::F1,
+        WinitKeyCode::F2 => KeyCode::F2,
+        WinitKeyCode::F3 => KeyCode::F3,
+        WinitKeyCode::F4 => KeyCode::F4,
+        WinitKeyCode::F5 => KeyCode::F5,
+        WinitKeyCode::F6 => KeyCode::F6,
+        WinitKeyCode::F7 => KeyCode::F7,
+        WinitKeyCode::F8 => KeyCode::F8,
+        WinitKeyCode::F9 => KeyCode::F9,
+        WinitKeyCode::F10 => KeyCode::F10,
+        WinitKeyCode::F11 => KeyCode::F11,
+        WinitKeyCode::F12 => KeyCode::F12,
         _ => return None,
     })
 }

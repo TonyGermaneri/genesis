@@ -264,6 +264,30 @@ pub enum KeyCode {
     Left,
     /// Right arrow
     Right,
+    /// Function keys
+    F1,
+    /// F2 key
+    F2,
+    /// F3 key
+    F3,
+    /// F4 key
+    F4,
+    /// F5 key
+    F5,
+    /// F6 key
+    F6,
+    /// F7 key
+    F7,
+    /// F8 key
+    F8,
+    /// F9 key
+    F9,
+    /// F10 key
+    F10,
+    /// F11 key
+    F11,
+    /// F12 key
+    F12,
 }
 
 /// Mouse button codes.

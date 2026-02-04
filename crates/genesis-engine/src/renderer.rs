@@ -9,7 +9,10 @@
 
 use anyhow::{Context, Result};
 use genesis_gameplay::GameState;
-use genesis_kernel::{Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager};
+use genesis_kernel::{
+    Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager,
+    ChunkRenderManager, StreamingConfig, StreamingTerrain,
+};
 use genesis_tools::EguiIntegration;
 use tracing::info;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
@@ -37,6 +40,10 @@ pub struct Renderer {
     cell_buffer: CellBuffer,
     /// Chunk manager for multi-chunk mode (optional)
     chunk_manager: Option<ChunkManager>,
+    /// Streaming terrain system (player-centered chunk loading)
+    streaming_terrain: Option<StreamingTerrain>,
+    /// Chunk render manager for multi-chunk rendering
+    chunk_render_manager: Option<ChunkRenderManager>,
     /// Render bind group for current buffer
     render_bind_group: wgpu::BindGroup,
     /// Egui integration for UI overlay
@@ -147,11 +154,111 @@ impl Renderer {
             render_pipeline,
             cell_buffer,
             chunk_manager: None, // Single-chunk mode by default
+            streaming_terrain: None, // Streaming terrain disabled by default
+            chunk_render_manager: None, // Created when streaming terrain is enabled
             render_bind_group,
             egui,
             simulation_running: false, // Disable simulation (no cell gravity)
             frame_count: 0,
         })
+    }
+
+    /// Enables streaming terrain mode with player-centered chunk loading.
+    ///
+    /// When enabled, chunks are loaded/unloaded based on player position,
+    /// and only nearby chunks are simulated on the GPU.
+    pub fn enable_streaming_terrain(&mut self, seed: u64) {
+        if self.streaming_terrain.is_none() {
+            info!("Enabling streaming terrain mode with seed {}", seed);
+            self.streaming_terrain = Some(StreamingTerrain::with_seed(seed));
+            // Create chunk render manager for multi-chunk rendering
+            self.chunk_render_manager = Some(ChunkRenderManager::new(
+                &self.device,
+                self.config.format,
+                DEFAULT_CHUNK_SIZE,
+            ));
+        }
+    }
+
+    /// Enables streaming terrain with custom configuration.
+    pub fn enable_streaming_terrain_with_config(&mut self, seed: u64, config: StreamingConfig) {
+        if self.streaming_terrain.is_none() {
+            info!("Enabling streaming terrain mode with custom config");
+            let chunk_size = config.chunk_size;
+            self.streaming_terrain = Some(StreamingTerrain::new(seed, config));
+            // Create chunk render manager for multi-chunk rendering
+            self.chunk_render_manager = Some(ChunkRenderManager::new(
+                &self.device,
+                self.config.format,
+                chunk_size,
+            ));
+        }
+    }
+
+    /// Disables streaming terrain mode.
+    pub fn disable_streaming_terrain(&mut self) {
+        if self.streaming_terrain.is_some() {
+            info!("Disabling streaming terrain mode");
+            self.streaming_terrain = None;
+            self.chunk_render_manager = None;
+        }
+    }
+
+    /// Returns whether streaming terrain is enabled.
+    #[must_use]
+    pub const fn is_streaming_terrain_enabled(&self) -> bool {
+        self.streaming_terrain.is_some()
+    }
+
+    /// Updates streaming terrain based on player position.
+    ///
+    /// Call this each frame with the player's world position.
+    pub fn update_player_position_streaming(&mut self, player_x: f32, player_y: f32) {
+        // First update terrain position (this may load/unload chunks)
+        if let Some(terrain) = &mut self.streaming_terrain {
+            terrain.update_player_position(player_x, player_y, &self.device);
+        }
+
+        // Then sync to render manager (separate borrow)
+        self.sync_streaming_chunks_to_render();
+    }
+
+    /// Syncs streaming terrain chunks to the render manager.
+    fn sync_streaming_chunks_to_render(&mut self) {
+        use genesis_kernel::VisibleChunk;
+
+        let Some(terrain) = &self.streaming_terrain else { return };
+        let Some(render_mgr) = &mut self.chunk_render_manager else { return };
+
+        // Upload loaded chunks to GPU render manager
+        for chunk in terrain.loaded_chunks() {
+            // Create a VisibleChunk for the render manager
+            let visible_chunk = VisibleChunk {
+                position: (chunk.id.x, chunk.id.y),
+                cells: chunk.cells.clone(),
+                dirty: true, // Always mark dirty to ensure upload
+            };
+            render_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
+        }
+    }
+
+    /// Steps the streaming terrain simulation.
+    pub fn step_streaming_terrain(&mut self) {
+        if let Some(terrain) = &mut self.streaming_terrain {
+            terrain.step_simulation(&self.device, &self.queue, &self.compute_pipeline);
+        }
+    }
+
+    /// Returns a reference to the streaming terrain.
+    #[must_use]
+    pub fn streaming_terrain(&self) -> Option<&StreamingTerrain> {
+        self.streaming_terrain.as_ref()
+    }
+
+    /// Returns streaming terrain statistics.
+    #[must_use]
+    pub fn streaming_stats(&self) -> Option<genesis_kernel::StreamingStats> {
+        self.streaming_terrain.as_ref().map(|t| t.stats().clone())
     }
 
     /// Enables multi-chunk rendering mode.
@@ -202,6 +309,12 @@ impl Renderer {
             self.render_pipeline
                 .set_screen_size(&self.queue, new_size.width, new_size.height);
         }
+    }
+
+    /// Updates the scale factor for egui rendering.
+    /// Call this when the window's scale factor changes.
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        self.egui.set_pixels_per_point(scale_factor);
     }
 
     /// Renders a frame, running simulation if enabled.
@@ -373,6 +486,11 @@ impl Renderer {
         );
         self.render_pipeline.set_zoom(&self.queue, camera.zoom);
 
+        // Also update chunk render manager camera if using streaming terrain
+        if let Some(render_mgr) = &mut self.chunk_render_manager {
+            render_mgr.update_camera(&self.queue, camera);
+        }
+
         // Begin egui frame
         self.egui.begin_frame(window);
 
@@ -433,8 +551,13 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            self.render_pipeline
-                .render(&mut render_pass, &self.render_bind_group);
+            // Use chunk render manager for streaming terrain, otherwise single-chunk mode
+            if let Some(render_mgr) = &self.chunk_render_manager {
+                render_mgr.render(&mut render_pass);
+            } else {
+                self.render_pipeline
+                    .render(&mut render_pass, &self.render_bind_group);
+            }
         }
 
         // Render egui UI overlay (on top of world)
