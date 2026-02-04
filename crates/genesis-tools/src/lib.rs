@@ -13,10 +13,13 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod audio;
 pub mod cell_inspector;
 pub mod chunk_viewer;
+pub mod combat_hud;
 pub mod console;
 pub mod crafting_ui;
+pub mod dialogue_ui;
 pub mod event_log;
 pub mod hot_reload;
 pub mod inspector;
@@ -25,16 +28,20 @@ pub mod memory_profiler;
 pub mod minimap;
 pub mod perf;
 pub mod perf_hud;
+pub mod quest_ui;
 pub mod replay;
 pub mod screenshot;
 pub mod test_harness;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::audio::*;
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
+    pub use crate::combat_hud::*;
     pub use crate::console::*;
     pub use crate::crafting_ui::*;
+    pub use crate::dialogue_ui::*;
     pub use crate::event_log::*;
     pub use crate::hot_reload::*;
     pub use crate::inspector::*;
@@ -43,6 +50,7 @@ pub mod prelude {
     pub use crate::minimap::*;
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
+    pub use crate::quest_ui::*;
     pub use crate::replay::*;
     pub use crate::screenshot::*;
     pub use crate::test_harness::*;
