@@ -1,7 +1,7 @@
-# PROMPT — Tools Agent — Iteration 3
+# PROMPT — Tools Agent — Iteration 4
 
 > **Branch**: `tools-agent`
-> **Focus**: Inventory UI rendering, crafting UI rendering, minimap, debug console
+> **Focus**: Audio playback, quest UI, NPC dialogue, combat HUD
 
 ## Your Mission
 
@@ -11,199 +11,269 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### T-12: Inventory UI Renderer (P0)
-**File**: `crates/genesis-tools/src/inventory_ui.rs`
+### T-16: Audio Engine Integration (P0)
+**File**: `crates/genesis-tools/src/audio.rs`
 
-Render inventory using egui:
+Implement audio playback with rodio:
 
 ```rust
-use egui::{Context, Window, Grid, Image, Response};
-use genesis_gameplay::inventory_ui::{InventoryUIModel, InventoryAction, SlotUIData};
+use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+use genesis_kernel::audio::{SpatialAudioManager, AudioSourceId};
 
-pub struct InventoryUI {
-    pub is_open: bool,
-    slot_size: f32,
-    hotbar_y: f32,
+pub struct AudioEngine {
+    _stream: OutputStream,
+    stream_handle: OutputStreamHandle,
+    sinks: HashMap<AudioSourceId, Sink>,
+    music_sink: Option<Sink>,
+    master_volume: f32,
+    sfx_volume: f32,
+    music_volume: f32,
 }
 
-impl InventoryUI {
+pub struct SoundEffect {
+    pub id: SoundId,
+    pub data: Vec<u8>,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+impl AudioEngine {
+    pub fn new() -> Result<Self, AudioError>;
+
+    pub fn play_sound(&mut self, sound: &SoundEffect, position: Option<(f32, f32)>) -> AudioSourceId;
+    pub fn play_music(&mut self, music: &SoundEffect, fade_in: f32);
+    pub fn stop_music(&mut self, fade_out: f32);
+
+    pub fn update_spatial(&mut self, spatial: &SpatialAudioManager);
+
+    pub fn set_master_volume(&mut self, volume: f32);
+    pub fn set_sfx_volume(&mut self, volume: f32);
+    pub fn set_music_volume(&mut self, volume: f32);
+
+    pub fn stop_sound(&mut self, id: AudioSourceId);
+    pub fn stop_all(&mut self);
+}
+
+pub enum AudioError {
+    NoOutputDevice,
+    DecodingError(String),
+    PlaybackError(String),
+}
+```
+
+Requirements:
+- rodio for cross-platform audio
+- Spatial positioning from kernel data
+- Separate volume controls
+- Music crossfading
+- Sound pooling for frequent effects
+
+### T-17: Quest UI (P0)
+**File**: `crates/genesis-tools/src/quest_ui.rs`
+
+Render quest tracker and log:
+
+```rust
+use egui::{Context, Window};
+use genesis_gameplay::quest::{QuestManager, QuestProgress, QuestObjective};
+
+pub struct QuestUI {
+    pub tracker_visible: bool,
+    pub log_open: bool,
+    selected_quest: Option<QuestId>,
+}
+
+pub struct QuestUIData {
+    pub active_quests: Vec<QuestDisplayData>,
+    pub available_quests: Vec<QuestDisplayData>,
+    pub completed_count: u32,
+}
+
+pub struct QuestDisplayData {
+    pub id: QuestId,
+    pub name: String,
+    pub description: String,
+    pub objectives: Vec<ObjectiveDisplayData>,
+    pub rewards: Vec<String>,
+    pub tracked: bool,
+}
+
+pub struct ObjectiveDisplayData {
+    pub description: String,
+    pub progress: u32,
+    pub required: u32,
+    pub complete: bool,
+}
+
+impl QuestUI {
     pub fn new() -> Self;
 
-    pub fn show(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction>;
+    // Compact tracker (corner of screen)
+    pub fn show_tracker(&mut self, ctx: &Context, data: &QuestUIData);
 
-    pub fn show_hotbar(&mut self, ctx: &Context, model: &InventoryUIModel) -> Option<InventoryAction>;
+    // Full quest log window
+    pub fn show_log(&mut self, ctx: &Context, data: &QuestUIData) -> Option<QuestAction>;
 
-    fn render_slot(&self, ui: &mut egui::Ui, slot: &SlotUIData) -> Response;
+    fn render_objective(&self, ui: &mut egui::Ui, obj: &ObjectiveDisplayData);
+}
 
-    fn render_tooltip(&self, ui: &mut egui::Ui, tooltip: &TooltipData);
+pub enum QuestAction {
+    Track(QuestId),
+    Untrack(QuestId),
+    Abandon(QuestId),
+    SelectQuest(QuestId),
 }
 ```
 
 Requirements:
-- Grid layout for inventory slots
-- Hotbar always visible at bottom
-- Drag and drop between slots
-- Right-click context menu (use, drop, split)
-- Tooltip on hover
-- Item count overlay on slot
+- Compact tracker (tracked quests only)
+- Full quest log with categories
+- Objective progress bars
+- Track/untrack toggle
+- Quest details panel
 
-### T-13: Crafting UI Renderer (P0)
-**File**: `crates/genesis-tools/src/crafting_ui.rs`
+### T-18: Dialogue System UI (P0)
+**File**: `crates/genesis-tools/src/dialogue_ui.rs`
 
-Render crafting interface using egui:
+Implement NPC dialogue interface:
 
 ```rust
-use egui::{Context, Window, ScrollArea};
-use genesis_gameplay::crafting_ui::{CraftingUIModel, RecipeUIData};
+use egui::{Context, Window, RichText};
 
-pub struct CraftingUI {
-    pub is_open: bool,
-    search_text: String,
+pub struct DialogueUI {
+    pub is_active: bool,
+    current_node: Option<DialogueNodeId>,
+    history: Vec<DialogueLine>,
+    typewriter_progress: f32,
 }
 
-impl CraftingUI {
+pub struct DialogueTree {
+    pub nodes: HashMap<DialogueNodeId, DialogueNode>,
+    pub start_node: DialogueNodeId,
+}
+
+pub struct DialogueNode {
+    pub speaker: String,
+    pub portrait: Option<String>,
+    pub text: String,
+    pub choices: Vec<DialogueChoice>,
+    pub on_enter: Vec<DialogueEffect>,
+}
+
+pub struct DialogueChoice {
+    pub text: String,
+    pub next_node: Option<DialogueNodeId>,
+    pub condition: Option<DialogueCondition>,
+    pub effects: Vec<DialogueEffect>,
+}
+
+pub enum DialogueCondition {
+    HasItem(ItemId, u32),
+    QuestComplete(QuestId),
+    QuestActive(QuestId),
+    ReputationAbove(FactionId, i32),
+    Custom(String),
+}
+
+pub enum DialogueEffect {
+    GiveItem(ItemId, u32),
+    TakeItem(ItemId, u32),
+    StartQuest(QuestId),
+    CompleteQuest(QuestId),
+    AddReputation(FactionId, i32),
+    OpenShop(ShopId),
+}
+
+impl DialogueUI {
     pub fn new() -> Self;
 
-    pub fn show(&mut self, ctx: &Context, model: &mut CraftingUIModel) -> Option<CraftRequest>;
+    pub fn start_dialogue(&mut self, tree: &DialogueTree, npc_name: &str);
+    pub fn show(&mut self, ctx: &Context, tree: &DialogueTree) -> Vec<DialogueEffect>;
+    pub fn end_dialogue(&mut self);
 
-    fn render_recipe_list(&mut self, ui: &mut egui::Ui, model: &CraftingUIModel) -> Option<usize>;
-
-    fn render_recipe_detail(&self, ui: &mut egui::Ui, recipe: &RecipeUIData);
-
-    fn render_crafting_queue(&self, ui: &mut egui::Ui, model: &CraftingUIModel);
-}
-
-pub struct CraftRequest {
-    pub recipe_id: RecipeId,
-    pub count: u32,
+    fn render_speaker(&self, ui: &mut egui::Ui, node: &DialogueNode);
+    fn render_choices(&self, ui: &mut egui::Ui, choices: &[DialogueChoice]) -> Option<usize>;
 }
 ```
 
 Requirements:
-- Recipe list with filter/search
-- Recipe detail panel (ingredients, outputs)
-- "Craft" button (disabled if can't craft)
-- Crafting queue with progress bars
-- Visual feedback for missing ingredients
+- Typewriter text effect
+- Speaker portrait display
+- Choice buttons with conditions
+- Dialogue history scroll
+- Effects returned for gameplay
 
-### T-14: Minimap Renderer (P1)
-**File**: `crates/genesis-tools/src/minimap.rs`
+### T-19: Combat HUD (P1)
+**File**: `crates/genesis-tools/src/combat_hud.rs`
 
-Implement minimap display:
-
-```rust
-use egui::{Context, Painter, Rect, Color32};
-
-pub struct Minimap {
-    pub is_visible: bool,
-    pub size: f32,
-    pub zoom: f32,
-    texture: Option<egui::TextureHandle>,
-}
-
-pub struct MinimapData {
-    pub player_pos: (f32, f32),
-    pub player_rotation: f32,
-    pub entities: Vec<MinimapEntity>,
-    pub terrain_colors: Vec<u8>,  // RGBA for terrain
-    pub width: u32,
-    pub height: u32,
-}
-
-pub struct MinimapEntity {
-    pub pos: (f32, f32),
-    pub entity_type: MinimapEntityType,
-}
-
-pub enum MinimapEntityType {
-    Player,
-    NPC,
-    Enemy,
-    Item,
-    Building,
-}
-
-impl Minimap {
-    pub fn new(size: f32) -> Self;
-
-    pub fn show(&mut self, ctx: &Context, data: &MinimapData);
-
-    pub fn update_terrain(&mut self, ctx: &Context, colors: &[u8], width: u32, height: u32);
-
-    fn world_to_minimap(&self, world_pos: (f32, f32), center: (f32, f32)) -> Option<(f32, f32)>;
-}
-```
-
-Requirements:
-- Corner overlay (top-right by default)
-- Terrain texture from chunk data
-- Entity markers with icons/colors
-- Player arrow showing direction
-- Zoom in/out controls
-- Click to set waypoint (optional)
-
-### T-15: Debug Console (P1)
-**File**: `crates/genesis-tools/src/console.rs`
-
-Implement in-game debug console:
+Render combat-related UI:
 
 ```rust
-use egui::{Context, Window, TextEdit, ScrollArea};
+use egui::{Context, Painter, Pos2, Color32};
+use genesis_gameplay::combat::{CombatStats, DamageEvent};
 
-pub struct DebugConsole {
-    pub is_open: bool,
-    input_buffer: String,
-    history: Vec<ConsoleEntry>,
-    command_history: Vec<String>,
-    history_index: Option<usize>,
+pub struct CombatHUD {
+    damage_numbers: Vec<DamageNumber>,
+    health_bars: HashMap<EntityId, HealthBarState>,
+    crosshair_style: CrosshairStyle,
 }
 
-pub struct ConsoleEntry {
-    pub timestamp: f64,
-    pub level: ConsoleLevel,
-    pub message: String,
+pub struct DamageNumber {
+    pub value: f32,
+    pub position: (f32, f32),
+    pub color: Color32,
+    pub lifetime: f32,
+    pub velocity: (f32, f32),
 }
 
-pub enum ConsoleLevel {
-    Info,
-    Warning,
-    Error,
-    Command,
-    Result,
+pub struct HealthBarState {
+    pub current: f32,
+    pub max: f32,
+    pub damage_preview: f32,
+    pub heal_preview: f32,
 }
 
-pub trait ConsoleCommand {
-    fn name(&self) -> &str;
-    fn help(&self) -> &str;
-    fn execute(&self, args: &[&str]) -> String;
+pub enum CrosshairStyle {
+    None,
+    Dot,
+    Cross,
+    Circle,
+    Custom(String),
 }
 
-impl DebugConsole {
+impl CombatHUD {
     pub fn new() -> Self;
 
-    pub fn show(&mut self, ctx: &Context, commands: &[Box<dyn ConsoleCommand>]) -> Option<String>;
+    // Player health/mana bars
+    pub fn show_player_vitals(&self, ctx: &Context, stats: &CombatStats);
 
-    pub fn log(&mut self, level: ConsoleLevel, message: String);
+    // Enemy health bars (world-space)
+    pub fn show_enemy_health_bars(
+        &self,
+        painter: &Painter,
+        enemies: &[(EntityId, (f32, f32), &CombatStats)],
+        camera: &Camera,
+    );
 
-    pub fn execute(&mut self, input: &str, commands: &[Box<dyn ConsoleCommand>]);
+    // Floating damage numbers
+    pub fn spawn_damage_number(&mut self, event: &DamageEvent);
+    pub fn update_damage_numbers(&mut self, dt: f32);
+    pub fn render_damage_numbers(&self, painter: &Painter, camera: &Camera);
+
+    // Crosshair
+    pub fn show_crosshair(&self, ctx: &Context);
+
+    // Cooldown indicators
+    pub fn show_ability_cooldowns(&self, ctx: &Context, cooldowns: &[f32]);
 }
-
-// Built-in commands
-pub struct HelpCommand;
-pub struct ClearCommand;
-pub struct TeleportCommand;
-pub struct SpawnCommand;
-pub struct GiveCommand;
-pub struct SetTimeCommand;
 ```
 
 Requirements:
-- Toggle with backtick/tilde key
-- Command history (up/down arrows)
-- Tab completion for commands
-- Color-coded output levels
-- Scrollable history
-- Built-in debug commands
+- Animated health bars
+- Floating damage numbers
+- Critical hit emphasis
+- Low health warning effect
+- Target lock indicator
 
 ---
 
@@ -224,18 +294,27 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[tools] feat: T-12 inventory UI renderer
-[tools] feat: T-13 crafting UI renderer
-[tools] feat: T-14 minimap renderer
-[tools] feat: T-15 debug console
+[tools] feat: T-16 audio engine integration
+[tools] feat: T-17 quest UI
+[tools] feat: T-18 dialogue system UI
+[tools] feat: T-19 combat HUD
+```
+
+---
+
+## Dependencies
+
+Add to `crates/genesis-tools/Cargo.toml`:
+```toml
+rodio = "0.19"
 ```
 
 ---
 
 ## Integration Notes
 
-- T-12/T-13 consume data models from genesis-gameplay
-- Add genesis-gameplay dependency if not present
-- Use egui 0.30 (already in workspace)
+- T-16 uses SpatialAudioManager data from genesis-kernel
+- T-17 displays QuestManager data from genesis-gameplay
+- T-18 controls NPC dialogue flow
+- T-19 visualizes combat events
 - Export new modules in lib.rs
-- Test with mock data if gameplay types not available

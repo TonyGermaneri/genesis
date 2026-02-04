@@ -13,6 +13,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod audio;
 pub mod cell_inspector;
 pub mod chunk_viewer;
 pub mod console;
@@ -31,6 +32,7 @@ pub mod test_harness;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::audio::*;
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
     pub use crate::console::*;
