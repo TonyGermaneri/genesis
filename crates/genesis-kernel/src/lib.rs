@@ -43,6 +43,7 @@ pub mod audio;
 pub mod benchmark;
 pub mod biome;
 pub mod buffer;
+pub mod camera;
 pub mod cell;
 pub mod chunk;
 pub mod collision;
@@ -55,7 +56,9 @@ pub mod particles;
 pub mod readback;
 pub mod render;
 pub mod streaming;
+pub mod terrain_render;
 pub mod validation;
+pub mod world_init;
 pub mod worldgen;
 
 /// Prelude for convenient imports
@@ -64,6 +67,7 @@ pub mod prelude {
     pub use crate::benchmark::*;
     pub use crate::biome::*;
     pub use crate::buffer::*;
+    pub use crate::camera::*;
     pub use crate::cell::*;
     pub use crate::chunk::*;
     pub use crate::collision::*;
@@ -76,7 +80,9 @@ pub mod prelude {
     pub use crate::readback::*;
     pub use crate::render::*;
     pub use crate::streaming::*;
+    pub use crate::terrain_render::*;
     pub use crate::validation::*;
+    pub use crate::world_init::*;
     pub use crate::worldgen::*;
 }
 

@@ -27,6 +27,7 @@ pollster = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+toml = { workspace = true }
 
 # UI library (per UI RULE - use existing libraries)
 egui = { workspace = true }

@@ -14,7 +14,9 @@
 
 mod app;
 mod config;
+mod input;
 mod renderer;
+mod timing;
 
 /// Analytics module for opt-in gameplay telemetry
 pub mod analytics;
