@@ -208,14 +208,14 @@ struct VertexOutput {
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    
+
     // Generate fullscreen triangle
     let x = f32(i32(vertex_index & 1u) * 4 - 1);
     let y = f32(i32(vertex_index >> 1u) * 4 - 1);
-    
+
     out.position = vec4<f32>(x, y, 0.0, 1.0);
     out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    
+
     return out;
 }
 
@@ -238,13 +238,13 @@ fn get_growth(cell: Cell) -> u32 {
 fn get_ambient_light(time: f32) -> vec3<f32> {
     // time: 0.0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk
     let cycle = time * 6.283185; // 2*PI
-    
+
     // Base brightness varies with time
     let brightness = 0.3 + 0.7 * max(0.0, sin(cycle));
-    
+
     // Color shifts through the day
     var color = vec3<f32>(1.0, 1.0, 1.0);
-    
+
     if time < 0.2 || time > 0.8 {
         // Night - blue tint
         color = vec3<f32>(0.4, 0.5, 0.9);
@@ -257,7 +257,7 @@ fn get_ambient_light(time: f32) -> vec3<f32> {
         let t = (time - 0.7) / 0.1;
         color = mix(vec3<f32>(1.0, 0.8, 0.6), vec3<f32>(0.6, 0.4, 0.8), t);
     }
-    
+
     return color * brightness;
 }
 
@@ -282,40 +282,40 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Convert UV to pixel coordinates
     let pixel_x = i32(in.uv.x * f32(params.screen_width));
     let pixel_y = i32(in.uv.y * f32(params.screen_height));
-    
+
     // Convert pixel to world cell coordinates (accounting for camera and zoom)
     let world_x = i32(f32(pixel_x) / params.zoom) + params.camera_x;
     let world_y = i32(f32(pixel_y) / params.zoom) + params.camera_y;
-    
+
     // Convert to local chunk coordinates
     let local_x = world_x - chunk_params.world_offset_x;
     let local_y = world_y - chunk_params.world_offset_y;
-    
+
     // Bounds check against chunk
     let size = i32(params.chunk_size);
     if local_x < 0 || local_y < 0 || local_x >= size || local_y >= size {
         // Outside this chunk - transparent (allow blending)
         discard;
     }
-    
+
     // Get cell at coordinates
     let idx = u32(local_y) * params.chunk_size + u32(local_x);
     let cell = cells[idx];
-    
+
     // Get base color from material
     let material_id = get_material(cell);
     let num_colors = arrayLength(&colors);
     let color_idx = min(material_id, num_colors - 1u);
     var base_color = colors[color_idx];
-    
+
     // Get ambient light for day/night cycle
     let ambient = get_ambient_light(params.time_of_day);
-    
+
     var color = vec3<f32>(base_color.r, base_color.g, base_color.b);
-    
+
     // Special material handling
     let growth = get_growth(cell);
-    
+
     // Grass color varies by growth stage
     if material_id == MAT_GRASS {
         let growth_factor = f32(growth) / 255.0;
@@ -324,39 +324,39 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let mature_color = vec3<f32>(0.2, 0.5, 0.2);  // Dark green
         color = mix(young_color, mature_color, growth_factor);
     }
-    
+
     // Water reflects sky color
     if material_id == MAT_WATER {
         let sky = get_sky_color(params.time_of_day);
         // Blend water color with sky reflection
         color = mix(color, sky, 0.3);
     }
-    
+
     // Apply ambient lighting
     color = color * ambient;
-    
+
     // Modulate color based on cell state
     let flags = get_flags(cell);
-    
+
     // Add burning effect (orange glow, ignores ambient)
     if (flags & FLAG_BURNING) != 0u {
         color.r = min(color.r + 0.5, 1.0);
         color.g = min(color.g + 0.2, 1.0);
     }
-    
+
     // Draw player marker at center of screen (camera follows player)
     let screen_center_x = f32(params.screen_width) / 2.0;
     let screen_center_y = f32(params.screen_height) / 2.0;
     let screen_px = in.uv.x * f32(params.screen_width);
     let screen_py = in.uv.y * f32(params.screen_height);
     let dist_from_center = sqrt((screen_px - screen_center_x) * (screen_px - screen_center_x) + (screen_py - screen_center_y) * (screen_py - screen_center_y));
-    
+
     // Player marker scales with zoom
     let marker_scale = max(params.zoom, 2.0);
     let inner_radius = 4.0 * marker_scale;
     let mid_radius = 6.0 * marker_scale;
     let outer_radius = 8.0 * marker_scale;
-    
+
     if dist_from_center < inner_radius {
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
     } else if dist_from_center < mid_radius {
@@ -364,7 +364,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     } else if dist_from_center < outer_radius {
         return vec4<f32>(0.0, 0.3, 0.3, 1.0);
     }
-    
+
     return vec4<f32>(color.r, color.g, color.b, base_color.a);
 }
 ";
@@ -417,14 +417,14 @@ struct VertexOutput {
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    
+
     // Generate fullscreen triangle
     let x = f32(i32(vertex_index & 1u) * 4 - 1);
     let y = f32(i32(vertex_index >> 1u) * 4 - 1);
-    
+
     out.position = vec4<f32>(x, y, 0.0, 1.0);
     out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    
+
     return out;
 }
 
@@ -448,45 +448,45 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Convert UV to pixel coordinates
     let pixel_x = i32(in.uv.x * f32(params.screen_width));
     let pixel_y = i32(in.uv.y * f32(params.screen_height));
-    
+
     // Convert pixel to cell coordinates (accounting for camera and zoom)
     let cell_x = i32(f32(pixel_x) / params.zoom) + params.camera_x;
     let cell_y = i32(f32(pixel_y) / params.zoom) + params.camera_y;
-    
+
     // Bounds check
     let size = i32(params.chunk_size);
     if cell_x < 0 || cell_y < 0 || cell_x >= size || cell_y >= size {
         // Out of bounds - dark background
         return vec4<f32>(0.02, 0.02, 0.05, 1.0);
     }
-    
+
     // Get cell at coordinates
     let idx = u32(cell_y) * params.chunk_size + u32(cell_x);
     let cell = cells[idx];
-    
+
     // Get base color from material
     let material_id = get_material(cell);
     let num_colors = arrayLength(&colors);
     let color_idx = min(material_id, num_colors - 1u);
     var color = colors[color_idx];
-    
+
     // Modulate color based on cell state
     let flags = get_flags(cell);
     let temp = get_temperature(cell);
-    
+
     // Add burning effect (orange glow)
     if (flags & FLAG_BURNING) != 0u {
         color.r = min(color.r + 0.5, 1.0);
         color.g = min(color.g + 0.2, 1.0);
     }
-    
+
     // Temperature visualization (subtle)
     let temp_factor = f32(temp) / 255.0;
     if temp_factor > 0.5 {
         // Hot - shift towards red
         color.r = min(color.r + (temp_factor - 0.5) * 0.3, 1.0);
     }
-    
+
     // Draw player marker at center of screen (camera follows player)
     // Use screen pixel coordinates directly for the marker
     let screen_center_x = f32(params.screen_width) / 2.0;
@@ -494,13 +494,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let screen_px = in.uv.x * f32(params.screen_width);
     let screen_py = in.uv.y * f32(params.screen_height);
     let dist_from_center = sqrt((screen_px - screen_center_x) * (screen_px - screen_center_x) + (screen_py - screen_center_y) * (screen_py - screen_center_y));
-    
+
     // Player is a larger marker for visibility - scales with zoom
     let marker_scale = max(params.zoom, 2.0);
     let inner_radius = 4.0 * marker_scale;
     let mid_radius = 6.0 * marker_scale;
     let outer_radius = 8.0 * marker_scale;
-    
+
     if dist_from_center < inner_radius {
         // Inner white core
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
@@ -511,7 +511,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // Dark outline for contrast
         return vec4<f32>(0.0, 0.3, 0.3, 1.0);
     }
-    
+
     return vec4<f32>(color.r, color.g, color.b, color.a);
 }
 ";

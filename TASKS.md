@@ -40,16 +40,43 @@
 
 ---
 
-## Iteration 8 — Procedural World & Polish (Pending User Direction)
+## Iteration 8 — Procedural Biomes
 
-> **Awaiting user input on priorities for Iteration 8.**
-> Possible focus areas:
-> - Procedural biome generation (forests, deserts, lakes)
-> - Save/load game state
-> - Combat system
-> - NPC spawning
-> - Crafting UI
-> - Sound system
+### Kernel Agent (Branch: `kernel-agent`)
+
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| K-32 | Simplex noise generation | ⚪ | P0 | GPU-friendly noise for terrain height/moisture |
+| K-33 | Biome-aware cell rendering | ⚪ | P0 | Different cell colors/textures per biome |
+| K-34 | Biome transition blending | ⚪ | P0 | Smooth gradients between adjacent biomes |
+| K-35 | Water rendering for lakes | ⚪ | P1 | Animated water shader for lake biomes |
+
+### Gameplay Agent (Branch: `gameplay-agent`)
+
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| G-33 | Biome type definitions | ⚪ | P0 | Forest, desert, lake, plains, mountain enums |
+| G-34 | Terrain generation logic | ⚪ | P0 | Noise-based biome assignment per chunk |
+| G-35 | Biome resource distribution | ⚪ | P0 | Trees in forest, cacti in desert, fish in lakes |
+| G-36 | Biome-specific cell types | ⚪ | P1 | Sand, water, grass variants per biome |
+
+### Tools Agent (Branch: `tools-agent`)
+
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| T-32 | Biome minimap coloring | ⚪ | P0 | Color-coded biomes on minimap |
+| T-33 | Debug biome info panel | ⚪ | P0 | Show current biome, noise values |
+| T-34 | World seed display/input | ⚪ | P0 | Show seed, allow seed input for new worlds |
+| T-35 | Biome legend overlay | ⚪ | P1 | Color key for biome types |
+
+### Infra Agent (Branch: `infra-agent`)
+
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| I-28 | Wire biome generation | ⚪ | P0 | Call terrain gen on chunk creation |
+| I-29 | World seed management | ⚪ | P0 | Seed storage, deterministic generation |
+| I-30 | Chunk biome data flow | ⚪ | P0 | Pass biome info from gameplay to kernel |
+| I-31 | Biome generation profiling | ⚪ | P1 | Measure gen time per chunk |
 
 ---
 
