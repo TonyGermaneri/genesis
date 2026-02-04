@@ -40,6 +40,7 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod benchmark;
+pub mod biome;
 pub mod buffer;
 pub mod cell;
 pub mod chunk;
@@ -55,6 +56,7 @@ pub mod validation;
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::benchmark::*;
+    pub use crate::biome::*;
     pub use crate::buffer::*;
     pub use crate::cell::*;
     pub use crate::chunk::*;
