@@ -416,8 +416,8 @@ impl AmbientLayer {
                 } else {
                     self.volume // Fading out
                 };
-                self.volume = start_volume
-                    + (self.target_volume - start_volume) * self.transition_progress;
+                self.volume =
+                    start_volume + (self.target_volume - start_volume) * self.transition_progress;
             }
         }
         false

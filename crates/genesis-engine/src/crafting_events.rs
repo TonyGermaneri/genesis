@@ -209,7 +209,10 @@ impl CraftingEventHandler {
     }
 
     /// Processes all pending events and returns triggered actions.
-    pub fn process_events(&mut self, mut audio: Option<&mut AudioIntegration>) -> ProcessedCraftingEvents {
+    pub fn process_events(
+        &mut self,
+        mut audio: Option<&mut AudioIntegration>,
+    ) -> ProcessedCraftingEvents {
         let mut result = ProcessedCraftingEvents::default();
 
         while let Some(event) = self.event_queue.pop_front() {
@@ -220,18 +223,18 @@ impl CraftingEventHandler {
                     ..
                 } => {
                     debug!("Craft started: {} ({})", recipe_name, category);
-                    
+
                     // Play craft start sound
                     if let Some(audio) = audio.as_deref_mut() {
                         let sound_name = craft_start_sound(&category);
                         let sound = SoundEvent::new(AudioCategory::Sfx, sound_name);
                         audio.queue_sound(sound);
                     }
-                }
+                },
                 CraftingEvent::CraftProgress { progress, .. } => {
                     result.in_progress = true;
                     result.progress = progress;
-                }
+                },
                 CraftingEvent::CraftCompleted {
                     crafter,
                     recipe_id,
@@ -246,7 +249,8 @@ impl CraftingEventHandler {
 
                     // Update stats
                     let prev_total = self.stats.crafts_completed;
-                    self.stats.record_craft(recipe_id, output_quantity, skill_gain);
+                    self.stats
+                        .record_craft(recipe_id, output_quantity, skill_gain);
 
                     // Check for achievements
                     self.check_craft_achievements(prev_total, recipe_id);
@@ -257,9 +261,11 @@ impl CraftingEventHandler {
                         audio.queue_sound(sound);
                     }
 
-                    result.completed_crafts.push((recipe_id, output_item, output_quantity));
+                    result
+                        .completed_crafts
+                        .push((recipe_id, output_item, output_quantity));
                     result.skill_gained += skill_gain;
-                }
+                },
                 CraftingEvent::CraftFailed { reason, .. } => {
                     debug!("Craft failed: {:?}", reason);
                     self.stats.record_failure();
@@ -272,7 +278,7 @@ impl CraftingEventHandler {
 
                     result.failed = true;
                     result.fail_reason = Some(reason);
-                }
+                },
                 CraftingEvent::RecipeLearned { learner, recipe_id } => {
                     info!("Recipe learned: {:?} learned {:?}", learner, recipe_id);
 
@@ -283,7 +289,7 @@ impl CraftingEventHandler {
                     }
 
                     result.recipes_learned.push(recipe_id);
-                }
+                },
             }
         }
 
@@ -300,7 +306,8 @@ impl CraftingEventHandler {
 
         // First craft achievement
         if prev_total == 0 && current_total == 1 {
-            self.pending_achievements.push(CraftingAchievement::FirstCraft);
+            self.pending_achievements
+                .push(CraftingAchievement::FirstCraft);
         }
 
         // Total craft milestones
@@ -312,7 +319,12 @@ impl CraftingEventHandler {
         }
 
         // Recipe mastery milestones
-        let recipe_count = self.stats.crafts_by_recipe.get(&recipe_id.raw()).copied().unwrap_or(0);
+        let recipe_count = self
+            .stats
+            .crafts_by_recipe
+            .get(&recipe_id.raw())
+            .copied()
+            .unwrap_or(0);
         for milestone in [10, 50, 100] {
             if recipe_count == milestone {
                 self.pending_achievements

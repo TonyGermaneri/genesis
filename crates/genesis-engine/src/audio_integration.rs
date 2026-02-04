@@ -246,7 +246,10 @@ impl AudioIntegration {
                 (Some(stream), Some(handle))
             },
             Err(e) => {
-                warn!("Failed to initialize audio device: {}. Audio will be disabled.", e);
+                warn!(
+                    "Failed to initialize audio device: {}. Audio will be disabled.",
+                    e
+                );
                 state.initialized = true;
                 state.device_available = false;
                 (None, None)
@@ -531,7 +534,11 @@ impl AudioIntegration {
                 sink.set_volume(0.0);
             } else {
                 let vol = self.state.volumes.effective_music();
-                sink.set_volume(if self.state.mutes.is_music_muted() { 0.0 } else { vol });
+                sink.set_volume(if self.state.mutes.is_music_muted() {
+                    0.0
+                } else {
+                    vol
+                });
             }
 
             self.music_sink = Some(sink);
@@ -601,7 +608,13 @@ impl AudioIntegration {
     }
 
     /// Fades in an ambient layer.
-    pub fn fade_in_ambient(&mut self, layer_name: &str, asset_name: &str, volume: f32, duration: f32) {
+    pub fn fade_in_ambient(
+        &mut self,
+        layer_name: &str,
+        asset_name: &str,
+        volume: f32,
+        duration: f32,
+    ) {
         if !self.is_available() {
             return;
         }
@@ -633,7 +646,9 @@ impl AudioIntegration {
             }
         }
 
-        self.state.ambient.fade_in_layer(layer_name, asset_name, volume, duration);
+        self.state
+            .ambient
+            .fade_in_layer(layer_name, asset_name, volume, duration);
     }
 
     /// Fades out an ambient layer.
@@ -684,12 +699,20 @@ impl AudioIntegration {
         };
 
         match &self.state.music.play_state {
-            MusicPlayState::FadingIn { progress, target_volume, .. } => {
+            MusicPlayState::FadingIn {
+                progress,
+                target_volume,
+                ..
+            } => {
                 if let Some(sink) = &self.music_sink {
                     sink.set_volume(target_volume * progress * effective_volume);
                 }
             },
-            MusicPlayState::FadingOut { progress, start_volume, .. } => {
+            MusicPlayState::FadingOut {
+                progress,
+                start_volume,
+                ..
+            } => {
                 if let Some(sink) = &self.music_sink {
                     sink.set_volume(start_volume * (1.0 - progress) * effective_volume);
                 }

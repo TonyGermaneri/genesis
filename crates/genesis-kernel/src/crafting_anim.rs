@@ -544,8 +544,11 @@ impl CraftingProgress {
     pub fn add_sound_trigger(&mut self, trigger: SoundTrigger) {
         self.sound_triggers.push(trigger);
         // Sort by progress for efficient checking
-        self.sound_triggers
-            .sort_by(|a, b| a.progress.partial_cmp(&b.progress).unwrap_or(std::cmp::Ordering::Equal));
+        self.sound_triggers.sort_by(|a, b| {
+            a.progress
+                .partial_cmp(&b.progress)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     /// Check and return sound triggers that should fire.
@@ -641,8 +644,8 @@ impl AnimationPreset {
     #[must_use]
     pub fn forge() -> Self {
         Self {
-            start_sound: Some(100), // fire_start
-            complete_sound: Some(101), // anvil_ring
+            start_sound: Some(100),           // fire_start
+            complete_sound: Some(101),        // anvil_ring
             periodic_sound: Some((102, 0.3)), // hammer_hit
             emitters: vec![
                 CraftingParticleEmitter::sparks(),
@@ -655,8 +658,8 @@ impl AnimationPreset {
     #[must_use]
     pub fn alchemy() -> Self {
         Self {
-            start_sound: Some(200), // bubble_start
-            complete_sound: Some(201), // magic_complete
+            start_sound: Some(200),           // bubble_start
+            complete_sound: Some(201),        // magic_complete
             periodic_sound: Some((202, 0.5)), // bubble_pop
             emitters: vec![
                 CraftingParticleEmitter::new(CraftingParticleType::Bubbles)
@@ -671,7 +674,7 @@ impl AnimationPreset {
     #[must_use]
     pub fn enchanting() -> Self {
         Self {
-            start_sound: Some(300), // enchant_start
+            start_sound: Some(300),    // enchant_start
             complete_sound: Some(301), // enchant_complete
             periodic_sound: None,
             emitters: vec![CraftingParticleEmitter::magic()
@@ -684,7 +687,7 @@ impl AnimationPreset {
     #[must_use]
     pub fn basic() -> Self {
         Self {
-            start_sound: Some(1), // craft_start
+            start_sound: Some(1),    // craft_start
             complete_sound: Some(2), // craft_complete
             periodic_sound: None,
             emitters: vec![],
@@ -833,8 +836,7 @@ mod tests {
 
     #[test]
     fn test_particle_emitter() {
-        let emitter = CraftingParticleEmitter::smoke()
-            .with_progress_range(0.2, 0.8);
+        let emitter = CraftingParticleEmitter::smoke().with_progress_range(0.2, 0.8);
 
         assert!(!emitter.is_active_at(0.1));
         assert!(emitter.is_active_at(0.5));
@@ -856,12 +858,10 @@ mod tests {
     #[test]
     fn test_active_emitters() {
         let mut progress = CraftingProgress::new(1.0);
-        progress.add_particle_emitter(
-            CraftingParticleEmitter::smoke().with_progress_range(0.0, 0.5)
-        );
-        progress.add_particle_emitter(
-            CraftingParticleEmitter::sparks().with_progress_range(0.5, 1.0)
-        );
+        progress
+            .add_particle_emitter(CraftingParticleEmitter::smoke().with_progress_range(0.0, 0.5));
+        progress
+            .add_particle_emitter(CraftingParticleEmitter::sparks().with_progress_range(0.5, 1.0));
 
         progress.start();
 
