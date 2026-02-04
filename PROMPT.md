@@ -1,237 +1,65 @@
-# PROMPT — Gameplay Agent — Iteration 6
+# Iteration 7: Gameplay Agent Tasks
 
-> **Branch**: `gameplay-agent`
-> **Focus**: Terrain manipulation, top-down player controller, collision response, interaction system
-
-## Your Mission
-
-Make the world interactive! Players need to dig, place materials, and collide with terrain. Convert the platformer physics to smooth top-down movement.
-
----
+## Context
+You are the Gameplay Agent responsible for player mechanics, entities, and game systems.
+The game now has working top-down movement. This iteration adds environment interaction
+and weather/time systems.
 
 ## Tasks
 
-### G-25: Terrain Manipulation System (P0)
-**File**: `crates/genesis-gameplay/src/terrain_manipulation.rs`
+### G-29: Grass Interaction System (P0)
+**Goal:** Player can cut grass by interacting with it.
 
-Implement dig/place system for terrain modification:
+**Location:** `crates/genesis-gameplay/src/interaction.rs`
 
-```rust
-/// Actions the player can perform on terrain
-#[derive(Debug, Clone, Copy)]
-pub enum TerrainAction {
-    Dig { radius: f32 },
-    Place { material: u16, radius: f32 },
-    Fill { material: u16, radius: f32 },  // Only fills air
-}
+**Requirements:**
+1. Add CutGrass action to interaction system
+2. When player presses E near grass:
+   - Grass cell converts to cut grass material
+   - Player receives grass item
+   - Cut grass regrows over time
+3. Add grass-specific interaction radius
 
-/// Terrain manipulation system
-pub struct TerrainManipulator {
-    /// Current selected material for placing
-    pub selected_material: u16,
-    /// Dig/place radius
-    pub brush_radius: f32,
-    /// Cooldown between actions
-    pub action_cooldown: f32,
-    /// Time until next action allowed
-    cooldown_timer: f32,
-}
+### G-30: Weather State System (P0)
+**Goal:** Track weather state that affects environment simulation.
 
-impl TerrainManipulator {
-    pub fn new() -> Self;
-    
-    /// Attempt to perform terrain action at world position
-    /// Returns the cells that were modified
-    pub fn perform_action(
-        &mut self,
-        action: TerrainAction,
-        world_pos: (f32, f32),
-        chunk_manager: &mut ChunkManager,
-    ) -> Vec<(i32, i32, Cell)>;
-    
-    /// Update cooldown timer
-    pub fn update(&mut self, dt: f32);
-    
-    /// Check if action is ready
-    pub fn can_act(&self) -> bool;
-    
-    /// Set brush radius (clamped)
-    pub fn set_radius(&mut self, radius: f32);
-    
-    /// Cycle to next material
-    pub fn next_material(&mut self);
-    
-    /// Cycle to previous material
-    pub fn prev_material(&mut self);
-}
+**Location:** `crates/genesis-gameplay/src/weather.rs` (new file)
 
-/// Generate intent for GPU kernel to apply terrain change
-pub fn create_terrain_intent(
-    action: TerrainAction,
-    center: (i32, i32),
-) -> Vec<Intent>;
-```
+**Requirements:**
+1. Create WeatherSystem with states: Clear, Cloudy, Raining, Storm
+2. Weather transitions over time randomly
+3. Weather affects grass growth rate
+4. Rain fills water bodies, hydrates soil
+5. Expose weather state for kernel simulation
 
----
+### G-31: Time/Day Cycle System (P0)
+**Goal:** Game time system with day/night cycle.
 
-### G-26: Top-Down Player Controller (P0)
-**File**: `crates/genesis-gameplay/src/player.rs` (modify existing)
+**Location:** `crates/genesis-gameplay/src/time.rs` (new file)
 
-Convert platformer controller to top-down:
+**Requirements:**
+1. Create GameTime with time_of_day (0.0-1.0), day_count
+2. Time scale: 1 game minute = 1 real second
+3. Time affects lighting (passed to kernel)
+4. Helper methods: is_day(), is_night(), hour(), minute()
 
-```rust
-/// Top-down player configuration (replace PlayerConfig)
-#[derive(Debug, Clone)]
-pub struct TopDownPlayerConfig {
-    pub walk_speed: f32,        // Normal movement speed
-    pub run_speed: f32,         // Sprint speed (shift held)
-    pub acceleration: f32,      // How fast to reach target speed
-    pub friction: f32,          // How fast to stop (0-1, lower = more slide)
-    pub interaction_range: f32, // How far player can interact
-    pub dig_radius: f32,        // Default dig radius
-    pub place_radius: f32,      // Default place radius
-}
+### G-32: Plant Growth System (P1)
+**Goal:** Track plant entities and their growth lifecycle.
 
-impl Player {
-    /// Update for top-down movement (replace update method)
-    pub fn update_topdown(&mut self, input: &Input, terrain: &ChunkManager, dt: f32) {
-        // 1. Get input direction
-        // 2. Apply acceleration towards target velocity
-        // 3. Apply friction when no input
-        // 4. Check collision with terrain
-        // 5. Resolve collision (slide along walls)
-        // 6. Update position
-    }
-    
-    /// Get position player is aiming at (for dig/place)
-    pub fn aim_position(&self, mouse_world: (f32, f32)) -> (f32, f32);
-    
-    /// Check if player can interact with position
-    pub fn can_interact_at(&self, world_pos: (f32, f32)) -> bool;
-}
-```
+**Location:** `crates/genesis-gameplay/src/plants.rs` (new file)
 
-Key changes from platformer:
-- No gravity
-- Full 8-direction movement
-- Friction-based slowdown
-- Collision slides along walls instead of stopping
+**Requirements:**
+1. PlantRegistry for plant types with growth stages
+2. Growth affected by light, water, weather
+3. Mature plants can be harvested
+4. Integrate with grass cutting
 
----
+## Files to Create/Modify
+- crates/genesis-gameplay/src/weather.rs (new)
+- crates/genesis-gameplay/src/time.rs (new)
+- crates/genesis-gameplay/src/plants.rs (new)
+- crates/genesis-gameplay/src/interaction.rs
+- crates/genesis-gameplay/src/lib.rs
+- crates/genesis-gameplay/src/game_state.rs
 
-### G-27: Player-World Collision Response (P0)
-**File**: `crates/genesis-gameplay/src/collision_response.rs`
-
-Handle collision response for smooth movement:
-
-```rust
-/// Collision response behavior
-#[derive(Debug, Clone, Copy)]
-pub enum CollisionBehavior {
-    Stop,           // Stop movement on collision
-    Slide,          // Slide along surface
-    Bounce(f32),    // Bounce with coefficient
-}
-
-/// Process movement with collision
-pub fn move_with_collision(
-    position: &mut (f32, f32),
-    velocity: &mut (f32, f32),
-    radius: f32,
-    chunk_manager: &ChunkManager,
-    behavior: CollisionBehavior,
-    dt: f32,
-) -> bool;  // Returns true if collision occurred
-
-/// Slide movement along walls (feels good for RPG)
-pub fn slide_movement(
-    start: (f32, f32),
-    desired_end: (f32, f32),
-    radius: f32,
-    chunk_manager: &ChunkManager,
-) -> (f32, f32);  // Returns actual end position
-
-/// Check what terrain type player is standing on
-pub fn terrain_at_feet(
-    position: (f32, f32),
-    chunk_manager: &ChunkManager,
-) -> Option<u16>;
-```
-
----
-
-### G-28: Interaction System (P1)
-**File**: `crates/genesis-gameplay/src/interaction.rs` (extend)
-
-Wire up terrain manipulation to player input:
-
-```rust
-/// Player interaction handler
-pub struct InteractionHandler {
-    manipulator: TerrainManipulator,
-    interaction_mode: InteractionMode,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum InteractionMode {
-    Normal,     // Interact with objects
-    Dig,        // Primary action = dig
-    Place,      // Primary action = place
-    Inspect,    // Show cell info
-}
-
-impl InteractionHandler {
-    pub fn new() -> Self;
-    
-    /// Handle primary action (left click)
-    pub fn primary_action(
-        &mut self,
-        player: &Player,
-        world_pos: (f32, f32),
-        chunk_manager: &mut ChunkManager,
-    ) -> Option<InteractionResult>;
-    
-    /// Handle secondary action (right click)
-    pub fn secondary_action(
-        &mut self,
-        player: &Player,
-        world_pos: (f32, f32),
-        chunk_manager: &mut ChunkManager,
-    ) -> Option<InteractionResult>;
-    
-    /// Toggle interaction mode
-    pub fn set_mode(&mut self, mode: InteractionMode);
-    
-    /// Update (cooldowns, etc)
-    pub fn update(&mut self, dt: f32);
-}
-
-pub enum InteractionResult {
-    TerrainModified(Vec<(i32, i32)>),
-    ItemPickedUp(ItemTypeId),
-    ObjectInteracted(EntityId),
-    Nothing,
-}
-```
-
----
-
-## Validation
-
-After each task:
-```bash
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test -p genesis-gameplay
-```
-
-## Commit Format
-```
-[gameplay] feat: G-XX description
-```
-
-## Done Criteria
-- [ ] Left-click digs terrain, right-click places
-- [ ] Player slides smoothly along walls
-- [ ] Movement feels responsive (no ice skating, no instant stop)
-- [ ] Different terrain affects movement speed
+## Commit Format: [gameplay] feat: G-XX description
