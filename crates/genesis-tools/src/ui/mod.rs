@@ -9,9 +9,11 @@
 //! - Audio settings and debug tools
 //! - Crafting UI (grid, recipe book, preview, workbench)
 //! - Combat UI (health bars, combat HUD, equipment stats, combat debug)
+//! - Save/Load UI (save menu, save preview, autosave indicator, save management)
 
 pub mod audio_debug;
 pub mod audio_settings;
+pub mod autosave_indicator;
 pub mod biome;
 pub mod combat_debug;
 pub mod combat_hud;
@@ -23,12 +25,16 @@ pub mod health_bars;
 pub mod inventory;
 pub mod minimap;
 pub mod recipe_book;
+pub mod save_management;
+pub mod save_menu;
+pub mod save_preview;
 pub mod sound_test;
 pub mod stats;
 pub mod workbench_ui;
 
 pub use audio_debug::*;
 pub use audio_settings::*;
+pub use autosave_indicator::*;
 pub use biome::*;
 pub use combat_debug::*;
 pub use combat_hud::*;
@@ -40,6 +46,9 @@ pub use health_bars::*;
 pub use inventory::*;
 pub use minimap::*;
 pub use recipe_book::*;
+pub use save_management::*;
+pub use save_menu::*;
+pub use save_preview::*;
 pub use sound_test::*;
 pub use stats::*;
 pub use workbench_ui::*;
