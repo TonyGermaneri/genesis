@@ -79,7 +79,7 @@ impl GenesisApp {
 
         // Create gameplay state with a seed
         let seed = 42; // TODO: Make configurable or random
-        // Spawn player at center of chunk (128, 128) for 256x256 chunk
+                       // Spawn player at center of chunk (128, 128) for 256x256 chunk
         let mut gameplay = GameplayState::with_player_position(seed, (128.0, 100.0));
         // Set player as grounded for top-down movement
         gameplay.player.set_grounded(true);

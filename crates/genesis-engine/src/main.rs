@@ -15,6 +15,7 @@
 mod app;
 mod config;
 mod input;
+mod perf;
 mod renderer;
 mod timing;
 

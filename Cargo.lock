@@ -992,6 +992,7 @@ dependencies = [
  "genesis-common",
  "genesis-gameplay",
  "genesis-kernel",
+ "genesis-tools",
  "genesis-world",
  "pollster",
  "serde",
