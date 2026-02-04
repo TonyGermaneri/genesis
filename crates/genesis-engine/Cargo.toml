@@ -15,6 +15,7 @@ genesis-common = { path = "../genesis-common" }
 genesis-kernel = { path = "../genesis-kernel" }
 genesis-gameplay = { path = "../genesis-gameplay" }
 genesis-world = { path = "../genesis-world" }
+genesis-tools = { path = "../genesis-tools" }
 
 wgpu = { workspace = true }
 winit = { workspace = true }
