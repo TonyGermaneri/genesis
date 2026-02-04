@@ -1,87 +1,239 @@
-# Tools Agent — Current Prompt
+# PROMPT — Gameplay Agent — Iteration 3
 
-> Updated: 2026-02-03 — Iteration 2 by Orchestrator
+> **Branch**: `gameplay-agent`
+> **Focus**: Player physics, inventory UI data, crafting UI, save/load
 
-## Status
+## Your Mission
 
-✅ **Iteration 1 Complete!** T-1 through T-7 merged to main.
+Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
 
-Branch synced with main. Ready for Iteration 2.
+---
 
-## Next Priority Tasks
+## Tasks
 
-| ID | Task | Priority |
-|----|------|----------|
-| T-8 | Integration test harness | P0 |
-| T-9 | Automated screenshot tests | P1 |
-| T-10 | Memory profiler integration | P1 |
-| T-11 | Hot reload support | P2 |
+### G-13: Player Physics Integration (P0)
+**File**: `crates/genesis-gameplay/src/physics.rs`
 
-### T-8: Integration Test Harness
-
-Create a harness for end-to-end testing:
-- Headless mode (no window, software renderer)
-- Simulate N frames with scripted inputs
-- Assert on world state after simulation
-- Compare against golden files
+Integrate player movement with kernel collision:
 
 ```rust
-pub struct TestHarness {
-    world: World,
-    kernel: Kernel,
-    gameplay: Gameplay,
+use genesis_kernel::collision::CollisionQuery;
+
+pub struct PlayerPhysics {
+    pub gravity: f32,
+    pub move_speed: f32,
+    pub jump_velocity: f32,
+    pub friction: f32,
 }
 
-impl TestHarness {
-    pub fn new_headless() -> Self;
-    pub fn load_scenario(&mut self, path: &Path);
-    pub fn simulate(&mut self, frames: u32, inputs: &[Input]);
-    pub fn assert_cell(&self, pos: (u32, u32), expected: Cell);
-    pub fn assert_entity_exists(&self, id: EntityId);
-    pub fn snapshot(&self) -> WorldSnapshot;
+impl PlayerPhysics {
+    pub fn new() -> Self;
+    pub fn update(
+        &self,
+        player: &mut Player,
+        input: &InputState,
+        collision: &CollisionQuery,
+        dt: f32,
+    );
+    pub fn is_grounded(&self, player: &Player, collision: &CollisionQuery) -> bool;
 }
 ```
 
-### T-9: Automated Screenshot Tests
+Requirements:
+- AABB collision with cell grid
+- Gravity when not grounded
+- Wall sliding (don't stick to walls)
+- Jump only when grounded
+- Velocity clamping
 
-Visual regression testing:
-- Render frame to image buffer
-- Compare against golden screenshot
-- Report pixel differences
-- Store golden images in `tests/golden/`
+### G-14: Inventory UI Model (P0)
+**File**: `crates/genesis-gameplay/src/inventory_ui.rs`
+
+Prepare inventory data for UI rendering:
 
 ```rust
-pub fn screenshot_test(name: &str, harness: &TestHarness) -> TestResult {
-    let actual = harness.render_to_image();
-    let golden = load_golden(name)?;
-    compare_images(&actual, &golden, threshold: 0.01)
+pub struct InventoryUIModel {
+    pub slots: Vec<SlotUIData>,
+    pub selected_slot: Option<usize>,
+    pub drag_item: Option<ItemStack>,
+    pub tooltip: Option<TooltipData>,
+}
+
+pub struct SlotUIData {
+    pub index: usize,
+    pub item: Option<ItemStack>,
+    pub is_hotbar: bool,
+    pub is_selected: bool,
+}
+
+pub struct TooltipData {
+    pub item_name: String,
+    pub description: String,
+    pub stats: Vec<(String, String)>,
+}
+
+impl InventoryUIModel {
+    pub fn from_inventory(inv: &Inventory, hotbar_size: usize) -> Self;
+    pub fn handle_click(&mut self, slot: usize, button: MouseButton) -> InventoryAction;
+    pub fn handle_drag(&mut self, from: usize, to: usize) -> InventoryAction;
+}
+
+pub enum InventoryAction {
+    None,
+    Move { from: usize, to: usize },
+    Split { slot: usize },
+    Drop { slot: usize, count: u32 },
+    Use { slot: usize },
 }
 ```
 
-### T-10: Memory Profiler Integration
+Requirements:
+- Transform Inventory → display model
+- Handle slot click/drag actions
+- Return actions for Inventory to execute
+- Tooltip generation from item metadata
 
-Track memory usage:
-- Allocator wrapper that counts allocations
-- Per-system memory tracking (kernel, gameplay, world)
-- Memory usage in perf HUD
-- Detect memory leaks in tests
+### G-15: Crafting UI Model (P0)
+**File**: `crates/genesis-gameplay/src/crafting_ui.rs`
 
-### T-11: Hot Reload Support (stretch)
+Prepare crafting data for UI rendering:
 
-Reload assets without restart:
-- Watch material definitions
-- Watch shader files
-- Reload on file change
-- Useful for rapid iteration
+```rust
+pub struct CraftingUIModel {
+    pub available_recipes: Vec<RecipeUIData>,
+    pub selected_recipe: Option<usize>,
+    pub crafting_queue: Vec<CraftingQueueItem>,
+    pub filter: RecipeFilter,
+}
 
-## Rules
+pub struct RecipeUIData {
+    pub recipe_id: RecipeId,
+    pub name: String,
+    pub icon: String,
+    pub can_craft: bool,
+    pub missing_ingredients: Vec<String>,
+    pub inputs: Vec<IngredientUIData>,
+    pub outputs: Vec<IngredientUIData>,
+}
 
-1. Work ONLY in `crates/genesis-tools`
-2. Run validation after EVERY change
-3. Commit only when validation passes
+pub struct IngredientUIData {
+    pub item_name: String,
+    pub required: u32,
+    pub available: u32,
+}
 
-## Validation Command
+pub struct CraftingQueueItem {
+    pub recipe_id: RecipeId,
+    pub progress: f32,
+    pub time_remaining: f32,
+}
+
+pub enum RecipeFilter {
+    All,
+    Craftable,
+    Category(String),
+    Search(String),
+}
+
+impl CraftingUIModel {
+    pub fn from_state(
+        recipes: &[CraftingRecipe],
+        inventory: &Inventory,
+        queue: &CraftingQueue,
+        filter: RecipeFilter,
+    ) -> Self;
+    pub fn select_recipe(&mut self, index: usize);
+    pub fn queue_craft(&self) -> Option<RecipeId>;
+}
+```
+
+Requirements:
+- Filter recipes by craftability, category, search
+- Show ingredient availability
+- Display crafting queue progress
+- Sort by name/category/craftable
+
+### G-16: Save/Load Game State (P1)
+**File**: `crates/genesis-gameplay/src/save.rs`
+
+Implement game state serialization:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct SaveGame {
+    pub version: u32,
+    pub timestamp: u64,
+    pub player: PlayerSaveData,
+    pub entities: Vec<EntitySaveData>,
+    pub world_seed: u64,
+    pub game_time: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PlayerSaveData {
+    pub position: (f32, f32),
+    pub health: f32,
+    pub inventory: Vec<ItemStackSaveData>,
+    pub equipped: Vec<Option<ItemStackSaveData>>,
+}
+
+pub struct SaveManager {
+    save_dir: PathBuf,
+}
+
+impl SaveManager {
+    pub fn new(save_dir: PathBuf) -> Self;
+    pub fn save(&self, name: &str, data: &SaveGame) -> Result<(), SaveError>;
+    pub fn load(&self, name: &str) -> Result<SaveGame, SaveError>;
+    pub fn list_saves(&self) -> Vec<SaveMetadata>;
+    pub fn delete(&self, name: &str) -> Result<(), SaveError>;
+}
+
+pub struct SaveMetadata {
+    pub name: String,
+    pub timestamp: u64,
+    pub playtime: f64,
+}
+```
+
+Requirements:
+- Binary format (bincode) for compactness
+- Version field for migrations
+- Save metadata without loading full save
+- Atomic writes (write temp, rename)
+
+---
+
+## Validation Loop
+
+After each task:
 
 ```bash
-cargo fmt && cargo clippy -- -D warnings && cargo test
+cargo fmt
+cargo clippy -- -D warnings
+cargo test --workspace
 ```
+
+If ANY step fails, FIX IT before committing.
+
+---
+
+## Commit Convention
+
+```
+[gameplay] feat: G-13 player physics integration
+[gameplay] feat: G-14 inventory UI model
+[gameplay] feat: G-15 crafting UI model
+[gameplay] feat: G-16 save/load game state
+```
+
+---
+
+## Integration Notes
+
+- G-13 uses CollisionQuery from genesis-kernel (add dependency)
+- G-14/G-15 provide data models, actual UI in genesis-tools
+- G-16 coordinates with chunk save in genesis-world
+- Export new modules in lib.rs

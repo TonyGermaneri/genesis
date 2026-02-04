@@ -32,6 +32,7 @@ pub mod inventory_ui;
 pub mod needs;
 pub mod physics;
 pub mod player;
+pub mod save;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -48,6 +49,7 @@ pub mod prelude {
     pub use crate::needs::*;
     pub use crate::physics::*;
     pub use crate::player::*;
+    pub use crate::save::*;
 }
 
 pub use prelude::*;
