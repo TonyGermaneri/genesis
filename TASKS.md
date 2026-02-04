@@ -111,6 +111,10 @@
 | I-5 | Release artifact packaging | 🟢 | P2 |
 | I-6 | Mod package format | 🟢 | P2 |
 | I-7 | Cross-platform builds | 🟢 | P1 |
+| I-8 | Performance regression CI | 🟢 | P0 |
+| I-9 | Documentation site | 🟢 | P1 |
+| I-10 | Build telemetry | 🟢 | P1 |
+| I-11 | Docker development image | 🟢 | P2 |
 
 **Acceptance Criteria**:
 - CI runs on every PR
