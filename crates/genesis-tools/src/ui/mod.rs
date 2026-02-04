@@ -5,12 +5,15 @@
 //! - Player stats HUD (health, hunger, stamina)
 //! - Environment HUD (time, weather)
 //! - Chunk-based minimap
+//! - Biome visualization and debug tools
 
+pub mod biome;
 pub mod environment;
 pub mod inventory;
 pub mod minimap;
 pub mod stats;
 
+pub use biome::*;
 pub use environment::*;
 pub use inventory::*;
 pub use minimap::*;
