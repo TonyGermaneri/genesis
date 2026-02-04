@@ -19,6 +19,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod biome;
 pub mod collision_response;
 pub mod combat;
 pub mod crafting;
@@ -47,6 +48,7 @@ pub mod weather;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::biome::*;
     pub use crate::collision_response::*;
     pub use crate::combat::*;
     pub use crate::crafting::*;
