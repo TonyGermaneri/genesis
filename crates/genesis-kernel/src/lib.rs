@@ -50,6 +50,7 @@ pub mod edge;
 pub mod event;
 pub mod intent;
 pub mod lighting;
+pub mod particles;
 pub mod readback;
 pub mod render;
 pub mod streaming;
@@ -69,6 +70,7 @@ pub mod prelude {
     pub use crate::event::*;
     pub use crate::intent::*;
     pub use crate::lighting::*;
+    pub use crate::particles::*;
     pub use crate::readback::*;
     pub use crate::render::*;
     pub use crate::streaming::*;
