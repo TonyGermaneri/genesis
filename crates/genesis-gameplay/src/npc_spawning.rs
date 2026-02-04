@@ -197,7 +197,8 @@ impl NPCChunkSpawner {
         // Combine world seed with chunk position
         let x = chunk_pos.0 as u64;
         let y = chunk_pos.1 as u64;
-        self.config.seed
+        self.config
+            .seed
             .wrapping_mul(0x0005_DEEC_E66D)
             .wrapping_add(x.wrapping_mul(0x0123_4567))
             .wrapping_add(y.wrapping_mul(0x0765_4321))
