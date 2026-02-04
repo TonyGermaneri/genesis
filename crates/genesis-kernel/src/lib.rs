@@ -48,6 +48,7 @@ pub mod edge;
 pub mod event;
 pub mod intent;
 pub mod render;
+pub mod streaming;
 pub mod validation;
 
 /// Prelude for convenient imports
@@ -61,6 +62,7 @@ pub mod prelude {
     pub use crate::event::*;
     pub use crate::intent::*;
     pub use crate::render::*;
+    pub use crate::streaming::*;
     pub use crate::validation::*;
 }
 
