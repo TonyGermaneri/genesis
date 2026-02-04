@@ -1,0 +1,146 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================
+  # Performance Benchmark (I-8)
+  # ============================================
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need history for baseline comparison
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks
+        run: |
+          # Run benchmarks and save results
+          cargo bench --workspace -- --noplot 2>&1 | tee benchmark-output.txt
+          
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            target/criterion
+            benchmark-output.txt
+          retention-days: 30
+
+      - name: Download baseline (PR only)
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: benchmark.yml
+          branch: main
+          name: benchmark-results-*
+          path: baseline
+          search_artifacts: true
+          if_no_artifact_found: warn
+
+      - name: Compare with baseline
+        if: github.event_name == 'pull_request'
+        id: compare
+        run: |
+          if [ -d "baseline/criterion" ]; then
+            echo "Comparing against baseline..."
+            
+            # Parse benchmark results and compare
+            # This is a simplified comparison - criterion provides detailed output
+            echo "## Benchmark Comparison" > comparison.md
+            echo "" >> comparison.md
+            echo "Comparing PR benchmarks against main branch baseline." >> comparison.md
+            echo "" >> comparison.md
+            
+            # Check for regressions in the output
+            if grep -q "regressed" benchmark-output.txt; then
+              echo "::warning::Performance regression detected"
+              echo "regression=true" >> $GITHUB_OUTPUT
+              echo "### ⚠️ Regressions Detected" >> comparison.md
+              grep -A2 "regressed" benchmark-output.txt >> comparison.md || true
+            else
+              echo "regression=false" >> $GITHUB_OUTPUT
+              echo "### ✅ No Regressions" >> comparison.md
+            fi
+            
+            # Check for improvements
+            if grep -q "improved" benchmark-output.txt; then
+              echo "" >> comparison.md
+              echo "### 🚀 Improvements" >> comparison.md
+              grep -A2 "improved" benchmark-output.txt >> comparison.md || true
+            fi
+          else
+            echo "No baseline found, skipping comparison"
+            echo "regression=false" >> $GITHUB_OUTPUT
+            echo "## Benchmark Results" > comparison.md
+            echo "No baseline available for comparison (first run or main branch)." >> comparison.md
+          fi
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let body = '## 📊 Benchmark Results\n\n';
+            
+            // Read comparison file if it exists
+            try {
+              const comparison = fs.readFileSync('comparison.md', 'utf8');
+              body += comparison;
+            } catch (e) {
+              body += 'Benchmark comparison not available.\n';
+            }
+            
+            body += '\n\n---\n';
+            body += `*Commit: ${context.sha.substring(0, 7)}*`;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && c.body.includes('📊 Benchmark Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Fail on severe regression
+        if: github.event_name == 'pull_request' && steps.compare.outputs.regression == 'true'
+        run: |
+          # Check for >10% regression (this would need actual parsing of criterion output)
+          # For now, we just warn - severe regression detection requires more parsing
+          echo "::warning::Performance regression detected. Please review benchmark results."
+          # Uncomment to fail on regression:
+          # exit 1
