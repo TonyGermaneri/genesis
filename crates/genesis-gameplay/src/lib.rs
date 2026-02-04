@@ -34,6 +34,7 @@ pub mod needs;
 pub mod npc;
 pub mod physics;
 pub mod player;
+pub mod quest;
 pub mod save;
 pub mod vehicle;
 
@@ -54,6 +55,7 @@ pub mod prelude {
     pub use crate::npc::*;
     pub use crate::physics::*;
     pub use crate::player::*;
+    pub use crate::quest::*;
     pub use crate::save::*;
     pub use crate::vehicle::*;
 }
