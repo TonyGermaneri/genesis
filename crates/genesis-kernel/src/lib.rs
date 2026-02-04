@@ -53,6 +53,7 @@ pub mod readback;
 pub mod render;
 pub mod streaming;
 pub mod validation;
+pub mod worldgen;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -70,6 +71,7 @@ pub mod prelude {
     pub use crate::render::*;
     pub use crate::streaming::*;
     pub use crate::validation::*;
+    pub use crate::worldgen::*;
 }
 
 pub use prelude::*;
