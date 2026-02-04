@@ -474,7 +474,7 @@ fn vs_main(
     @builtin(instance_index) instance_idx: u32
 ) -> VertexOutput {
     let instance = instances[instance_idx];
-    
+
     // Quad vertices (two triangles)
     var positions = array<vec2<f32>, 6>(
         vec2<f32>(0.0, 0.0),
@@ -484,34 +484,34 @@ fn vs_main(
         vec2<f32>(1.0, 1.0),
         vec2<f32>(0.0, 1.0)
     );
-    
+
     let local_pos = positions[vertex_idx];
-    
+
     // World position
     let world_pos = instance.position + local_pos * instance.size;
-    
+
     // Convert to screen space
     let screen_pos = (world_pos - params.camera_pos) * params.zoom;
     let ndc = (screen_pos / params.screen_size) * 2.0 - 1.0;
-    
+
     var out: VertexOutput;
     out.position = vec4<f32>(ndc.x, -ndc.y, 0.0, 1.0);
     out.uv = instance.uv_offset + local_pos * instance.uv_size;
     out.tint = instance.tint;
-    
+
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tex_color = textureSample(sprite_texture, sprite_sampler, in.uv);
-    
+
     // Apply tint and discard transparent pixels
     let final_color = tex_color * in.tint;
     if final_color.a < 0.01 {
         discard;
     }
-    
+
     return final_color;
 }
 ";
@@ -552,7 +552,7 @@ fn vs_main(
     @builtin(instance_index) instance_idx: u32
 ) -> VertexOutput {
     let bubble = bubbles[instance_idx];
-    
+
     var positions = array<vec2<f32>, 6>(
         vec2<f32>(0.0, 0.0),
         vec2<f32>(1.0, 0.0),
@@ -561,19 +561,19 @@ fn vs_main(
         vec2<f32>(1.0, 1.0),
         vec2<f32>(0.0, 1.0)
     );
-    
+
     let local_pos = positions[vertex_idx];
     let world_pos = bubble.position + local_pos * bubble.size;
     let screen_pos = (world_pos - params.camera_pos) * params.zoom;
     let ndc = (screen_pos / params.screen_size) * 2.0 - 1.0;
-    
+
     var out: VertexOutput;
     out.position = vec4<f32>(ndc.x, -ndc.y, 0.0, 1.0);
     out.local_pos = local_pos * bubble.size;
     out.size = bubble.size;
     out.color = bubble.color;
     out.corner_radius = bubble.corner_radius;
-    
+
     return out;
 }
 
@@ -586,14 +586,14 @@ fn sd_rounded_rect(p: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let d = sd_rounded_rect(in.local_pos, in.size, in.corner_radius);
-    
+
     // Smooth edge
     let alpha = 1.0 - smoothstep(-1.0, 1.0, d);
-    
+
     if alpha < 0.01 {
         discard;
     }
-    
+
     return vec4<f32>(in.color.rgb, in.color.a * alpha);
 }
 ";
