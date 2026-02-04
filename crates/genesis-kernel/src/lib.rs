@@ -53,6 +53,8 @@ pub mod edge;
 pub mod event;
 pub mod intent;
 pub mod lighting;
+pub mod npc_collision;
+pub mod npc_render;
 pub mod particles;
 pub mod quadtree;
 pub mod readback;
@@ -80,6 +82,8 @@ pub mod prelude {
     pub use crate::event::*;
     pub use crate::intent::*;
     pub use crate::lighting::*;
+    pub use crate::npc_collision::*;
+    pub use crate::npc_render::*;
     pub use crate::particles::*;
     pub use crate::quadtree::*;
     pub use crate::readback::*;
