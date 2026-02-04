@@ -1,34 +1,35 @@
-# Iteration 11: Infra Agent - Crafting Integration
+# Iteration 12: Infra Agent - Combat Integration
 
 ## Objective
-Load recipes from assets, wire crafting to game systems, persist learned recipes.
+Wire combat events, load weapon data, persist combat state, and profile performance.
 
 ## Tasks
 
-### 1. Recipe Asset Loading (recipe_loader.rs)
-- Load recipes from assets/recipes/*.toml
-- Validate recipe data on load
-- Hot-reload recipes in debug mode
-- Recipe registry with fast lookup
+### 1. Combat Event System (combat_events.rs)
+- OnAttack: trigger sounds, particles, hitbox
+- OnHit: apply damage, knockback, effects
+- OnDeath: drop loot, play animation
+- OnBlock: reduce damage, play sound
 
-### 2. Crafting Event Integration (crafting_events.rs)
-- Wire CraftItem event to inventory system
-- Trigger crafting sounds on start/complete
-- Update player stats on craft
-- Achievement/quest triggers
+### 2. Weapon Data Loading (weapon_loader.rs)
+- Load weapons from assets/weapons/*.toml
+- WeaponData: damage, speed, reach, type
+- Validate weapon stats on load
+- Hot-reload for development
 
-### 3. Crafting Persistence (crafting_save.rs)
-- Save learned recipes to player save
-- Persist workbench contents on exit
-- Load crafting state on game load
-- Migration for recipe format changes
+### 3. Combat State Persistence (combat_save.rs)
+- Save player HP, stamina
+- Save active status effects
+- Save equipped weapon state
+- Load combat state on game load
 
-### 4. Crafting Profiling (crafting_profile.rs)
-- Measure recipe search performance
-- Track crafting frequency stats
-- Memory usage for recipe database
+### 4. Combat Profiling (combat_profile.rs)
+- Hitbox collision check timing
+- Projectile update timing
+- Combat event processing time
+- Entity combat update batching
 
 ### 5. Update Engine Integration
-- Add crafting to game loop
-- Wire workbench interaction to input
-- Connect UI to crafting system
+- Add combat to game loop
+- Wire input to attack actions
+- Connect UI to combat stats
