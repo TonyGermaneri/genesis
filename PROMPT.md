@@ -1,90 +1,126 @@
-# Kernel Agent — Iteration 8 Prompt
+# Tools Agent — Iteration 9 Prompt
 
 ## Context
 
-You are the **Kernel Agent** for Project Genesis, a 2D top-down game engine built with Rust/wgpu.
+You are the **Tools Agent** for Project Genesis, a 2D top-down game engine built with Rust and egui.
 
 **Current State:**
-- Multi-chunk streaming render is working (K-28)
-- Quadtree chunk activation for simulation (K-29)
-- Environment simulation shader for grass/rain (K-30)
-- Day/night cycle rendering (K-31)
-- Biome system exists in biome.rs with SimplexNoise, BiomeManager, BiomeConfig
-- WorldGenerator uses biomes for material selection
+- Biome minimap and debug info (T-32 to T-35)
+- Inventory UI, stats HUD complete
+- Weather/time HUD working
+- Debug panels for various systems
 
-**Iteration 8 Focus:** Enhance biome rendering with visual distinction and smooth transitions.
+**Iteration 9 Focus:** NPC-related UI: dialogue, debug overlays, spawn editor.
 
 ---
 
 ## Assigned Tasks
 
-### K-32: Biome-aware cell coloring (P0)
+### T-36: Dialogue UI panel (P0)
 
-**Goal:** Modify the render shader to use biome-specific color palettes.
+**Goal:** Display NPC dialogue with player choices.
 
 **Implementation:**
-1. Add biome_id field to RenderParams or compute from noise in shader
-2. Create color palettes for each biome:
-   - Forest: Lush greens (grass #4a7c23, dirt #8b6914)
-   - Desert: Warm yellows/oranges (sand #c2a655, sandstone #b8956e)
-   - Lake/Ocean: Blues (water #3a7ca5, deep #1e4d6b)
-   - Plains: Light greens/yellows (grass #7cb342, dirt #a08060)
-   - Mountain: Grays/whites (stone #7a7a7a, snow #e8e8e8)
-3. Use material_id AND biome_id to determine final color
+1. Create dialogue window that appears when talking to NPC
+2. Layout:
+   - NPC portrait/name at top
+   - Dialogue text in main area
+   - Choice buttons at bottom
+3. Features:
+   - Text typewriter effect (optional)
+   - Choice highlighting on hover
+   - Keyboard navigation (1-4 for choices)
+   - Close button / ESC to exit
+
+```rust
+pub struct DialoguePanel {
+    visible: bool,
+    npc_name: String,
+    npc_portrait: Option<TextureId>,
+    current_text: String,
+    choices: Vec<String>,
+    selected_choice: usize,
+}
+
+impl DialoguePanel {
+    pub fn show(&mut self, ctx: &egui::Context) -> Option<usize> {
+        // Returns selected choice index when player chooses
+    }
+}
+```
 
 **Files to modify:**
-- crates/genesis-kernel/src/render.rs
-- Inline WGSL shader code
+- Create `crates/genesis-tools/src/dialogue_ui.rs`
+- Update `lib.rs` to export
 
 ---
 
-### K-33: Biome transition blending (P0)
+### T-37: NPC debug overlay (P0)
 
-**Goal:** Smooth visual transitions between adjacent biomes.
+**Goal:** Debug visualization for NPC AI state.
 
 **Implementation:**
-1. Sample biome at neighboring cells in shader
-2. Apply gradient blending using noise-based weights
-3. Blend over 3-5 cells for natural transition
-4. Use dithering or noise for organic boundary appearance
+1. Overlay showing for each NPC (toggle with key):
+   - NPC ID and type
+   - Current state (Idle/Walking/etc)
+   - AI behavior (Patrol/Wander/etc)
+   - Target position (line to target)
+   - Collision radius (circle)
+   - Interaction radius (larger circle)
+   - Health bar above NPC
+
+2. In debug panel:
+   - Total NPC count
+   - NPCs per chunk
+   - AI update time
+   - Selected NPC details
 
 ---
 
-### K-34: Lake/water rendering (P0)
+### T-38: NPC spawn editor (P1)
 
-**Goal:** Add animated water shader for lake biomes.
+**Goal:** Debug tool to manually spawn/remove NPCs.
 
 **Implementation:**
-1. Detect water material cells in render shader (material_id == 4)
-2. Add wave animation using time uniform and sine functions
-3. Add subtle color variation based on depth
-4. Water should have slight transparency (alpha < 1.0)
+1. Spawn panel:
+   - Dropdown to select NPC type
+   - Click on world to spawn at location
+   - Or spawn at player position
+2. Remove:
+   - Click on NPC to select
+   - Delete button or key to remove
+3. List of spawned debug NPCs (separate from natural spawns)
 
 ---
 
-### K-35: Mountain/elevation rendering (P1)
+### T-39: NPC list panel (P1)
 
-**Goal:** Add elevation-based rendering for mountain biomes.
+**Goal:** List all NPCs in loaded chunks.
 
 **Implementation:**
-1. Use noise to generate elevation values
-2. Higher elevations get snow-capped appearance
-3. Add shadow/highlight based on light direction
+1. Scrollable list showing:
+   - NPC ID
+   - Type
+   - Position
+   - State
+   - Distance from player
+2. Click to select/highlight NPC
+3. "Teleport to" button for debugging
+4. Filter by type or state
 
 ---
 
 ## Constraints
 
-1. Performance: Biome calculations must not exceed 1ms per chunk
-2. GPU-friendly: Use uniforms, not per-cell CPU computation
-3. No gameplay logic: Only rendering
-4. Existing APIs: Use existing SimplexNoise and BiomeManager
-5. Backward compatible: Existing cell rendering must still work
+1. Use egui for all UI
+2. Consistent with existing UI style
+3. No direct NPC mutation - emit events/intents
+4. Toggle-able overlays (don't clutter screen)
 
 ---
 
 ## Commit Format
 
 ```
-[kernel] feat: K-32..K-35 Biome rendering with transitions and water animation
+[tools] feat: T-36..T-39 Dialogue UI and NPC debug tools
 ```
