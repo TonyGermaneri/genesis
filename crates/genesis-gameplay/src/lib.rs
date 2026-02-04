@@ -25,6 +25,7 @@ pub mod biome;
 pub mod collision_response;
 pub mod combat;
 pub mod crafting;
+pub mod crafting_progression;
 pub mod crafting_ui;
 pub mod dialogue;
 pub mod economy;
@@ -44,6 +45,7 @@ pub mod physics;
 pub mod plants;
 pub mod player;
 pub mod quest;
+pub mod recipes;
 pub mod save;
 pub mod sound_events;
 pub mod sound_triggers;
@@ -52,6 +54,7 @@ pub mod terrain_manipulation;
 pub mod time;
 pub mod vehicle;
 pub mod weather;
+pub mod workbench_types;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -61,6 +64,7 @@ pub mod prelude {
     pub use crate::collision_response::*;
     pub use crate::combat::*;
     pub use crate::crafting::*;
+    pub use crate::crafting_progression::*;
     pub use crate::crafting_ui::*;
     pub use crate::dialogue::*;
     pub use crate::economy::*;
@@ -80,6 +84,7 @@ pub mod prelude {
     pub use crate::plants::*;
     pub use crate::player::*;
     pub use crate::quest::*;
+    pub use crate::recipes::*;
     pub use crate::save::*;
     pub use crate::sound_events::*;
     pub use crate::sound_triggers::*;
@@ -88,6 +93,7 @@ pub mod prelude {
     pub use crate::time::*;
     pub use crate::vehicle::*;
     pub use crate::weather::*;
+    pub use crate::workbench_types::*;
 }
 
 pub use prelude::*;
