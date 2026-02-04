@@ -98,3 +98,48 @@ jobs:
         run: nix build --print-build-logs
       - name: Nix flake check
         run: nix flake check
+
+  # ============================================
+  # Build Telemetry (I-10)
+  # ============================================
+  telemetry:
+    name: Build Telemetry
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Collect build metrics
+        id: metrics
+        run: |
+          chmod +x scripts/telemetry.sh
+          ./scripts/telemetry.sh --json > telemetry.json
+          cat telemetry.json
+          
+          # Extract values for outputs
+          echo "build_time=$(jq -r '.build_time_seconds' telemetry.json)" >> $GITHUB_OUTPUT
+          echo "binary_size=$(jq -r '.binary_size_bytes' telemetry.json)" >> $GITHUB_OUTPUT
+          echo "dep_count=$(jq -r '.dependency_count' telemetry.json)" >> $GITHUB_OUTPUT
+
+      - name: Upload telemetry artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-${{ github.sha }}
+          path: |
+            telemetry.json
+            build.log
+          retention-days: 90
+
+      - name: Check binary size regression
+        run: |
+          CURRENT_SIZE=${{ steps.metrics.outputs.binary_size }}
+          # Set threshold at 100MB (adjust as needed)
+          THRESHOLD=104857600
+          
+          if [ "$CURRENT_SIZE" -gt "$THRESHOLD" ]; then
+            echo "::warning::Binary size ($CURRENT_SIZE bytes) exceeds threshold ($THRESHOLD bytes)"
+          fi
+          
+          echo "Binary size: $CURRENT_SIZE bytes"
