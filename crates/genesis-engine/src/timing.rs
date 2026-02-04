@@ -258,6 +258,115 @@ impl FpsCounter {
     }
 }
 
+/// Metrics for NPC system performance.
+#[derive(Debug, Clone)]
+pub struct NpcMetrics {
+    /// Recent NPC AI update times
+    ai_times: VecDeque<Duration>,
+    /// Peak AI update time in window
+    peak_ai_time: Duration,
+    /// Maximum samples to keep
+    max_samples: usize,
+    /// Current NPC count
+    npc_count: usize,
+    /// Frame time budget in milliseconds for NPC updates
+    frame_budget_ms: f64,
+}
+
+impl Default for NpcMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
+impl NpcMetrics {
+    /// Creates a new NPC metrics tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            ai_times: VecDeque::with_capacity(60),
+            peak_ai_time: Duration::ZERO,
+            max_samples: 60,
+            npc_count: 0,
+            frame_budget_ms: 2.0, // 2ms budget for NPC updates
+        }
+    }
+
+    /// Records an AI update time.
+    pub fn record_ai_time(&mut self, duration: Duration) {
+        // Track peak
+        if duration > self.peak_ai_time {
+            self.peak_ai_time = duration;
+        }
+
+        self.ai_times.push_back(duration);
+        if self.ai_times.len() > self.max_samples {
+            // When removing old samples, recalculate peak
+            self.ai_times.pop_front();
+            self.recalculate_peak();
+        }
+    }
+
+    /// Recalculates the peak AI time from current samples.
+    fn recalculate_peak(&mut self) {
+        self.peak_ai_time = self.ai_times.iter().copied().max().unwrap_or(Duration::ZERO);
+    }
+
+    /// Sets the current NPC count.
+    pub fn set_npc_count(&mut self, count: usize) {
+        self.npc_count = count;
+    }
+
+    /// Returns the current NPC count.
+    #[must_use]
+    pub fn npc_count(&self) -> usize {
+        self.npc_count
+    }
+
+    /// Returns the average AI update time in milliseconds.
+    #[must_use]
+    pub fn avg_ai_time_ms(&self) -> f64 {
+        if self.ai_times.is_empty() {
+            return 0.0;
+        }
+        let total: Duration = self.ai_times.iter().sum();
+        total.as_secs_f64() * 1000.0 / self.ai_times.len() as f64
+    }
+
+    /// Returns the peak AI update time in milliseconds.
+    #[must_use]
+    pub fn peak_ai_time_ms(&self) -> f64 {
+        self.peak_ai_time.as_secs_f64() * 1000.0
+    }
+
+    /// Returns the average time per NPC in microseconds.
+    #[must_use]
+    pub fn avg_time_per_npc_us(&self) -> f64 {
+        if self.npc_count == 0 {
+            return 0.0;
+        }
+        self.avg_ai_time_ms() * 1000.0 / self.npc_count as f64
+    }
+
+    /// Returns whether NPC processing exceeds the budget.
+    #[must_use]
+    pub fn exceeds_budget(&self) -> bool {
+        self.avg_ai_time_ms() > self.frame_budget_ms
+    }
+
+    /// Sets the frame budget for NPC updates.
+    pub fn set_budget(&mut self, budget_ms: f64) {
+        self.frame_budget_ms = budget_ms;
+    }
+
+    /// Clears all recorded metrics.
+    pub fn clear(&mut self) {
+        self.ai_times.clear();
+        self.peak_ai_time = Duration::ZERO;
+    }
+}
+
 /// Metrics for chunk loading and simulation performance.
 #[derive(Debug, Clone)]
 pub struct ChunkMetrics {

@@ -62,7 +62,7 @@ pub fn handle_npc_interaction(&mut self, input: &Input) {
             self.start_interaction(npc_id);
         }
     }
-    
+
     if self.in_dialogue {
         // Handle dialogue input
         if let Some(choice) = self.dialogue_ui.get_choice() {
