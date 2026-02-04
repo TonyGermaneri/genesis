@@ -34,10 +34,6 @@ use crate::combat_events::CombatEventHandler;
 use crate::combat_save::CombatPersistence;
 use crate::combat_profile::CombatProfiler;
 use crate::weapon_loader::WeaponLoader;
-use crate::crafting_events::CraftingEventHandler;
-use crate::crafting_save::CraftingPersistence;
-use crate::crafting_profile::CraftingProfiler;
-use crate::recipe_loader::RecipeLoader;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
