@@ -8,6 +8,8 @@ use bytemuck::{Pod, Zeroable};
 use tracing::info;
 use wgpu::{util::DeviceExt, Device};
 
+use crate::camera::Camera;
+
 /// Number of builtin material colors
 pub const NUM_MATERIAL_COLORS: usize = 16;
 
@@ -403,6 +405,25 @@ impl CellRenderPipeline {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&self.params));
     }
 
+    /// Updates render params from a Camera struct.
+    ///
+    /// This provides an ergonomic way to sync render params with the camera system.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn update_camera(&mut self, queue: &wgpu::Queue, camera: &Camera) {
+        self.params.camera_x = camera.position.0 as i32;
+        self.params.camera_y = camera.position.1 as i32;
+        self.params.zoom = camera.zoom;
+        self.params.screen_width = camera.viewport_size.0;
+        self.params.screen_height = camera.viewport_size.1;
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&self.params));
+    }
+
+    /// Sets the zoom level.
+    pub fn set_zoom(&mut self, queue: &wgpu::Queue, zoom: f32) {
+        self.params.zoom = zoom.max(0.1);
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&self.params));
+    }
+
     /// Creates a bind group for rendering.
     #[must_use]
     pub fn create_bind_group(
@@ -486,5 +507,23 @@ mod tests {
 
         // Water should be blue
         assert!(colors[1].b > colors[1].r);
+    }
+
+    #[test]
+    fn test_render_params_camera_sync() {
+        let mut params = RenderParams::default();
+        let camera = Camera::new(800, 600);
+
+        params.camera_x = camera.position.0 as i32;
+        params.camera_y = camera.position.1 as i32;
+        params.zoom = camera.zoom;
+        params.screen_width = camera.viewport_size.0;
+        params.screen_height = camera.viewport_size.1;
+
+        assert_eq!(params.camera_x, 0);
+        assert_eq!(params.camera_y, 0);
+        assert_eq!(params.zoom, 1.0);
+        assert_eq!(params.screen_width, 800);
+        assert_eq!(params.screen_height, 600);
     }
 }
