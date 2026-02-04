@@ -18,6 +18,7 @@ pub mod cell_inspector;
 pub mod chunk_viewer;
 pub mod console;
 pub mod crafting_ui;
+pub mod dialogue_ui;
 pub mod event_log;
 pub mod hot_reload;
 pub mod inspector;
@@ -38,6 +39,7 @@ pub mod prelude {
     pub use crate::chunk_viewer::*;
     pub use crate::console::*;
     pub use crate::crafting_ui::*;
+    pub use crate::dialogue_ui::*;
     pub use crate::event_log::*;
     pub use crate::hot_reload::*;
     pub use crate::inspector::*;
