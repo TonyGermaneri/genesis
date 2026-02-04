@@ -85,10 +85,14 @@
 
 | ID | Task | Status | Priority |
 |----|------|--------|----------|
-| I-12 | Asset pipeline | ⚪ | P0 |
-| I-13 | Localization system | ⚪ | P0 |
-| I-14 | Crash reporting | ⚪ | P1 |
-| I-15 | Telemetry & analytics | ⚪ | P2 |
+| I-12 | Asset pipeline | 🟢 | P0 |
+| I-13 | Localization system | 🟢 | P0 |
+| I-14 | Crash reporting | 🟢 | P1 |
+| I-15 | Telemetry & analytics | 🟢 | P2 |
+| I-16 | Input system integration | 🟢 | P0 |
+| I-17 | Main game loop integration | 🟢 | P0 |
+| I-18 | Engine configuration | 🟢 | P0 |
+| I-19 | Frame timing | 🟢 | P1 |
 
 ---
 
