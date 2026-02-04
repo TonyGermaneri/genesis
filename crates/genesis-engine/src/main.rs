@@ -16,6 +16,11 @@ mod app;
 mod config;
 mod renderer;
 
+/// Analytics module for opt-in gameplay telemetry
+pub mod analytics;
+/// Crash reporting and error capture
+pub mod crash_report;
+
 use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

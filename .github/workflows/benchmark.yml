@@ -30,7 +30,7 @@ jobs:
         run: |
           # Run benchmarks and save results
           cargo bench --workspace -- --noplot 2>&1 | tee benchmark-output.txt
-          
+
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
@@ -57,14 +57,14 @@ jobs:
         run: |
           if [ -d "baseline/criterion" ]; then
             echo "Comparing against baseline..."
-            
+
             # Parse benchmark results and compare
             # This is a simplified comparison - criterion provides detailed output
             echo "## Benchmark Comparison" > comparison.md
             echo "" >> comparison.md
             echo "Comparing PR benchmarks against main branch baseline." >> comparison.md
             echo "" >> comparison.md
-            
+
             # Check for regressions in the output
             if grep -q "regressed" benchmark-output.txt; then
               echo "::warning::Performance regression detected"
@@ -75,7 +75,7 @@ jobs:
               echo "regression=false" >> $GITHUB_OUTPUT
               echo "### ✅ No Regressions" >> comparison.md
             fi
-            
+
             # Check for improvements
             if grep -q "improved" benchmark-output.txt; then
               echo "" >> comparison.md
@@ -95,9 +95,9 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             let body = '## 📊 Benchmark Results\n\n';
-            
+
             // Read comparison file if it exists
             try {
               const comparison = fs.readFileSync('comparison.md', 'utf8');
@@ -105,21 +105,21 @@ jobs:
             } catch (e) {
               body += 'Benchmark comparison not available.\n';
             }
-            
+
             body += '\n\n---\n';
             body += `*Commit: ${context.sha.substring(0, 7)}*`;
-            
+
             // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            
-            const botComment = comments.find(c => 
+
+            const botComment = comments.find(c =>
               c.user.type === 'Bot' && c.body.includes('📊 Benchmark Results')
             );
-            
+
             if (botComment) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,

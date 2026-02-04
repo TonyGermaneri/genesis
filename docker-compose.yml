@@ -1,5 +1,5 @@
 # Genesis Development Docker Compose
-# 
+#
 # Usage:
 #   docker compose up dev          # Start development shell
 #   docker compose run dev bash    # Interactive bash

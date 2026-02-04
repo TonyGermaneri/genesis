@@ -1,7 +1,7 @@
-# PROMPT — Tools Agent — Iteration 3
+# PROMPT — Infra Agent — Iteration 4
 
-> **Branch**: `tools-agent`
-> **Focus**: Inventory UI rendering, crafting UI rendering, minimap, debug console
+> **Branch**: `infra-agent`
+> **Focus**: Asset pipeline, localization, crash reporting, analytics
 
 ## Your Mission
 
@@ -11,199 +11,276 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### T-12: Inventory UI Renderer (P0)
-**File**: `crates/genesis-tools/src/inventory_ui.rs`
+### I-12: Asset Pipeline (P0)
+**File**: `crates/genesis-tools/src/assets.rs` and `scripts/build_assets.sh`
 
-Render inventory using egui:
+Implement asset loading and processing:
 
 ```rust
-use egui::{Context, Window, Grid, Image, Response};
-use genesis_gameplay::inventory_ui::{InventoryUIModel, InventoryAction, SlotUIData};
+use std::path::{Path, PathBuf};
+use serde::{Serialize, Deserialize};
 
-pub struct InventoryUI {
-    pub is_open: bool,
-    slot_size: f32,
-    hotbar_y: f32,
+pub struct AssetManager {
+    base_path: PathBuf,
+    cache: HashMap<AssetId, CachedAsset>,
+    manifest: AssetManifest,
 }
 
-impl InventoryUI {
-    pub fn new() -> Self;
+#[derive(Serialize, Deserialize)]
+pub struct AssetManifest {
+    pub version: u32,
+    pub assets: HashMap<String, AssetEntry>,
+}
 
-    pub fn show(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction>;
+#[derive(Serialize, Deserialize)]
+pub struct AssetEntry {
+    pub path: String,
+    pub asset_type: AssetType,
+    pub hash: String,
+    pub size: u64,
+    pub compressed: bool,
+}
 
-    pub fn show_hotbar(&mut self, ctx: &Context, model: &InventoryUIModel) -> Option<InventoryAction>;
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub enum AssetType {
+    Texture,
+    Sound,
+    Music,
+    Font,
+    Shader,
+    Data,
+    Localization,
+}
 
-    fn render_slot(&self, ui: &mut egui::Ui, slot: &SlotUIData) -> Response;
+pub struct CachedAsset {
+    pub data: Vec<u8>,
+    pub asset_type: AssetType,
+    pub loaded_at: std::time::Instant,
+}
 
-    fn render_tooltip(&self, ui: &mut egui::Ui, tooltip: &TooltipData);
+impl AssetManager {
+    pub fn new(base_path: impl AsRef<Path>) -> Result<Self, AssetError>;
+
+    pub fn load(&mut self, id: &str) -> Result<&CachedAsset, AssetError>;
+    pub fn load_async(&mut self, id: &str) -> AssetHandle;
+    pub fn unload(&mut self, id: &str);
+
+    pub fn preload_group(&mut self, group: &str);
+    pub fn get_memory_usage(&self) -> usize;
+    pub fn clear_cache(&mut self);
+}
+
+pub enum AssetError {
+    NotFound(String),
+    IoError(std::io::Error),
+    DecompressionError,
+    ManifestCorrupt,
+}
+```
+
+Also create `scripts/build_assets.sh`:
+```bash
+#!/bin/bash
+# Build and compress game assets
+
+set -e
+
+ASSET_DIR="${1:-assets}"
+OUTPUT_DIR="${2:-target/assets}"
+
+echo "Building assets from $ASSET_DIR to $OUTPUT_DIR"
+
+# Create manifest, compress textures, etc.
+```
+
+Requirements:
+- Manifest-based asset tracking
+- LZ4 compression for large assets
+- Async loading with handles
+- Memory budget enforcement
+- Hot reload in debug mode
+
+### I-13: Localization System (P0)
+**File**: `crates/genesis-tools/src/localization.rs`
+
+Implement multi-language support:
+
+```rust
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+
+pub struct Localization {
+    current_locale: String,
+    strings: HashMap<String, HashMap<String, String>>, // locale -> key -> value
+    fallback_locale: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LocaleFile {
+    pub locale: String,
+    pub name: String,
+    pub strings: HashMap<String, String>,
+}
+
+impl Localization {
+    pub fn new(default_locale: &str) -> Self;
+
+    pub fn load_locale(&mut self, path: impl AsRef<Path>) -> Result<(), LocaleError>;
+    pub fn set_locale(&mut self, locale: &str) -> Result<(), LocaleError>;
+    pub fn get_locale(&self) -> &str;
+    pub fn available_locales(&self) -> Vec<&str>;
+
+    pub fn get(&self, key: &str) -> &str;
+    pub fn get_formatted(&self, key: &str, args: &[(&str, &str)]) -> String;
+    pub fn get_plural(&self, key: &str, count: u32) -> String;
+}
+
+// Macro for compile-time key checking (optional)
+#[macro_export]
+macro_rules! t {
+    ($loc:expr, $key:literal) => {
+        $loc.get($key)
+    };
+    ($loc:expr, $key:literal, $($arg:tt)*) => {
+        $loc.get_formatted($key, &[$($arg)*])
+    };
+}
+```
+
+Create locale files structure:
+```
+assets/locales/
+├── en.json
+├── es.json
+├── fr.json
+├── de.json
+├── ja.json
+└── zh.json
+```
+
+Requirements:
+- JSON locale files
+- Fallback to default locale
+- Format string interpolation
+- Plural forms support
+- Runtime language switching
+
+### I-14: Crash Reporting (P1)
+**File**: `crates/genesis-engine/src/crash_report.rs`
+
+Implement crash capture and reporting:
+
+```rust
+use std::panic;
+use backtrace::Backtrace;
+
+pub struct CrashReporter {
+    report_dir: PathBuf,
+    app_version: String,
+    enabled: bool,
+}
+
+#[derive(Serialize)]
+pub struct CrashReport {
+    pub timestamp: String,
+    pub app_version: String,
+    pub os: String,
+    pub arch: String,
+    pub panic_message: String,
+    pub backtrace: String,
+    pub system_info: SystemInfo,
+    pub recent_logs: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct SystemInfo {
+    pub os_version: String,
+    pub cpu: String,
+    pub ram_mb: u64,
+    pub gpu: Option<String>,
+}
+
+impl CrashReporter {
+    pub fn new(report_dir: impl AsRef<Path>, app_version: &str) -> Self;
+
+    pub fn install_panic_hook(&self);
+
+    fn capture_crash(&self, panic_info: &panic::PanicInfo) -> CrashReport;
+    fn write_report(&self, report: &CrashReport) -> Result<PathBuf, std::io::Error>;
+
+    pub fn get_pending_reports(&self) -> Vec<PathBuf>;
+    pub fn submit_report(&self, path: &Path) -> Result<(), ReportError>;
+    pub fn delete_report(&self, path: &Path);
+}
+
+pub enum ReportError {
+    IoError(std::io::Error),
+    NetworkError(String),
+    ServerError(u16),
 }
 ```
 
 Requirements:
-- Grid layout for inventory slots
-- Hotbar always visible at bottom
-- Drag and drop between slots
-- Right-click context menu (use, drop, split)
-- Tooltip on hover
-- Item count overlay on slot
+- Custom panic hook
+- Backtrace capture
+- System info collection
+- Report file persistence
+- Optional upload (disabled by default)
 
-### T-13: Crafting UI Renderer (P0)
-**File**: `crates/genesis-tools/src/crafting_ui.rs`
+### I-15: Telemetry & Analytics (P2)
+**File**: `crates/genesis-engine/src/analytics.rs`
 
-Render crafting interface using egui:
+Implement opt-in gameplay analytics:
 
 ```rust
-use egui::{Context, Window, ScrollArea};
-use genesis_gameplay::crafting_ui::{CraftingUIModel, RecipeUIData};
+use serde::Serialize;
 
-pub struct CraftingUI {
-    pub is_open: bool,
-    search_text: String,
+pub struct Analytics {
+    enabled: bool,
+    session_id: String,
+    events: Vec<AnalyticsEvent>,
+    flush_interval: std::time::Duration,
 }
 
-impl CraftingUI {
-    pub fn new() -> Self;
-
-    pub fn show(&mut self, ctx: &Context, model: &mut CraftingUIModel) -> Option<CraftRequest>;
-
-    fn render_recipe_list(&mut self, ui: &mut egui::Ui, model: &CraftingUIModel) -> Option<usize>;
-
-    fn render_recipe_detail(&self, ui: &mut egui::Ui, recipe: &RecipeUIData);
-
-    fn render_crafting_queue(&self, ui: &mut egui::Ui, model: &CraftingUIModel);
+#[derive(Serialize)]
+pub struct AnalyticsEvent {
+    pub timestamp: u64,
+    pub event_type: String,
+    pub properties: HashMap<String, serde_json::Value>,
 }
 
-pub struct CraftRequest {
-    pub recipe_id: RecipeId,
-    pub count: u32,
+pub struct AnalyticsConfig {
+    pub enabled: bool,
+    pub endpoint: Option<String>,
+    pub flush_interval_secs: u64,
+    pub batch_size: usize,
+}
+
+impl Analytics {
+    pub fn new(config: AnalyticsConfig) -> Self;
+
+    pub fn track(&mut self, event_type: &str, properties: HashMap<String, serde_json::Value>);
+
+    // Pre-defined events
+    pub fn track_session_start(&mut self);
+    pub fn track_session_end(&mut self, play_time_secs: u64);
+    pub fn track_level_complete(&mut self, level: &str, time_secs: u64);
+    pub fn track_death(&mut self, cause: &str, location: (f32, f32));
+    pub fn track_achievement(&mut self, achievement: &str);
+
+    pub fn flush(&mut self);
+
+    pub fn set_enabled(&mut self, enabled: bool);
+    pub fn is_enabled(&self) -> bool;
 }
 ```
 
 Requirements:
-- Recipe list with filter/search
-- Recipe detail panel (ingredients, outputs)
-- "Craft" button (disabled if can't craft)
-- Crafting queue with progress bars
-- Visual feedback for missing ingredients
-
-### T-14: Minimap Renderer (P1)
-**File**: `crates/genesis-tools/src/minimap.rs`
-
-Implement minimap display:
-
-```rust
-use egui::{Context, Painter, Rect, Color32};
-
-pub struct Minimap {
-    pub is_visible: bool,
-    pub size: f32,
-    pub zoom: f32,
-    texture: Option<egui::TextureHandle>,
-}
-
-pub struct MinimapData {
-    pub player_pos: (f32, f32),
-    pub player_rotation: f32,
-    pub entities: Vec<MinimapEntity>,
-    pub terrain_colors: Vec<u8>,  // RGBA for terrain
-    pub width: u32,
-    pub height: u32,
-}
-
-pub struct MinimapEntity {
-    pub pos: (f32, f32),
-    pub entity_type: MinimapEntityType,
-}
-
-pub enum MinimapEntityType {
-    Player,
-    NPC,
-    Enemy,
-    Item,
-    Building,
-}
-
-impl Minimap {
-    pub fn new(size: f32) -> Self;
-
-    pub fn show(&mut self, ctx: &Context, data: &MinimapData);
-
-    pub fn update_terrain(&mut self, ctx: &Context, colors: &[u8], width: u32, height: u32);
-
-    fn world_to_minimap(&self, world_pos: (f32, f32), center: (f32, f32)) -> Option<(f32, f32)>;
-}
-```
-
-Requirements:
-- Corner overlay (top-right by default)
-- Terrain texture from chunk data
-- Entity markers with icons/colors
-- Player arrow showing direction
-- Zoom in/out controls
-- Click to set waypoint (optional)
-
-### T-15: Debug Console (P1)
-**File**: `crates/genesis-tools/src/console.rs`
-
-Implement in-game debug console:
-
-```rust
-use egui::{Context, Window, TextEdit, ScrollArea};
-
-pub struct DebugConsole {
-    pub is_open: bool,
-    input_buffer: String,
-    history: Vec<ConsoleEntry>,
-    command_history: Vec<String>,
-    history_index: Option<usize>,
-}
-
-pub struct ConsoleEntry {
-    pub timestamp: f64,
-    pub level: ConsoleLevel,
-    pub message: String,
-}
-
-pub enum ConsoleLevel {
-    Info,
-    Warning,
-    Error,
-    Command,
-    Result,
-}
-
-pub trait ConsoleCommand {
-    fn name(&self) -> &str;
-    fn help(&self) -> &str;
-    fn execute(&self, args: &[&str]) -> String;
-}
-
-impl DebugConsole {
-    pub fn new() -> Self;
-
-    pub fn show(&mut self, ctx: &Context, commands: &[Box<dyn ConsoleCommand>]) -> Option<String>;
-
-    pub fn log(&mut self, level: ConsoleLevel, message: String);
-
-    pub fn execute(&mut self, input: &str, commands: &[Box<dyn ConsoleCommand>]);
-}
-
-// Built-in commands
-pub struct HelpCommand;
-pub struct ClearCommand;
-pub struct TeleportCommand;
-pub struct SpawnCommand;
-pub struct GiveCommand;
-pub struct SetTimeCommand;
-```
-
-Requirements:
-- Toggle with backtick/tilde key
-- Command history (up/down arrows)
-- Tab completion for commands
-- Color-coded output levels
-- Scrollable history
-- Built-in debug commands
+- Disabled by default (opt-in)
+- Local event buffering
+- Batch submission
+- No PII collection
+- Session tracking
 
 ---
 
@@ -224,18 +301,28 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[tools] feat: T-12 inventory UI renderer
-[tools] feat: T-13 crafting UI renderer
-[tools] feat: T-14 minimap renderer
-[tools] feat: T-15 debug console
+[infra] feat: I-12 asset pipeline
+[infra] feat: I-13 localization system
+[infra] feat: I-14 crash reporting
+[infra] feat: I-15 telemetry and analytics
+```
+
+---
+
+## Dependencies
+
+Add to `crates/genesis-engine/Cargo.toml`:
+```toml
+backtrace = "0.3"
+lz4 = "1.24"
 ```
 
 ---
 
 ## Integration Notes
 
-- T-12/T-13 consume data models from genesis-gameplay
-- Add genesis-gameplay dependency if not present
-- Use egui 0.30 (already in workspace)
-- Export new modules in lib.rs
-- Test with mock data if gameplay types not available
+- I-12 assets used by all crates for loading resources
+- I-13 localization integrated with all UI
+- I-14 crash reporter installed at startup
+- I-15 analytics tracks gameplay events
+- Create sample locale files in `assets/locales/`

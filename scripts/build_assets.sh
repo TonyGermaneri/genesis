@@ -80,21 +80,21 @@ if [ -d "$ASSET_DIR" ]; then
     find "$ASSET_DIR" -type f | while read -r file; do
         # Get relative path
         rel_path="${file#$ASSET_DIR/}"
-        
+
         # Get asset ID (path without extension)
         asset_id="${rel_path%.*}"
-        
+
         # Get asset info
         asset_type=$(get_asset_type "$file")
         file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo 0)
         file_hash=$(get_hash "$file")
-        
+
         # Determine if we should compress (files > 10KB)
         compressed="false"
         output_file="$OUTPUT_DIR/$rel_path"
-        
+
         mkdir -p "$(dirname "$output_file")"
-        
+
         if [ "$file_size" -gt 10240 ] && command -v lz4 &> /dev/null; then
             # Compress with LZ4
             lz4 -9 -f "$file" "$output_file.lz4" 2>/dev/null && {
@@ -108,14 +108,14 @@ if [ -d "$ASSET_DIR" ]; then
             # Copy without compression
             cp "$file" "$output_file"
         fi
-        
+
         # Add to manifest
         if [ "$FIRST" = true ]; then
             FIRST=false
         else
             echo "," >> "$MANIFEST_FILE"
         fi
-        
+
         cat >> "$MANIFEST_FILE" << EOF
     "$asset_id": {
       "path": "$rel_path",
@@ -125,7 +125,7 @@ if [ -d "$ASSET_DIR" ]; then
       "compressed": $compressed
     }
 EOF
-        
+
         echo "  ✓ $asset_id ($asset_type, ${file_size} bytes)"
     done
 fi
