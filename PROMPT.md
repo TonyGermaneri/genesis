@@ -1,343 +1,346 @@
-# PROMPT — Infra Agent — Iteration 5
+# PROMPT — Infra Agent — Iteration 6
 
 > **Branch**: `infra-agent`
-> **Focus**: App.rs integration, main loop, input handling, config
+> **Focus**: Wire egui into render loop, multi-chunk terrain, player z-index fix, performance profiling
 
 ## Your Mission
 
-Wire up the engine main loop in `app.rs`. This is the CRITICAL integration task. Complete these tasks sequentially, validating after each.
+Integrate all the new systems into the main engine. The player should render above terrain, egui UI should appear on top of everything, and multi-chunk rendering should be wired up.
 
 ---
 
 ## Tasks
 
-### I-16: Input System Integration (P0)
-**File**: `crates/genesis-engine/src/input.rs`
+### I-20: Egui in Main Render Loop (P0)
+**File**: `crates/genesis-engine/src/renderer.rs`
 
-Handle all input and convert to game actions:
-
-```rust
-use winit::event::{WindowEvent, KeyEvent, ElementState, MouseButton};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use genesis_gameplay::input::InputState;
-
-pub struct InputHandler {
-    current_state: InputState,
-    keys_pressed: HashSet<KeyCode>,
-    mouse_position: (f32, f32),
-    mouse_buttons: HashSet<MouseButton>,
-}
-
-impl InputHandler {
-    pub fn new() -> Self;
-
-    /// Handle a winit window event, returns true if handled
-    pub fn handle_event(&mut self, event: &WindowEvent) -> bool;
-
-    /// Get current input state for gameplay
-    pub fn state(&self) -> &InputState;
-
-    /// Check if a key is currently held
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool;
-
-    /// Check if a key was just pressed this frame
-    pub fn is_key_just_pressed(&self, key: KeyCode) -> bool;
-
-    /// Get mouse position in screen coordinates
-    pub fn mouse_position(&self) -> (f32, f32);
-
-    /// Reset per-frame state (call at end of frame)
-    pub fn end_frame(&mut self);
-}
-
-/// Map physical keys to game input state
-impl InputState {
-    pub fn from_handler(handler: &InputHandler) -> Self {
-        Self {
-            move_left: handler.is_key_pressed(KeyCode::KeyA) || handler.is_key_pressed(KeyCode::ArrowLeft),
-            move_right: handler.is_key_pressed(KeyCode::KeyD) || handler.is_key_pressed(KeyCode::ArrowRight),
-            move_up: handler.is_key_pressed(KeyCode::KeyW) || handler.is_key_pressed(KeyCode::ArrowUp),
-            move_down: handler.is_key_pressed(KeyCode::KeyS) || handler.is_key_pressed(KeyCode::ArrowDown),
-            jump: handler.is_key_pressed(KeyCode::Space),
-            action_primary: handler.mouse_buttons.contains(&MouseButton::Left),
-            action_secondary: handler.mouse_buttons.contains(&MouseButton::Right),
-            // ... etc
-        }
-    }
-}
-```
-
-Requirements:
-- WASD + Arrow keys for movement
-- Space for jump
-- Mouse buttons for actions
-- Number keys 1-9,0 for hotbar
-- F3 for debug overlay
-- Escape for pause/menu
-- Track just-pressed vs held
-
-### I-17: Main Game Loop Integration (P0)
-**File**: Update `crates/genesis-engine/src/app.rs`
-
-Integrate all subsystems into the main loop:
+Integrate egui rendering into the main render pipeline:
 
 ```rust
-use genesis_gameplay::GameplaySystem;
-use genesis_kernel::{Camera, TerrainRenderer, WorldInitializer};
-use genesis_tools::{EguiIntegration, GameHUD, FpsCounter};
-use crate::input::InputHandler;
-
-struct GenesisApp {
-    // Existing fields...
-    config: EngineConfig,
-    window: Option<Window>,
-    renderer: Option<Renderer>,
-
-    // NEW: Game systems
-    gameplay: Option<GameplaySystem>,
-    terrain: Option<TerrainRenderer>,
-    camera: Option<Camera>,
-    egui: Option<EguiIntegration>,
-    hud: Option<GameHUD>,
-    input: InputHandler,
-    fps_counter: FpsCounter,
-    last_update: std::time::Instant,
+pub struct Renderer {
+    // ... existing fields ...
+    
+    /// Egui integration for UI
+    egui: EguiIntegration,
 }
 
-impl ApplicationHandler for GenesisApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // ... existing window/renderer creation ...
-
-        // Initialize game systems
-        let seed = self.config.world_seed.unwrap_or_else(|| rand::random());
-
-        // Initialize terrain renderer
-        let mut terrain = TerrainRenderer::new(seed, self.renderer.device());
-        let world_init = WorldInitializer::new(seed);
-        world_init.generate_starting_area(&mut terrain, self.renderer.device());
-
-        // Initialize gameplay
-        let spawn_point = world_init.find_spawn_position(&terrain);
-        let mut gameplay = GameplaySystem::new(seed);
-        gameplay.initialize(spawn_point);
-
-        // Initialize camera centered on player
-        let mut camera = Camera::new(self.config.window_width, self.config.window_height);
-        camera.center_on(spawn_point.0, spawn_point.1);
-
+impl Renderer {
+    pub async fn new(window: &Window) -> Result<Self> {
+        // ... existing init ...
+        
         // Initialize egui
         let egui = EguiIntegration::new(
-            self.renderer.device(),
-            self.renderer.surface_format(),
-            &window,
+            &device,
+            config.format,
+            window,
+            1, // No MSAA for now
         );
-
-        // Store systems
-        self.terrain = Some(terrain);
-        self.gameplay = Some(gameplay);
-        self.camera = Some(camera);
-        self.egui = Some(egui);
-        self.hud = Some(GameHUD::new());
+        
+        // ...
     }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-        // Let egui handle event first
-        if let Some(egui) = &mut self.egui {
-            if egui.handle_event(&self.window.as_ref().unwrap(), &event) {
-                return; // egui consumed the event
-            }
-        }
-
-        // Handle input
-        self.input.handle_event(&event);
-
-        match event {
-            WindowEvent::RedrawRequested => {
-                self.update_and_render();
-            },
-            // ... other events
-        }
+    
+    /// Handle window events - returns true if egui consumed event
+    pub fn handle_event(&mut self, window: &Window, event: &WindowEvent) -> bool {
+        self.egui.handle_event(window, event)
     }
-}
-
-impl GenesisApp {
-    fn update_and_render(&mut self) {
-        let now = std::time::Instant::now();
-        let dt = (now - self.last_update).as_secs_f32();
-        self.last_update = now;
-
-        let (fps, frame_time) = self.fps_counter.tick();
-
-        // Update gameplay
-        if let (Some(gameplay), Some(terrain), Some(camera)) =
-            (&mut self.gameplay, &mut self.terrain, &mut self.camera)
-        {
-            let input_state = InputState::from_handler(&self.input);
-            gameplay.update(&input_state, terrain.collision_query(), dt);
-
-            // Update camera to follow player
-            let player_pos = gameplay.player_position();
-            camera.center_on(player_pos.0, player_pos.1);
-
-            // Update visible terrain
-            terrain.update_visible(camera);
-            terrain.generate_pending(self.renderer.device(), 2);
-        }
-
-        // Render
-        if let Some(renderer) = &mut self.renderer {
-            // ... render terrain with camera
-            // ... render egui HUD
-        }
-
-        self.input.end_frame();
+    
+    /// Main render with UI
+    pub fn render_with_ui<F>(
+        &mut self,
+        window: &Window,
+        camera: &Camera,
+        gameplay: &GameState,
+        ui_callback: F,
+    ) -> Result<()>
+    where
+        F: FnOnce(&egui::Context),
+    {
+        // 1. Begin egui frame
+        self.egui.begin_frame(window);
+        
+        // 2. Call UI callback (HUD, inventory, etc.)
+        ui_callback(self.egui.context());
+        
+        // 3. End egui frame
+        let egui_output = self.egui.end_frame(window);
+        
+        // 4. Get surface texture
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&Default::default());
+        
+        // 5. Create encoder
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        
+        // 6. Render game world (terrain, entities)
+        self.render_world(&mut encoder, &view, camera, gameplay);
+        
+        // 7. Render player marker ABOVE terrain
+        self.render_player(&mut encoder, &view, camera, gameplay);
+        
+        // 8. Render egui UI on top of everything
+        self.egui.render(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &view,
+            &self.screen_descriptor(),
+            egui_output,
+        );
+        
+        // 9. Submit and present
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+        
+        Ok(())
     }
 }
 ```
-
-Requirements:
-- Proper delta time calculation
-- Input → gameplay → camera → render pipeline
-- Terrain streaming based on camera
-- HUD rendering after game world
-- Pause when escape pressed
-
-### I-18: Engine Configuration (P0)
-**File**: Update `crates/genesis-engine/src/config.rs`
-
-Expand engine configuration:
-
-```rust
-use serde::{Serialize, Deserialize};
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EngineConfig {
-    // Window settings
-    pub window_width: u32,
-    pub window_height: u32,
-    pub fullscreen: bool,
-    pub vsync: bool,
-
-    // World settings
-    pub world_seed: Option<u64>,
-    pub render_distance: u32,  // in chunks
-
-    // Graphics settings
-    pub cell_scale: f32,
-    pub enable_particles: bool,
-    pub enable_lighting: bool,
-
-    // Debug settings
-    pub show_fps: bool,
-    pub show_debug_overlay: bool,
-}
-
-impl Default for EngineConfig {
-    fn default() -> Self {
-        Self {
-            window_width: 1280,
-            window_height: 720,
-            fullscreen: false,
-            vsync: true,
-            world_seed: None,
-            render_distance: 4,
-            cell_scale: 4.0,
-            enable_particles: true,
-            enable_lighting: true,
-            show_fps: true,
-            show_debug_overlay: false,
-        }
-    }
-}
-
-impl EngineConfig {
-    /// Load from file or return default
-    pub fn load() -> Self;
-
-    /// Save to file
-    pub fn save(&self) -> Result<(), std::io::Error>;
-}
-```
-
-Requirements:
-- Sensible defaults
-- Optional config file loading
-- All tunable parameters exposed
-
-### I-19: Frame Timing & Performance (P1)
-**File**: `crates/genesis-engine/src/timing.rs`
-
-Proper frame timing:
-
-```rust
-pub struct FrameTiming {
-    target_fps: u32,
-    frame_budget: std::time::Duration,
-    last_frame: std::time::Instant,
-    accumulator: f32,
-    fixed_dt: f32,
-}
-
-impl FrameTiming {
-    pub fn new(target_fps: u32) -> Self;
-
-    /// Get time since last frame
-    pub fn delta_time(&mut self) -> f32;
-
-    /// For fixed timestep physics (call in loop)
-    pub fn should_update_fixed(&mut self) -> bool;
-
-    /// Sleep to maintain target framerate (if vsync off)
-    pub fn sleep_remainder(&self);
-
-    /// Get current FPS
-    pub fn current_fps(&self) -> f32;
-}
-```
-
-Requirements:
-- Smooth delta time
-- Fixed timestep option for physics
-- FPS limiting when vsync off
-- Prevent spiral of death
 
 ---
 
-## Validation Loop
+### I-21: Multi-Chunk Terrain Integration (P0)
+**File**: `crates/genesis-engine/src/renderer.rs`
+
+Replace single chunk rendering with ChunkManager:
+
+```rust
+pub struct Renderer {
+    // Remove: cell_buffer: CellBuffer,
+    // Add:
+    chunk_manager: ChunkManager,
+    world_generator: Box<dyn WorldGenerator>,
+}
+
+impl Renderer {
+    /// Render all visible chunks
+    fn render_world(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        camera: &Camera,
+        gameplay: &GameState,
+    ) {
+        // Update visible chunks based on camera
+        self.chunk_manager.update_visible(camera, self.world_generator.as_ref());
+        
+        // Begin render pass
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("World Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1, g: 0.15, b: 0.2, a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+        
+        // Render each visible chunk
+        for chunk in self.chunk_manager.visible_chunks() {
+            self.render_chunk(&mut render_pass, chunk, camera);
+        }
+    }
+}
+```
+
+---
+
+### I-22: Player Z-Index Fix (P0)
+**File**: `crates/genesis-kernel/src/render.rs`
+
+Fix player marker to render above terrain. Options:
+1. Render player in a separate pass after terrain
+2. Use depth buffer with player at lower depth
+3. Render player as a UI element
+
+**Recommended approach** - Add player rendering uniform:
+
+```rust
+/// Render params now include player position
+#[repr(C)]
+pub struct RenderParams {
+    // ... existing fields ...
+    
+    /// Player world position X
+    pub player_x: f32,
+    /// Player world position Y  
+    pub player_y: f32,
+    /// Player marker radius (in cells)
+    pub player_radius: f32,
+    /// Whether to show player marker
+    pub show_player: u32,
+}
+```
+
+Update the shader to draw player marker AFTER terrain color is determined:
+
+```wgsl
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // ... calculate terrain color ...
+    
+    // Draw player marker on top of terrain
+    // Convert player world position to screen position
+    let player_screen_x = (params.player_x - f32(params.camera_x)) * params.zoom;
+    let player_screen_y = (params.player_y - f32(params.camera_y)) * params.zoom;
+    
+    // Offset to screen center
+    let center_offset_x = f32(params.screen_width) / 2.0;
+    let center_offset_y = f32(params.screen_height) / 2.0;
+    
+    let final_player_x = player_screen_x + center_offset_x;
+    let final_player_y = player_screen_y + center_offset_y;
+    
+    let pixel_x = in.uv.x * f32(params.screen_width);
+    let pixel_y = in.uv.y * f32(params.screen_height);
+    
+    let dist = sqrt(
+        (pixel_x - final_player_x) * (pixel_x - final_player_x) +
+        (pixel_y - final_player_y) * (pixel_y - final_player_y)
+    );
+    
+    let marker_size = params.player_radius * params.zoom;
+    
+    if dist < marker_size * 0.5 {
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0); // White core
+    } else if dist < marker_size * 0.75 {
+        return vec4<f32>(0.0, 1.0, 1.0, 1.0); // Cyan ring
+    } else if dist < marker_size {
+        return vec4<f32>(0.0, 0.3, 0.3, 1.0); // Dark outline
+    }
+    
+    return terrain_color;
+}
+```
+
+---
+
+### I-23: Performance Profiling (P1)
+**File**: `crates/genesis-engine/src/perf.rs` (new)
+
+Add performance monitoring:
+
+```rust
+/// Performance metrics collector
+pub struct PerfMetrics {
+    frame_times: VecDeque<f32>,
+    update_times: VecDeque<f32>,
+    render_times: VecDeque<f32>,
+    chunk_count: u32,
+    cell_count: u64,
+}
+
+impl PerfMetrics {
+    pub fn new(history_size: usize) -> Self;
+    
+    /// Record frame timing
+    pub fn record_frame(&mut self, total: f32, update: f32, render: f32);
+    
+    /// Get average FPS
+    pub fn avg_fps(&self) -> f32;
+    
+    /// Get 1% low FPS
+    pub fn low_fps(&self) -> f32;
+    
+    /// Get average frame time
+    pub fn avg_frame_time(&self) -> f32;
+    
+    /// Update chunk/cell counts
+    pub fn set_world_stats(&mut self, chunks: u32, cells: u64);
+    
+    /// Get summary for debug display
+    pub fn summary(&self) -> PerfSummary;
+}
+
+pub struct PerfSummary {
+    pub fps: f32,
+    pub fps_1_percent_low: f32,
+    pub frame_time_ms: f32,
+    pub update_time_ms: f32,
+    pub render_time_ms: f32,
+    pub chunks_loaded: u32,
+    pub cells_simulated: u64,
+}
+```
+
+**Integration**: Display in debug overlay (F3):
+```
+FPS: 60 (1% low: 55)
+Frame: 16.6ms (Update: 2.1ms, Render: 8.3ms)
+Chunks: 9 loaded (589,824 cells)
+Camera: (128.5, 100.2) Zoom: 4.0x
+Player: (128.5, 100.2) vel: (0.0, 0.0)
+```
+
+---
+
+## App.rs Integration
+
+Update `crates/genesis-engine/src/app.rs` to use new systems:
+
+```rust
+fn render(&mut self) {
+    if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+        // Render with UI callback
+        let result = renderer.render_with_ui(
+            window,
+            &self.camera,
+            &self.gameplay,
+            |ctx| {
+                // Render HUD
+                self.hud.render(ctx, &HUDState {
+                    player: &self.gameplay.player,
+                    health: &self.player_health,
+                    inventory: &self.player_inventory,
+                    hotbar_selection: self.hotbar_slot,
+                    fps: self.current_fps,
+                    player_position: self.gameplay.player.position().into(),
+                    current_material: self.selected_material,
+                });
+                
+                // Render inventory if open
+                if self.show_inventory {
+                    self.inventory_panel.render(ctx, &mut self.player_inventory);
+                }
+                
+                // Render crafting if open
+                if self.show_crafting {
+                    self.crafting_panel.render(ctx, &self.recipes, &self.player_inventory);
+                }
+            },
+        );
+        
+        if let Err(e) = result {
+            warn!("Render error: {e}");
+        }
+    }
+}
+```
+
+---
+
+## Validation
 
 After each task:
-
 ```bash
-cargo fmt
+cargo fmt --check
 cargo clippy -- -D warnings
-cargo test --workspace
+cargo test -p genesis-engine
 ```
 
-If ANY step fails, FIX IT before committing.
-
----
-
-## Commit Convention
-
+## Commit Format
 ```
-[infra] feat: I-16 input system integration
-[infra] feat: I-17 main game loop integration
-[infra] feat: I-18 engine configuration
-[infra] feat: I-19 frame timing
+[infra] feat: I-XX description
 ```
 
----
-
-## Integration Notes
-
-- I-16 input bridges winit → gameplay input state
-- I-17 is the MAIN integration task - wire everything together
-- I-18 config used throughout engine
-- I-19 timing ensures smooth gameplay
-
-**CRITICAL**: Task I-17 must make the game actually playable:
-- Arrow keys/WASD move player
-- Camera follows player
-- Terrain generates as you explore
-- HUD shows health/hotbar
-- F3 shows debug info
+## Done Criteria
+- [ ] Egui UI renders on top of game world
+- [ ] Multi-chunk terrain renders seamlessly
+- [ ] Player marker is visible above terrain
+- [ ] Performance metrics displayed in debug overlay
+- [ ] No regressions in frame rate
