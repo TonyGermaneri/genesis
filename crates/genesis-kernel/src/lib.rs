@@ -53,9 +53,12 @@ pub mod chunk;
 pub mod chunk_manager;
 pub mod collision;
 pub mod compute;
+pub mod crafting_anim;
+pub mod crafting_grid;
 pub mod edge;
 pub mod event;
 pub mod intent;
+pub mod item_stack;
 pub mod lighting;
 pub mod npc_collision;
 pub mod npc_render;
@@ -67,6 +70,7 @@ pub mod streaming;
 pub mod terrain_render;
 pub mod topdown_physics;
 pub mod validation;
+pub mod workbench;
 pub mod world_init;
 pub mod worldgen;
 
@@ -82,9 +86,20 @@ pub mod prelude {
     pub use crate::chunk_manager::*;
     pub use crate::collision::*;
     pub use crate::compute::*;
+    // Crafting modules use explicit imports to avoid conflicts
+    pub use crate::crafting_anim::{
+        AnimationPreset, AnimationState, CraftingProgress, SoundTrigger,
+    };
+    pub use crate::crafting_grid::{
+        CraftingGrid, CraftingResult, ExtractedPattern, ItemSlot, RecipeMatcher, RecipePattern,
+        RecipeType,
+    };
     pub use crate::edge::*;
     pub use crate::event::*;
     pub use crate::intent::*;
+    pub use crate::item_stack::{
+        CompactStack, ItemMetadata, ItemStack, ItemStackBuilder, StackResult,
+    };
     pub use crate::lighting::*;
     pub use crate::npc_collision::*;
     pub use crate::npc_render::*;
@@ -96,6 +111,9 @@ pub mod prelude {
     pub use crate::terrain_render::*;
     pub use crate::topdown_physics::*;
     pub use crate::validation::*;
+    pub use crate::workbench::{
+        CraftingStation, CraftingStationBuilder, StationRegistry, WorkbenchType, WorkbenchZone,
+    };
     pub use crate::world_init::*;
     pub use crate::worldgen::*;
 }

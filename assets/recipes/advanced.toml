@@ -1,0 +1,142 @@
+# Advanced Crafting Recipes
+# Requires higher skill levels and workstations
+
+version = "1.0.0"
+
+[[recipes]]
+id = 100
+name = "Iron Sword"
+description = "A sturdy iron sword"
+category = "weapons"
+skill_type = "smithing"
+skill_required = 5
+craft_time_ticks = 180
+skill_gain = 10
+workstation = 101  # Forge
+
+[recipes.output]
+item_id = 200
+quantity = 1
+quality_variance = 0.2
+
+[[recipes.ingredients]]
+item_id = 100  # Iron ingot
+quantity = 3
+
+[[recipes.ingredients]]
+item_id = 1    # Wood (handle)
+quantity = 1
+
+[[recipes.tools]]
+# Requires hammer (item 50)
+item_id = 50
+
+
+[[recipes]]
+id = 101
+name = "Iron Pickaxe"
+description = "A durable iron pickaxe"
+category = "tools"
+skill_type = "smithing"
+skill_required = 3
+craft_time_ticks = 150
+skill_gain = 8
+workstation = 101  # Forge
+
+[recipes.output]
+item_id = 201
+quantity = 1
+quality_variance = 0.15
+
+[[recipes.ingredients]]
+item_id = 100  # Iron ingot
+quantity = 2
+
+[[recipes.ingredients]]
+item_id = 1    # Wood (handle)
+quantity = 2
+
+[[recipes.tools]]
+item_id = 50  # Hammer
+
+
+[[recipes]]
+id = 102
+name = "Iron Armor Plate"
+description = "A protective iron plate"
+category = "armor"
+skill_type = "smithing"
+skill_required = 7
+craft_time_ticks = 240
+skill_gain = 15
+workstation = 101  # Forge
+
+[recipes.output]
+item_id = 300
+quantity = 1
+quality_variance = 0.25
+
+[[recipes.ingredients]]
+item_id = 100  # Iron ingot
+quantity = 5
+
+[[recipes.ingredients]]
+item_id = 101  # Leather straps
+quantity = 2
+
+[[recipes.tools]]
+item_id = 50  # Hammer
+
+
+[[recipes]]
+id = 103
+name = "Health Potion"
+description = "Restores health over time"
+category = "consumables"
+skill_type = "chemistry"
+skill_required = 2
+craft_time_ticks = 90
+skill_gain = 5
+workstation = 102  # Chemistry Bench
+
+[recipes.output]
+item_id = 400
+quantity = 2
+quality_variance = 0.1
+
+[[recipes.ingredients]]
+item_id = 110  # Red herb
+quantity = 2
+
+[[recipes.ingredients]]
+item_id = 111  # Purified water
+quantity = 1
+
+
+[[recipes]]
+id = 104
+name = "Circuit Board"
+description = "Basic electronic component"
+category = "materials"
+skill_type = "electronics"
+skill_required = 4
+craft_time_ticks = 120
+skill_gain = 8
+workstation = 103  # Electronics Bench
+
+[recipes.output]
+item_id = 500
+quantity = 1
+quality_variance = 0.3
+
+[[recipes.ingredients]]
+item_id = 120  # Copper wire
+quantity = 5
+
+[[recipes.ingredients]]
+item_id = 121  # Plastic sheet
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 122  # Solder
+quantity = 2
