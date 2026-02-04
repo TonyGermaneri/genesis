@@ -34,6 +34,7 @@ pub mod inventory_ui;
 pub mod localization;
 pub mod memory_profiler;
 pub mod minimap;
+pub mod npc_debug;
 pub mod perf;
 pub mod perf_hud;
 pub mod quest_ui;
@@ -66,6 +67,7 @@ pub mod prelude {
     pub use crate::localization::*;
     pub use crate::memory_profiler::*;
     pub use crate::minimap::*;
+    pub use crate::npc_debug::*;
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
     pub use crate::quest_ui::*;
