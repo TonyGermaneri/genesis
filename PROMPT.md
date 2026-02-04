@@ -1,216 +1,305 @@
-# PROMPT — Tools Agent — Iteration 5
+# PROMPT — Infra Agent — Iteration 5
 
-> **Branch**: `tools-agent`
-> **Focus**: HUD integration, inventory hotbar, debug overlay, egui setup
+> **Branch**: `infra-agent`
+> **Focus**: App.rs integration, main loop, input handling, config
 
 ## Your Mission
 
-Wire up the UI subsystems for visible gameplay. Complete these tasks sequentially, validating after each.
+Wire up the engine main loop in `app.rs`. This is the CRITICAL integration task. Complete these tasks sequentially, validating after each.
 
 ---
 
 ## Tasks
 
-### T-20: Egui Integration Layer (P0)
-**File**: `crates/genesis-tools/src/egui_integration.rs`
+### I-16: Input System Integration (P0)
+**File**: `crates/genesis-engine/src/input.rs`
 
-Set up egui for in-game UI:
+Handle all input and convert to game actions:
 
 ```rust
-use egui::{Context, FullOutput};
-use egui_wgpu::Renderer as EguiRenderer;
-use egui_winit::State as EguiWinit;
-use winit::window::Window;
+use winit::event::{WindowEvent, KeyEvent, ElementState, MouseButton};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use genesis_gameplay::input::InputState;
 
-pub struct EguiIntegration {
-    context: Context,
-    state: EguiWinit,
-    renderer: EguiRenderer,
+pub struct InputHandler {
+    current_state: InputState,
+    keys_pressed: HashSet<KeyCode>,
+    mouse_position: (f32, f32),
+    mouse_buttons: HashSet<MouseButton>,
 }
 
-impl EguiIntegration {
-    pub fn new(
-        device: &wgpu::Device,
-        output_format: wgpu::TextureFormat,
-        window: &Window,
-    ) -> Self;
+impl InputHandler {
+    pub fn new() -> Self;
 
-    /// Handle winit window event, returns true if egui consumed it
-    pub fn handle_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> bool;
+    /// Handle a winit window event, returns true if handled
+    pub fn handle_event(&mut self, event: &WindowEvent) -> bool;
 
-    /// Begin frame - call before any UI code
-    pub fn begin_frame(&mut self, window: &Window);
+    /// Get current input state for gameplay
+    pub fn state(&self) -> &InputState;
 
-    /// End frame and get paint jobs
-    pub fn end_frame(&mut self, window: &Window) -> FullOutput;
+    /// Check if a key is currently held
+    pub fn is_key_pressed(&self, key: KeyCode) -> bool;
 
-    /// Render egui output
-    pub fn render(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
-        screen_descriptor: egui_wgpu::ScreenDescriptor,
-        output: FullOutput,
-    );
+    /// Check if a key was just pressed this frame
+    pub fn is_key_just_pressed(&self, key: KeyCode) -> bool;
 
-    /// Get egui context for UI code
-    pub fn context(&self) -> &Context;
+    /// Get mouse position in screen coordinates
+    pub fn mouse_position(&self) -> (f32, f32);
+
+    /// Reset per-frame state (call at end of frame)
+    pub fn end_frame(&mut self);
+}
+
+/// Map physical keys to game input state
+impl InputState {
+    pub fn from_handler(handler: &InputHandler) -> Self {
+        Self {
+            move_left: handler.is_key_pressed(KeyCode::KeyA) || handler.is_key_pressed(KeyCode::ArrowLeft),
+            move_right: handler.is_key_pressed(KeyCode::KeyD) || handler.is_key_pressed(KeyCode::ArrowRight),
+            move_up: handler.is_key_pressed(KeyCode::KeyW) || handler.is_key_pressed(KeyCode::ArrowUp),
+            move_down: handler.is_key_pressed(KeyCode::KeyS) || handler.is_key_pressed(KeyCode::ArrowDown),
+            jump: handler.is_key_pressed(KeyCode::Space),
+            action_primary: handler.mouse_buttons.contains(&MouseButton::Left),
+            action_secondary: handler.mouse_buttons.contains(&MouseButton::Right),
+            // ... etc
+        }
+    }
 }
 ```
 
 Requirements:
-- Clean egui-wgpu-winit setup
-- Event handling passthrough
-- Proper frame lifecycle
-- Screen scaling support
+- WASD + Arrow keys for movement
+- Space for jump
+- Mouse buttons for actions
+- Number keys 1-9,0 for hotbar
+- F3 for debug overlay
+- Escape for pause/menu
+- Track just-pressed vs held
 
-### T-21: Game HUD Renderer (P0)
-**File**: `crates/genesis-tools/src/game_hud.rs`
+### I-17: Main Game Loop Integration (P0)
+**File**: Update `crates/genesis-engine/src/app.rs`
 
-Render the main gameplay HUD:
+Integrate all subsystems into the main loop:
 
 ```rust
-use egui::Context;
-use genesis_gameplay::{Player, Inventory};
+use genesis_gameplay::GameplaySystem;
+use genesis_kernel::{Camera, TerrainRenderer, WorldInitializer};
+use genesis_tools::{EguiIntegration, GameHUD, FpsCounter};
+use crate::input::InputHandler;
 
-pub struct GameHUD {
-    show_debug: bool,
-    show_inventory: bool,
+struct GenesisApp {
+    // Existing fields...
+    config: EngineConfig,
+    window: Option<Window>,
+    renderer: Option<Renderer>,
+
+    // NEW: Game systems
+    gameplay: Option<GameplaySystem>,
+    terrain: Option<TerrainRenderer>,
+    camera: Option<Camera>,
+    egui: Option<EguiIntegration>,
+    hud: Option<GameHUD>,
+    input: InputHandler,
+    fps_counter: FpsCounter,
+    last_update: std::time::Instant,
 }
 
-impl GameHUD {
-    pub fn new() -> Self;
+impl ApplicationHandler for GenesisApp {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // ... existing window/renderer creation ...
 
-    /// Render the full HUD
-    pub fn render(
-        &mut self,
-        ctx: &Context,
-        player: &Player,
-        inventory: &Inventory,
-        fps: f32,
-        frame_time: f32,
-    );
+        // Initialize game systems
+        let seed = self.config.world_seed.unwrap_or_else(|| rand::random());
 
-    /// Render health/stamina bars (top-left)
-    fn render_vitals(&self, ctx: &Context, player: &Player);
+        // Initialize terrain renderer
+        let mut terrain = TerrainRenderer::new(seed, self.renderer.device());
+        let world_init = WorldInitializer::new(seed);
+        world_init.generate_starting_area(&mut terrain, self.renderer.device());
 
-    /// Render hotbar (bottom-center)
-    fn render_hotbar(&self, ctx: &Context, inventory: &Inventory);
+        // Initialize gameplay
+        let spawn_point = world_init.find_spawn_position(&terrain);
+        let mut gameplay = GameplaySystem::new(seed);
+        gameplay.initialize(spawn_point);
 
-    /// Render debug info (top-right, toggleable)
-    fn render_debug(&self, ctx: &Context, fps: f32, frame_time: f32, player: &Player);
+        // Initialize camera centered on player
+        let mut camera = Camera::new(self.config.window_width, self.config.window_height);
+        camera.center_on(spawn_point.0, spawn_point.1);
 
-    /// Toggle debug overlay
-    pub fn toggle_debug(&mut self);
+        // Initialize egui
+        let egui = EguiIntegration::new(
+            self.renderer.device(),
+            self.renderer.surface_format(),
+            &window,
+        );
 
-    /// Toggle inventory panel
-    pub fn toggle_inventory(&mut self);
+        // Store systems
+        self.terrain = Some(terrain);
+        self.gameplay = Some(gameplay);
+        self.camera = Some(camera);
+        self.egui = Some(egui);
+        self.hud = Some(GameHUD::new());
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        // Let egui handle event first
+        if let Some(egui) = &mut self.egui {
+            if egui.handle_event(&self.window.as_ref().unwrap(), &event) {
+                return; // egui consumed the event
+            }
+        }
+
+        // Handle input
+        self.input.handle_event(&event);
+
+        match event {
+            WindowEvent::RedrawRequested => {
+                self.update_and_render();
+            },
+            // ... other events
+        }
+    }
+}
+
+impl GenesisApp {
+    fn update_and_render(&mut self) {
+        let now = std::time::Instant::now();
+        let dt = (now - self.last_update).as_secs_f32();
+        self.last_update = now;
+
+        let (fps, frame_time) = self.fps_counter.tick();
+
+        // Update gameplay
+        if let (Some(gameplay), Some(terrain), Some(camera)) =
+            (&mut self.gameplay, &mut self.terrain, &mut self.camera)
+        {
+            let input_state = InputState::from_handler(&self.input);
+            gameplay.update(&input_state, terrain.collision_query(), dt);
+
+            // Update camera to follow player
+            let player_pos = gameplay.player_position();
+            camera.center_on(player_pos.0, player_pos.1);
+
+            // Update visible terrain
+            terrain.update_visible(camera);
+            terrain.generate_pending(self.renderer.device(), 2);
+        }
+
+        // Render
+        if let Some(renderer) = &mut self.renderer {
+            // ... render terrain with camera
+            // ... render egui HUD
+        }
+
+        self.input.end_frame();
+    }
 }
 ```
 
 Requirements:
-- Health bar with color gradient
-- Hotbar with 10 slots (1-9, 0)
-- Selected slot highlight
-- Debug info: FPS, position, velocity, chunk
-- Minimap placeholder
+- Proper delta time calculation
+- Input → gameplay → camera → render pipeline
+- Terrain streaming based on camera
+- HUD rendering after game world
+- Pause when escape pressed
 
-### T-22: Hotbar Widget (P0)
-**File**: `crates/genesis-tools/src/hotbar.rs`
+### I-18: Engine Configuration (P0)
+**File**: Update `crates/genesis-engine/src/config.rs`
 
-Focused hotbar implementation:
+Expand engine configuration:
 
 ```rust
-use egui::{Context, Ui, Response};
-use genesis_gameplay::inventory::{Inventory, ItemStack};
+use serde::{Serialize, Deserialize};
 
-pub struct Hotbar {
-    selected_slot: usize,
-    slot_size: f32,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EngineConfig {
+    // Window settings
+    pub window_width: u32,
+    pub window_height: u32,
+    pub fullscreen: bool,
+    pub vsync: bool,
+
+    // World settings
+    pub world_seed: Option<u64>,
+    pub render_distance: u32,  // in chunks
+
+    // Graphics settings
+    pub cell_scale: f32,
+    pub enable_particles: bool,
+    pub enable_lighting: bool,
+
+    // Debug settings
+    pub show_fps: bool,
+    pub show_debug_overlay: bool,
 }
 
-impl Hotbar {
-    pub fn new() -> Self;
+impl Default for EngineConfig {
+    fn default() -> Self {
+        Self {
+            window_width: 1280,
+            window_height: 720,
+            fullscreen: false,
+            vsync: true,
+            world_seed: None,
+            render_distance: 4,
+            cell_scale: 4.0,
+            enable_particles: true,
+            enable_lighting: true,
+            show_fps: true,
+            show_debug_overlay: false,
+        }
+    }
+}
 
-    /// Render hotbar, returns selected slot if changed
-    pub fn render(&mut self, ctx: &Context, inventory: &Inventory) -> Option<usize>;
+impl EngineConfig {
+    /// Load from file or return default
+    pub fn load() -> Self;
 
-    /// Select slot by number (0-9)
-    pub fn select_slot(&mut self, slot: usize);
-
-    /// Select next/previous slot (mouse wheel)
-    pub fn cycle_slot(&mut self, delta: i32);
-
-    /// Get currently selected slot
-    pub fn selected(&self) -> usize;
-
-    /// Render single slot with item
-    fn render_slot(&self, ui: &mut Ui, slot: usize, item: Option<&ItemStack>, selected: bool) -> Response;
+    /// Save to file
+    pub fn save(&self) -> Result<(), std::io::Error>;
 }
 ```
 
 Requirements:
-- 10 slots horizontally centered
-- Number key hints (1-9, 0)
-- Item icon and count
-- Selection highlight
-- Mouse wheel cycling
+- Sensible defaults
+- Optional config file loading
+- All tunable parameters exposed
 
-### T-23: Debug Overlay (P1)
-**File**: `crates/genesis-tools/src/debug_overlay.rs`
+### I-19: Frame Timing & Performance (P1)
+**File**: `crates/genesis-engine/src/timing.rs`
 
-Comprehensive debug information:
+Proper frame timing:
 
 ```rust
-use egui::Context;
-use genesis_gameplay::Player;
-use genesis_kernel::Camera;
-
-pub struct DebugOverlay {
-    visible: bool,
-    show_fps: bool,
-    show_position: bool,
-    show_chunk_info: bool,
-    show_memory: bool,
+pub struct FrameTiming {
+    target_fps: u32,
+    frame_budget: std::time::Duration,
+    last_frame: std::time::Instant,
+    accumulator: f32,
+    fixed_dt: f32,
 }
 
-impl DebugOverlay {
-    pub fn new() -> Self;
+impl FrameTiming {
+    pub fn new(target_fps: u32) -> Self;
 
-    pub fn render(
-        &mut self,
-        ctx: &Context,
-        fps: f32,
-        frame_time_ms: f32,
-        player: &Player,
-        camera: &Camera,
-        memory_usage: usize,
-    );
+    /// Get time since last frame
+    pub fn delta_time(&mut self) -> f32;
 
-    pub fn toggle(&mut self);
-    pub fn is_visible(&self) -> bool;
-}
+    /// For fixed timestep physics (call in loop)
+    pub fn should_update_fixed(&mut self) -> bool;
 
-/// FPS tracking helper
-pub struct FpsCounter {
-    frames: VecDeque<f64>,
-    last_time: std::time::Instant,
-}
+    /// Sleep to maintain target framerate (if vsync off)
+    pub fn sleep_remainder(&self);
 
-impl FpsCounter {
-    pub fn new() -> Self;
-    pub fn tick(&mut self) -> (f32, f32);  // (fps, frame_time_ms)
+    /// Get current FPS
+    pub fn current_fps(&self) -> f32;
 }
 ```
 
 Requirements:
-- F3 to toggle (like Minecraft)
-- Smooth FPS counter (rolling average)
-- Player position and velocity
-- Current chunk coordinates
-- Memory usage estimate
+- Smooth delta time
+- Fixed timestep option for physics
+- FPS limiting when vsync off
+- Prevent spiral of death
 
 ---
 
@@ -231,29 +320,24 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[tools] feat: T-20 egui integration layer
-[tools] feat: T-21 game HUD renderer
-[tools] feat: T-22 hotbar widget
-[tools] feat: T-23 debug overlay
-```
-
----
-
-## Dependencies
-
-Ensure these are in `crates/genesis-tools/Cargo.toml`:
-```toml
-egui = "0.30"
-egui-wgpu = "0.30"
-egui-winit = "0.30"
+[infra] feat: I-16 input system integration
+[infra] feat: I-17 main game loop integration
+[infra] feat: I-18 engine configuration
+[infra] feat: I-19 frame timing
 ```
 
 ---
 
 ## Integration Notes
 
-- T-20 provides egui setup used by app.rs
-- T-21 HUD rendered each frame after game render
-- T-22 hotbar integrated with inventory
-- T-23 debug toggled by F3 key
-- Export new modules in lib.rs
+- I-16 input bridges winit → gameplay input state
+- I-17 is the MAIN integration task - wire everything together
+- I-18 config used throughout engine
+- I-19 timing ensures smooth gameplay
+
+**CRITICAL**: Task I-17 must make the game actually playable:
+- Arrow keys/WASD move player
+- Camera follows player
+- Terrain generates as you explore
+- HUD shows health/hotbar
+- F3 shows debug info
