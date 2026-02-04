@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-04
-> Sprint: Iteration 11 — Crafting System
+> Sprint: Iteration 12 — Combat System
 
 ## Legend
 
@@ -12,7 +12,7 @@
 
 ---
 
-## Completed — Iterations 1-10
+## Completed — Iterations 1-11
 
 ### Kernel Agent
 | ID | Task | Status |
@@ -22,6 +22,7 @@
 | K-32 to K-35 | Biome rendering, transitions, water animation | 🟢 |
 | K-36 to K-39 | NPC rendering, collision, batch render, speech bubbles | 🟢 |
 | K-40 to K-43 | Audio backend, spatial audio, streaming, mixing | 🟢 |
+| K-44 to K-47 | Crafting grid, item stacks, workbench zones, animations | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
@@ -31,6 +32,7 @@
 | G-33 to G-36 | Biome terrain generation, resource distribution | 🟢 |
 | G-37 to G-40 | NPC entities, AI behaviors, spawning, dialogue | 🟢 |
 | G-41 to G-44 | Sound events, ambient rules, music state, NPC sounds | 🟢 |
+| G-45 to G-48 | Recipes, crafting logic, workbench types, progression | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
@@ -40,6 +42,7 @@
 | T-32 to T-35 | Biome minimap, debug info, seed display | 🟢 |
 | T-36 to T-39 | Dialogue UI, NPC debug, spawn editor | 🟢 |
 | T-40 to T-43 | Sound settings, audio debug, sound test | 🟢 |
+| T-44 to T-47 | Crafting UI, recipe book, workbench panels | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
@@ -49,50 +52,47 @@
 | I-28 to I-31 | Biome generation wiring, seed management | 🟢 |
 | I-32 to I-35 | NPC manager, interaction, chunk loading | 🟢 |
 | I-36 to I-40 | Audio manager, asset loading, config, profiling | 🟢 |
+| I-41 to I-44 | Recipe loading, crafting events, persistence | 🟢 |
 
 ---
 
-## Iteration 11 — Crafting System
-
----
-
-## Iteration 11 — Crafting System
+## Iteration 12 — Combat System
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| K-44 | Crafting grid compute shader | ⚪ | P0 | GPU-accelerated recipe matching |
-| K-45 | Item stack management | ⚪ | P0 | Efficient item combining/splitting |
-| K-46 | Workbench interaction zones | ⚪ | P1 | Spatial detection for crafting stations |
-| K-47 | Crafting animation support | ⚪ | P1 | Progress bar, particle effects data |
+| K-48 | Hitbox/hurtbox collision | ⚪ | P0 | Attack collision detection |
+| K-49 | Projectile physics | ⚪ | P0 | Arrow, spell projectile trajectories |
+| K-50 | Damage number rendering | ⚪ | P1 | Floating damage text sprites |
+| K-51 | Combat particle effects | ⚪ | P1 | Hit sparks, blood, impact effects |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| G-45 | Recipe data structure | ⚪ | P0 | Define recipes, ingredients, outputs |
-| G-46 | Crafting logic | ⚪ | P0 | Validate recipes, consume items, produce output |
-| G-47 | Workbench types | ⚪ | P0 | Forge, anvil, alchemy table, etc. |
-| G-48 | Crafting progression | ⚪ | P1 | Unlock recipes via skills/discovery |
+| G-49 | Combat stats system | ⚪ | P0 | HP, attack, defense, crit, dodge |
+| G-50 | Melee attack logic | ⚪ | P0 | Swing timing, combos, stamina cost |
+| G-51 | Ranged attack logic | ⚪ | P0 | Bow, crossbow, throwing weapons |
+| G-52 | Damage calculation | ⚪ | P0 | Formulas, armor, resistances, crits |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| T-44 | Crafting UI grid | ⚪ | P0 | Drag-drop crafting interface |
-| T-45 | Recipe book UI | ⚪ | P0 | Browse known recipes by category |
-| T-46 | Crafting result preview | ⚪ | P0 | Show output item before crafting |
-| T-47 | Workbench interaction UI | ⚪ | P1 | Station-specific crafting panels |
+| T-48 | Health/stamina bars | ⚪ | P0 | Player and target health UI |
+| T-49 | Combat HUD | ⚪ | P0 | Combo counter, damage taken indicator |
+| T-50 | Equipment stats panel | ⚪ | P1 | Show weapon damage, armor values |
+| T-51 | Combat debug overlay | ⚪ | P1 | Hitbox visualization, damage log |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| I-41 | Recipe loading from assets | ⚪ | P0 | Load recipes from JSON/TOML files |
-| I-42 | Crafting event integration | ⚪ | P0 | Wire crafting to inventory/sound/stats |
-| I-43 | Crafting persistence | ⚪ | P0 | Save learned recipes, queue state |
-| I-44 | Crafting profiling | ⚪ | P1 | Measure recipe search performance |
+| I-45 | Combat event system | ⚪ | P0 | Wire attacks to damage, sounds, effects |
+| I-46 | Weapon data loading | ⚪ | P0 | Load weapon stats from assets |
+| I-47 | Combat state persistence | ⚪ | P0 | Save HP, status effects |
+| I-48 | Combat profiling | ⚪ | P1 | Measure collision check performance |
 
 ---
 

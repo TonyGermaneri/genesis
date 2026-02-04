@@ -1,0 +1,117 @@
+# Basic Recipes
+# Starter recipes that all players know
+
+version = "1.0.0"
+
+[[recipes]]
+id = 1
+name = "Basic Torch"
+description = "A simple torch for light"
+category = "tools"
+skill_type = "crafting"
+craft_time_ticks = 30
+skill_gain = 1
+
+[recipes.output]
+item_id = 10
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 1  # Wood
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 2  # Cloth
+quantity = 1
+
+
+[[recipes]]
+id = 2
+name = "Wooden Pickaxe"
+description = "A basic pickaxe for mining"
+category = "tools"
+skill_type = "crafting"
+skill_required = 0
+craft_time_ticks = 60
+skill_gain = 2
+
+[recipes.output]
+item_id = 20
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 1  # Wood
+quantity = 3
+
+[[recipes.ingredients]]
+item_id = 3  # Fiber
+quantity = 2
+
+
+[[recipes]]
+id = 3
+name = "Stone Axe"
+description = "A stone axe for chopping"
+category = "tools"
+skill_type = "crafting"
+skill_required = 0
+craft_time_ticks = 60
+skill_gain = 2
+
+[recipes.output]
+item_id = 21
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 1  # Wood
+quantity = 2
+
+[[recipes.ingredients]]
+item_id = 4  # Stone
+quantity = 2
+
+
+[[recipes]]
+id = 4
+name = "Campfire"
+description = "A campfire for cooking and warmth"
+category = "building_components"
+skill_type = "crafting"
+skill_required = 0
+craft_time_ticks = 120
+skill_gain = 3
+
+[recipes.output]
+item_id = 30
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 1  # Wood
+quantity = 5
+
+[[recipes.ingredients]]
+item_id = 4  # Stone
+quantity = 8
+
+
+[[recipes]]
+id = 5
+name = "Basic Repair Kit"
+description = "A kit for repairing damaged items"
+category = "tools"
+skill_type = "crafting"
+skill_required = 1
+craft_time_ticks = 90
+skill_gain = 3
+
+[recipes.output]
+item_id = 40
+quantity = 1
+
+[[recipes.ingredients]]
+item_id = 5  # Scrap metal
+quantity = 2
+
+[[recipes.ingredients]]
+item_id = 2  # Cloth
+quantity = 1

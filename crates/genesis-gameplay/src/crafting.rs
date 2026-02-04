@@ -334,6 +334,105 @@ impl CraftingSystem {
                 .unwrap_or(false)
         })
     }
+
+    /// Get all craftable recipe IDs with the given inventory.
+    #[must_use]
+    pub fn get_craftable_recipes(&self, inventory: &Inventory, skill_level: u32) -> Vec<RecipeId> {
+        self.recipes
+            .values()
+            .filter(|recipe| {
+                self.can_craft(recipe.id, inventory, skill_level)
+                    .unwrap_or(false)
+            })
+            .map(|r| r.id)
+            .collect()
+    }
+
+    /// Find recipes that partially match the inventory (some ingredients present).
+    #[must_use]
+    pub fn get_partial_matches(&self, inventory: &Inventory) -> Vec<(RecipeId, PartialMatch)> {
+        self.recipes
+            .values()
+            .filter_map(|recipe| {
+                let partial = Self::check_partial_ingredients(recipe, inventory);
+                if partial.total_required > 0 && partial.have > 0 {
+                    Some((recipe.id, partial))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Check how many ingredients are available for a recipe.
+    fn check_partial_ingredients(recipe: &Recipe, inventory: &Inventory) -> PartialMatch {
+        let mut have = 0u32;
+        let mut total_required = 0u32;
+        let mut missing = Vec::new();
+
+        for ingredient in &recipe.ingredients {
+            let available = inventory.count(ingredient.item);
+            total_required += ingredient.quantity;
+
+            if available >= ingredient.quantity {
+                have += ingredient.quantity;
+            } else {
+                have += available;
+                missing.push(MissingIngredient {
+                    item: ingredient.item,
+                    needed: ingredient.quantity - available,
+                });
+            }
+        }
+
+        PartialMatch {
+            have,
+            total_required,
+            missing,
+            percentage: if total_required > 0 {
+                (have as f32 / total_required as f32) * 100.0
+            } else {
+                0.0
+            },
+        }
+    }
+
+    /// Find recipe by output item.
+    #[must_use]
+    pub fn find_recipe_for_output(&self, output: ItemTypeId) -> Option<&Recipe> {
+        self.recipes.values().find(|r| r.output == output)
+    }
+
+    /// Find all recipes that use a specific ingredient.
+    #[must_use]
+    pub fn find_recipes_using_ingredient(&self, item: ItemTypeId) -> Vec<&Recipe> {
+        self.recipes
+            .values()
+            .filter(|r| r.ingredients.iter().any(|i| i.item == item))
+            .collect()
+    }
+}
+
+/// Information about partial ingredient matching.
+#[derive(Debug, Clone)]
+pub struct PartialMatch {
+    /// Number of ingredient units available.
+    pub have: u32,
+    /// Total ingredient units required.
+    pub total_required: u32,
+    /// Missing ingredients.
+    pub missing: Vec<MissingIngredient>,
+    /// Completion percentage.
+    pub percentage: f32,
+}
+
+/// A missing ingredient for a recipe.
+#[derive(Debug, Clone)]
+pub struct MissingIngredient {
+    /// Item type.
+    pub item: ItemTypeId,
+    /// Quantity still needed.
+    pub needed: u32,
 }
 
 /// Building definition for world construction.

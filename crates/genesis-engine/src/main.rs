@@ -29,8 +29,16 @@ pub mod audio_assets;
 pub mod audio_integration;
 /// Audio state management
 pub mod audio_state;
+/// Crafting event integration
+pub mod crafting_events;
+/// Crafting profiling and metrics
+pub mod crafting_profile;
+/// Crafting persistence
+pub mod crafting_save;
 /// Crash reporting and error capture
 pub mod crash_report;
+/// Recipe asset loading
+pub mod recipe_loader;
 
 use anyhow::Result;
 use tracing::info;
