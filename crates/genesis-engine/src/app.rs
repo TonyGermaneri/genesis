@@ -23,6 +23,7 @@ use crate::input::InputHandler;
 use crate::perf::PerfMetrics;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming};
+use crate::world::TerrainGenerationService;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -66,6 +67,10 @@ struct GenesisApp {
     /// Chunk-specific metrics
     chunk_metrics: ChunkMetrics,
 
+    // === World Generation ===
+    /// Terrain generation service with biome management
+    terrain_service: TerrainGenerationService,
+
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -92,9 +97,13 @@ impl GenesisApp {
     fn new(config: EngineConfig) -> Self {
         let timing = FrameTiming::new(config.target_fps).with_vsync(config.vsync);
 
-        // Create gameplay state with a seed
-        let seed = 42; // TODO: Make configurable or random
-                       // Spawn player at center of chunk (128, 128) for 256x256 chunk
+        // Create terrain generation service from config
+        let terrain_service = TerrainGenerationService::from_engine_config(&config);
+        let seed = terrain_service.seed();
+        info!("World seed: {}", seed);
+
+        // Create gameplay state with the world seed
+        // Spawn player at center of chunk (128, 128) for 256x256 chunk
         let mut gameplay = GameplayState::with_player_position(seed, (128.0, 100.0));
         // Set player as grounded for top-down movement
         gameplay.player.set_grounded(true);
@@ -117,6 +126,7 @@ impl GenesisApp {
             environment: EnvironmentState::new(),
             perf_metrics: PerfMetrics::new(120),
             chunk_metrics: ChunkMetrics::new(),
+            terrain_service,
 
             gameplay,
             camera,
@@ -263,6 +273,7 @@ impl GenesisApp {
         let show_debug = self.show_debug;
         let show_inventory = self.show_inventory;
         let hotbar_slot = self.hotbar_slot;
+        let biome_metrics = self.terrain_service.metrics();
         let debug_data = DebugOverlayData {
             perf: self.perf_metrics.summary(),
             time: self.environment.time.clone(),
@@ -272,6 +283,11 @@ impl GenesisApp {
             chunk_load_ms: self.chunk_metrics.avg_load_time_ms(),
             chunk_sim_ms: self.chunk_metrics.avg_sim_time_ms(),
             chunk_exceeds_budget: self.chunk_metrics.exceeds_budget(),
+            world_seed: self.terrain_service.seed(),
+            biome_gen_avg_ms: biome_metrics.avg_generation_time_ms(),
+            biome_gen_peak_ms: biome_metrics.peak_generation_time_ms(),
+            biome_chunks_generated: biome_metrics.total_chunks_generated(),
+            biome_exceeds_budget: biome_metrics.exceeds_budget(),
         };
         let environment_time = debug_data.time.clone();
         let environment_weather = debug_data.weather.clone();
@@ -309,6 +325,12 @@ struct DebugOverlayData {
     chunk_load_ms: f64,
     chunk_sim_ms: f64,
     chunk_exceeds_budget: bool,
+    // Biome generation metrics
+    world_seed: u64,
+    biome_gen_avg_ms: f64,
+    biome_gen_peak_ms: f64,
+    biome_chunks_generated: u64,
+    biome_exceeds_budget: bool,
 }
 
 /// Renders the debug overlay.
@@ -370,6 +392,21 @@ fn render_debug_overlay(ctx: &egui::Context, data: &DebugOverlayData) {
                 ui.label(format!("Chunk Sim: {chunk_sim_ms:.2}ms"));
                 if data.chunk_exceeds_budget {
                     ui.colored_label(egui::Color32::RED, "⚠ Frame budget exceeded!");
+                }
+            }
+
+            // Biome generation metrics
+            ui.separator();
+            ui.label(format!("World Seed: {}", data.world_seed));
+            if data.biome_chunks_generated > 0 {
+                let biome_gen_avg_ms = data.biome_gen_avg_ms;
+                let biome_gen_peak_ms = data.biome_gen_peak_ms;
+                ui.label(format!(
+                    "Biome Gen: {biome_gen_avg_ms:.2}ms avg, {biome_gen_peak_ms:.2}ms peak"
+                ));
+                ui.label(format!("Chunks Generated: {}", data.biome_chunks_generated));
+                if data.biome_exceeds_budget {
+                    ui.colored_label(egui::Color32::YELLOW, "⚠ Biome gen > 16ms!");
                 }
             }
         });

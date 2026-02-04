@@ -319,6 +319,7 @@ pub struct Player {
     coyote_time: f32,
 }
 
+#[allow(dead_code)]
 impl Player {
     /// Jump buffer duration in seconds.
     const JUMP_BUFFER_TIME: f32 = 0.1;
