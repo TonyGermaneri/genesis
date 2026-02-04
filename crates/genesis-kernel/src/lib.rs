@@ -40,6 +40,10 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod audio;
+pub mod audio_backend;
+pub mod audio_legacy;
+pub mod audio_resource;
+pub mod audio_spatial;
 pub mod benchmark;
 pub mod biome;
 pub mod buffer;
