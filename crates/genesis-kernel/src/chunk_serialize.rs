@@ -149,8 +149,7 @@ impl SerializedChunk {
             return Err(SerializeError::InvalidHeader);
         }
 
-        let header: ChunkHeader =
-            *bytemuck::from_bytes(&bytes[..ChunkHeader::SIZE]);
+        let header: ChunkHeader = *bytemuck::from_bytes(&bytes[..ChunkHeader::SIZE]);
 
         if !header.is_valid() {
             return Err(SerializeError::InvalidMagic);

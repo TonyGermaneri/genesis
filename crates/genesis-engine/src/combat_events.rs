@@ -471,7 +471,10 @@ impl CombatEventHandler {
     }
 
     /// Processes all pending events.
-    pub fn process_events(&mut self, mut audio: Option<&mut AudioIntegration>) -> ProcessedCombatEvents {
+    pub fn process_events(
+        &mut self,
+        mut audio: Option<&mut AudioIntegration>,
+    ) -> ProcessedCombatEvents {
         let mut result = ProcessedCombatEvents::default();
 
         while let Some(event) = self.event_queue.pop_front() {
@@ -485,13 +488,14 @@ impl CombatEventHandler {
 
                     // Play attack sound
                     if let Some(audio) = audio.as_deref_mut() {
-                        let sound = SoundEvent::new(AudioCategory::Sfx, attack.attack_type.sound_name())
-                            .at_position(attack.position.0, attack.position.1);
+                        let sound =
+                            SoundEvent::new(AudioCategory::Sfx, attack.attack_type.sound_name())
+                                .at_position(attack.position.0, attack.position.1);
                         audio.queue_sound(sound);
                     }
 
                     result.attacks.push(attack);
-                }
+                },
                 CombatEvent::Hit(hit) => {
                     debug!(
                         "Hit: {:?} dealt {} damage to {:?}",
@@ -501,26 +505,29 @@ impl CombatEventHandler {
 
                     // Play hit sound
                     if let Some(audio) = audio.as_deref_mut() {
-                        let sound = SoundEvent::new(AudioCategory::Sfx, hit.damage_type.hit_sound())
-                            .at_position(hit.position.0, hit.position.1);
+                        let sound =
+                            SoundEvent::new(AudioCategory::Sfx, hit.damage_type.hit_sound())
+                                .at_position(hit.position.0, hit.position.1);
                         audio.queue_sound(sound);
 
                         // Play critical hit sound if applicable
                         if hit.critical {
-                            let crit_sound = SoundEvent::new(AudioCategory::Sfx, "combat/critical_hit")
-                                .at_position(hit.position.0, hit.position.1);
+                            let crit_sound =
+                                SoundEvent::new(AudioCategory::Sfx, "combat/critical_hit")
+                                    .at_position(hit.position.0, hit.position.1);
                             audio.queue_sound(crit_sound);
                         }
                     }
 
                     result.hits.push(hit);
-                }
+                },
                 CombatEvent::Block(block) => {
                     debug!(
                         "Block: {:?} blocked {} damage from {:?}",
                         block.blocker, block.damage_blocked, block.attacker
                     );
-                    self.stats.record_block(block.damage_blocked, block.perfect_block);
+                    self.stats
+                        .record_block(block.damage_blocked, block.perfect_block);
 
                     // Play block sound
                     if let Some(audio) = audio.as_deref_mut() {
@@ -535,7 +542,7 @@ impl CombatEventHandler {
                     }
 
                     result.blocks.push(block);
-                }
+                },
                 CombatEvent::Death(death) => {
                     info!("Death: {:?} killed by {:?}", death.entity, death.killer);
                     self.stats.record_death();
@@ -552,7 +559,7 @@ impl CombatEventHandler {
                     }
 
                     result.deaths.push(death);
-                }
+                },
                 CombatEvent::DamageOverTime(dot) => {
                     debug!(
                         "DoT: {:?} took {} {} damage from {}",
@@ -560,7 +567,7 @@ impl CombatEventHandler {
                     );
                     self.stats.record_damage_taken(dot.damage);
                     result.dots.push(dot);
-                }
+                },
                 CombatEvent::StatusApplied(status) => {
                     debug!(
                         "Status applied: {:?} on {:?} for {}s",
@@ -569,16 +576,20 @@ impl CombatEventHandler {
 
                     // Play status apply sound
                     if let Some(audio) = audio.as_deref_mut() {
-                        let sound = SoundEvent::new(AudioCategory::Sfx, status.status.apply_sound());
+                        let sound =
+                            SoundEvent::new(AudioCategory::Sfx, status.status.apply_sound());
                         audio.queue_sound(sound);
                     }
 
                     result.statuses_applied.push(status);
-                }
+                },
                 CombatEvent::StatusRemoved(status) => {
-                    debug!("Status removed: {:?} from {:?}", status.status, status.target);
+                    debug!(
+                        "Status removed: {:?} from {:?}",
+                        status.status, status.target
+                    );
                     result.statuses_removed.push(status);
-                }
+                },
                 CombatEvent::ProjectileSpawned(proj) => {
                     debug!(
                         "Projectile spawned: {:?} from {:?} at {:?}",
@@ -587,13 +598,14 @@ impl CombatEventHandler {
 
                     // Play projectile spawn sound
                     if let Some(audio) = audio.as_deref_mut() {
-                        let sound = SoundEvent::new(AudioCategory::Sfx, proj.projectile_type.spawn_sound())
-                            .at_position(proj.position.0, proj.position.1);
+                        let sound =
+                            SoundEvent::new(AudioCategory::Sfx, proj.projectile_type.spawn_sound())
+                                .at_position(proj.position.0, proj.position.1);
                         audio.queue_sound(sound);
                     }
 
                     result.projectiles_spawned.push(proj);
-                }
+                },
                 CombatEvent::ProjectileHit(proj) => {
                     debug!(
                         "Projectile hit: {:?} at {:?}",
@@ -602,13 +614,16 @@ impl CombatEventHandler {
 
                     // Play projectile impact sound
                     if let Some(audio) = audio.as_deref_mut() {
-                        let sound = SoundEvent::new(AudioCategory::Sfx, proj.projectile_type.impact_sound())
-                            .at_position(proj.position.0, proj.position.1);
+                        let sound = SoundEvent::new(
+                            AudioCategory::Sfx,
+                            proj.projectile_type.impact_sound(),
+                        )
+                        .at_position(proj.position.0, proj.position.1);
                         audio.queue_sound(sound);
                     }
 
                     result.projectiles_hit.push(proj);
-                }
+                },
             }
         }
 
@@ -619,7 +634,12 @@ impl CombatEventHandler {
     }
 
     /// Registers a loot drop for a death event.
-    pub fn register_loot_drop(&mut self, entity_id: EntityId, position: (f32, f32), items: Vec<LootItem>) {
+    pub fn register_loot_drop(
+        &mut self,
+        entity_id: EntityId,
+        position: (f32, f32),
+        items: Vec<LootItem>,
+    ) {
         self.pending_loot.push((entity_id, position, items));
     }
 
@@ -846,7 +866,10 @@ mod tests {
 
     #[test]
     fn test_attack_category_sounds() {
-        assert_eq!(AttackCategory::MeleeSwing.sound_name(), "combat/melee_swing");
+        assert_eq!(
+            AttackCategory::MeleeSwing.sound_name(),
+            "combat/melee_swing"
+        );
         assert_eq!(AttackCategory::RangedBow.sound_name(), "combat/bow_draw");
         assert_eq!(AttackCategory::MagicSpell.sound_name(), "combat/spell_cast");
     }

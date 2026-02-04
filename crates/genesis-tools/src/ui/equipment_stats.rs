@@ -1162,7 +1162,10 @@ mod tests {
 
     #[test]
     fn test_item_rarity_color() {
-        assert_ne!(EquipmentRarity::Common.color(), EquipmentRarity::Legendary.color());
+        assert_ne!(
+            EquipmentRarity::Common.color(),
+            EquipmentRarity::Legendary.color()
+        );
     }
 
     #[test]
@@ -1192,10 +1195,14 @@ mod tests {
 
     #[test]
     fn test_equipment_item_with_bonus() {
-        let item =
-            EquipmentItem::weapon("sword", "Sword", WeaponStats::default(), EquipmentRarity::Rare)
-                .with_bonus(StatType::Strength, 10)
-                .with_bonus(StatType::Strength, 5);
+        let item = EquipmentItem::weapon(
+            "sword",
+            "Sword",
+            WeaponStats::default(),
+            EquipmentRarity::Rare,
+        )
+        .with_bonus(StatType::Strength, 10)
+        .with_bonus(StatType::Strength, 5);
         assert_eq!(item.total_stat(StatType::Strength), 15);
     }
 
@@ -1257,8 +1264,12 @@ mod tests {
     #[test]
     fn test_equipment_stats_panel_select() {
         let mut panel = EquipmentStatsPanel::new();
-        let item =
-            EquipmentItem::weapon("sword", "Sword", WeaponStats::default(), EquipmentRarity::Common);
+        let item = EquipmentItem::weapon(
+            "sword",
+            "Sword",
+            WeaponStats::default(),
+            EquipmentRarity::Common,
+        );
         panel.select_item(item);
         assert!(panel.selected_item.is_some());
         panel.clear_selection();
@@ -1308,10 +1319,14 @@ mod tests {
 
     #[test]
     fn test_equipment_item_serialization() {
-        let item =
-            EquipmentItem::weapon("sword", "Sword", WeaponStats::default(), EquipmentRarity::Epic)
-                .with_bonus(StatType::Strength, 10)
-                .with_description("A fine sword");
+        let item = EquipmentItem::weapon(
+            "sword",
+            "Sword",
+            WeaponStats::default(),
+            EquipmentRarity::Epic,
+        )
+        .with_bonus(StatType::Strength, 10)
+        .with_description("A fine sword");
 
         let json = serde_json::to_string(&item).unwrap();
         let loaded: EquipmentItem = serde_json::from_str(&json).unwrap();

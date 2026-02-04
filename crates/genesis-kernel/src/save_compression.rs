@@ -265,8 +265,8 @@ impl Compressor {
         }
 
         // Read compression type from first byte
-        let compression_type = CompressionType::from_u8(data[0])
-            .ok_or(CompressionError::UnknownType(data[0]))?;
+        let compression_type =
+            CompressionType::from_u8(data[0]).ok_or(CompressionError::UnknownType(data[0]))?;
 
         let payload = &data[1..];
 
@@ -582,9 +582,7 @@ fn zstd_compress(input: &[u8], _level: i32) -> Vec<u8> {
         let byte = input[pos];
         let mut run_len = 1;
 
-        while pos + run_len < input.len()
-            && input[pos + run_len] == byte
-            && run_len < 255 + min_run
+        while pos + run_len < input.len() && input[pos + run_len] == byte && run_len < 255 + min_run
         {
             run_len += 1;
         }
@@ -618,8 +616,7 @@ fn zstd_decompress(input: &[u8], _expected_size: usize) -> Result<Vec<u8>, Compr
         return Err(CompressionError::InvalidData);
     }
 
-    let original_size =
-        u32::from_le_bytes([input[0], input[1], input[2], input[3]]) as usize;
+    let original_size = u32::from_le_bytes([input[0], input[1], input[2], input[3]]) as usize;
     let mut output = Vec::with_capacity(original_size);
 
     let mut pos = 4;
