@@ -453,7 +453,10 @@ impl ItemStack {
         }
 
         let before = self.durability;
-        self.durability = self.durability.saturating_add(amount).min(self.max_durability);
+        self.durability = self
+            .durability
+            .saturating_add(amount)
+            .min(self.max_durability);
         self.durability - before
     }
 
@@ -484,7 +487,12 @@ impl ItemStack {
     /// Transfer items from another stack.
     ///
     /// Returns (transferred, remaining in source).
-    pub fn transfer_from(&mut self, source: &mut Self, max_transfer: u32, max_stack: u32) -> (u32, u32) {
+    pub fn transfer_from(
+        &mut self,
+        source: &mut Self,
+        max_transfer: u32,
+        max_stack: u32,
+    ) -> (u32, u32) {
         if source.is_empty() {
             return (0, 0);
         }
@@ -899,9 +907,7 @@ mod tests {
 
     #[test]
     fn test_infinite_durability() {
-        let stack = ItemStackBuilder::new(1)
-            .infinite_durability()
-            .build();
+        let stack = ItemStackBuilder::new(1).infinite_durability().build();
 
         assert!(stack.is_infinite_durability());
         assert!(!stack.is_broken());

@@ -135,19 +135,18 @@ pub fn check_npc_collisions(
     }
 
     // Sort by distance (closest first)
-    collisions.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+    collisions.sort_by(|a, b| {
+        a.distance
+            .partial_cmp(&b.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     collisions
 }
 
 /// Checks for collision between two circles.
 #[must_use]
-pub fn circles_collide(
-    pos1: Vec2,
-    radius1: f32,
-    pos2: Vec2,
-    radius2: f32,
-) -> Option<(f32, Vec2)> {
+pub fn circles_collide(pos1: Vec2, radius1: f32, pos2: Vec2, radius2: f32) -> Option<(f32, Vec2)> {
     let dx = pos2.x - pos1.x;
     let dy = pos2.y - pos1.y;
     let distance_sq = dx * dx + dy * dy;
@@ -304,13 +303,21 @@ impl NpcCollisionManager {
 
     /// Checks collisions with the player.
     #[must_use]
-    pub fn check_player_collisions(&self, player_pos: Vec2, player_radius: f32) -> Vec<NpcCollision> {
+    pub fn check_player_collisions(
+        &self,
+        player_pos: Vec2,
+        player_radius: f32,
+    ) -> Vec<NpcCollision> {
         check_npc_collisions(player_pos, player_radius, &self.npcs)
     }
 
     /// Finds the closest interactable NPC.
     #[must_use]
-    pub fn find_closest_interactable(&self, player_pos: Vec2, player_radius: f32) -> Option<NpcCollision> {
+    pub fn find_closest_interactable(
+        &self,
+        player_pos: Vec2,
+        player_radius: f32,
+    ) -> Option<NpcCollision> {
         find_closest_interactable(player_pos, player_radius, &self.npcs)
     }
 
@@ -377,11 +384,9 @@ mod tests {
 
     #[test]
     fn test_interaction_range() {
-        let npcs = vec![
-            NpcPosition::new(1, 40.0, 0.0)
-                .with_collision_radius(10.0)
-                .with_interaction_radius(35.0),
-        ];
+        let npcs = vec![NpcPosition::new(1, 40.0, 0.0)
+            .with_collision_radius(10.0)
+            .with_interaction_radius(35.0)];
         let collisions = check_npc_collisions(Vec2::new(0.0, 0.0), 10.0, &npcs);
 
         assert_eq!(collisions.len(), 1);
@@ -403,23 +408,13 @@ mod tests {
     #[test]
     fn test_circles_collide() {
         // Overlapping circles
-        let result = circles_collide(
-            Vec2::new(0.0, 0.0),
-            10.0,
-            Vec2::new(15.0, 0.0),
-            10.0,
-        );
+        let result = circles_collide(Vec2::new(0.0, 0.0), 10.0, Vec2::new(15.0, 0.0), 10.0);
         assert!(result.is_some());
         let (penetration, _) = result.unwrap();
         assert!((penetration - 5.0).abs() < 0.001);
 
         // Non-overlapping circles
-        let result = circles_collide(
-            Vec2::new(0.0, 0.0),
-            10.0,
-            Vec2::new(50.0, 0.0),
-            10.0,
-        );
+        let result = circles_collide(Vec2::new(0.0, 0.0), 10.0, Vec2::new(50.0, 0.0), 10.0);
         assert!(result.is_none());
     }
 
