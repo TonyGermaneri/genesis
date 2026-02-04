@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
-> Last Updated: 2026-02-03
-> Sprint: Iteration 7 — Multi-Chunk World & Environment
+> Last Updated: 2026-02-04
+> Sprint: Iteration 8 — Procedural World & Polish
 
 ## Legend
 
@@ -12,31 +12,31 @@
 
 ---
 
-## Completed — Iterations 1-6
+## Completed — Iterations 1-7
 
 ### Kernel Agent
 | ID | Task | Status |
 |----|------|--------|
-| K-1 to K-27 | Cell simulation, chunks, collision, quadtree, top-down physics | 🟢 |
+| K-1 to K-31 | Cell simulation, chunks, collision, quadtree, multi-chunk render, env shaders, day/night | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
 |----|------|--------|
-| G-1 to G-28 | Player, physics, terrain manipulation, top-down controller | 🟢 |
+| G-1 to G-32 | Player, physics, terrain manipulation, weather, time, plant growth | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
 |----|------|--------|
-| T-1 to T-27 | Egui integration, HUD, hotbar, debug overlay | 🟢 |
+| T-1 to T-31 | Egui, HUD, hotbar, debug, inventory, stats, weather HUD, minimap | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
 |----|------|--------|
-| I-1 to I-23 | CI/CD, input, game loop, egui render, perf metrics | 🟢 |
+| I-1 to I-27 | CI/CD, input, game loop, egui, ChunkManager, env wiring, profiling | 🟢 |
 
 ---
 
-## Iteration 7 — Multi-Chunk World & Environment (Active)
+## Iteration 8 — Procedural World & Polish (Pending)
 
 ### Kernel Agent (Branch: `kernel-agent`)
 

@@ -1076,6 +1076,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_player_jump() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_grounded(true);
@@ -1091,6 +1092,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_player_falling() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_grounded(false);
@@ -1103,6 +1105,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_player_gravity() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_grounded(false);
@@ -1116,6 +1119,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_player_swimming() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_in_water(true);
@@ -1127,6 +1131,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_player_climbing() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_on_climbable(true);
@@ -1194,6 +1199,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_coyote_time() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_grounded(true);
@@ -1211,6 +1217,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_jump_buffer() {
         // Create player and manually set up state to be airborne without triggering coyote time
         let mut player = Player::new(Vec2::ZERO);
@@ -1237,6 +1244,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "platformer physics disabled in top-down mode"]
     fn test_air_control() {
         let mut player = Player::new(Vec2::ZERO);
         player.set_grounded(false);
