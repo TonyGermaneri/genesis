@@ -19,6 +19,7 @@ mod input;
 mod perf;
 mod renderer;
 mod timing;
+mod world;
 
 /// Analytics module for opt-in gameplay telemetry
 pub mod analytics;

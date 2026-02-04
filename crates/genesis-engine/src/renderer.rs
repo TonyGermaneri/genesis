@@ -656,7 +656,7 @@ fn create_static_terrain(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
                 cells[idx] = Cell::new(1).with_flag(CellFlags::LIQUID); // Water
             }
             // Sandy beach around water
-            if lake_dist >= 30.0 && lake_dist < 35.0 {
+            if (30.0..35.0).contains(&lake_dist) {
                 cells[idx] = Cell::new(2).with_flag(CellFlags::SOLID); // Sand
             }
 
