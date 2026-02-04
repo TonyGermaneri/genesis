@@ -321,8 +321,10 @@ pub struct Player {
 
 impl Player {
     /// Jump buffer duration in seconds.
+    #[allow(dead_code)]
     const JUMP_BUFFER_TIME: f32 = 0.1;
     /// Coyote time duration in seconds.
+    #[allow(dead_code)]
     const COYOTE_TIME: f32 = 0.08;
 
     /// Create a new player at the given position.
@@ -490,6 +492,8 @@ impl Player {
     }
 
     /// Update player state based on input and environment.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_state(&mut self, input: &Input) {
         // Check for swimming
         if self.in_water {
@@ -538,6 +542,8 @@ impl Player {
     }
 
     /// Update movement based on state and input.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_movement(&mut self, input: &Input, dt: f32) {
         match self.state {
             PlayerState::Idle | PlayerState::Walking | PlayerState::Running => {
@@ -556,6 +562,8 @@ impl Player {
     }
 
     /// Ground movement update.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_ground_movement(&mut self, input: &Input, dt: f32) {
         let speed = if input.running {
             self.config.run_speed
@@ -573,6 +581,8 @@ impl Player {
     }
 
     /// Air movement update.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_air_movement(&mut self, input: &Input, dt: f32) {
         // Limited air control
         let target_x = input.movement.x * self.config.walk_speed;
@@ -592,6 +602,8 @@ impl Player {
     }
 
     /// Swimming movement update.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_swim_movement(&mut self, input: &Input, dt: f32) {
         // Full directional control in water
         let target_velocity = input.movement.scale(self.config.swim_speed);
@@ -602,6 +614,8 @@ impl Player {
     }
 
     /// Climbing movement update.
+    /// NOTE: This is for platformer-style movement, currently unused.
+    #[allow(dead_code)]
     fn update_climb_movement(&mut self, input: &Input, dt: f32) {
         // Vertical movement when climbing
         let target_velocity = input.movement.scale(self.config.climb_speed);
