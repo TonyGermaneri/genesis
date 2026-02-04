@@ -26,6 +26,10 @@ use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
 use crate::audio_integration::{AudioIntegration, SoundEvent};
 use crate::audio_assets::AudioCategory;
+use crate::crafting_events::CraftingEventHandler;
+use crate::crafting_save::CraftingPersistence;
+use crate::crafting_profile::CraftingProfiler;
+use crate::recipe_loader::RecipeLoader;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -85,6 +89,18 @@ struct GenesisApp {
     /// Audio integration system
     audio: AudioIntegration,
 
+    // === Crafting ===
+    /// Recipe loader for loading recipes from assets
+    recipe_loader: RecipeLoader,
+    /// Crafting event handler
+    crafting_events: CraftingEventHandler,
+    /// Crafting persistence (learned recipes, workbenches)
+    crafting_persistence: CraftingPersistence,
+    /// Crafting profiler for performance tracking
+    crafting_profiler: CraftingProfiler,
+    /// Whether crafting UI is open
+    show_crafting: bool,
+
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -136,6 +152,18 @@ impl GenesisApp {
             warn!("Audio system not available - continuing without audio");
         }
 
+        // Initialize crafting system
+        let mut recipe_loader = RecipeLoader::with_default_path();
+        if let Err(e) = recipe_loader.load_all() {
+            warn!("Failed to load recipes: {}", e);
+        } else {
+            info!("Loaded {} recipes", recipe_loader.registry().len());
+        }
+        let crafting_events = CraftingEventHandler::new();
+        // Starter recipes that all players know (basic tools)
+        let crafting_persistence = CraftingPersistence::with_starter_recipes([1, 2, 3, 4, 5]);
+        let crafting_profiler = CraftingProfiler::new();
+
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
@@ -167,6 +195,11 @@ impl GenesisApp {
             npc_spawner,
             last_player_chunk: initial_chunk,
             audio,
+            recipe_loader,
+            crafting_events,
+            crafting_persistence,
+            crafting_profiler,
+            show_crafting: false,
 
             gameplay,
             camera,
@@ -207,6 +240,19 @@ impl GenesisApp {
             info!(
                 "Inventory: {}",
                 if self.show_inventory {
+                    "OPEN"
+                } else {
+                    "CLOSED"
+                }
+            );
+        }
+
+        // Handle crafting toggle (C key)
+        if self.input.is_key_just_pressed(KeyCode::C) {
+            self.show_crafting = !self.show_crafting;
+            info!(
+                "Crafting: {}",
+                if self.show_crafting {
                     "OPEN"
                 } else {
                     "CLOSED"
@@ -310,6 +356,9 @@ impl GenesisApp {
 
         // Update audio system
         self.update_audio(dt, player_pos.x, player_pos.y);
+
+        // Update crafting system (check hot-reload, process events)
+        self.update_crafting(dt);
 
         // Check for chunk changes and spawn/despawn NPCs
         self.update_npc_chunks();
@@ -540,6 +589,37 @@ impl GenesisApp {
     pub fn play_ui_sound(&mut self, name: &str) {
         let event = SoundEvent::new(AudioCategory::Ui, name);
         self.audio.queue_sound(event);
+    }
+
+    /// Updates crafting system for the frame.
+    fn update_crafting(&mut self, _dt: f32) {
+        // Check for recipe hot-reload in debug mode
+        if self.recipe_loader.check_hot_reload() {
+            info!("Recipes hot-reloaded");
+        }
+
+        // Process pending crafting events
+        let result = self.crafting_events.process_events(Some(&mut self.audio));
+
+        // Handle completed crafts
+        for (recipe_id, _output_item, _quantity) in &result.completed_crafts {
+            // Add to recent recipes
+            self.crafting_persistence.add_recent(*recipe_id);
+
+            // Record for profiling
+            if let Some(recipe) = self.recipe_loader.get_recipe(recipe_id.raw()) {
+                self.crafting_profiler.record_craft(recipe_id.raw(), &recipe.category);
+            }
+        }
+
+        // Handle learned recipes
+        for recipe_id in &result.recipes_learned {
+            self.crafting_persistence.learn_recipe(*recipe_id);
+        }
+
+        // Update playtime for frequency stats
+        let playtime = self.gameplay.game_time();
+        self.crafting_profiler.update_playtime(playtime);
     }
 
     /// Render the frame.
