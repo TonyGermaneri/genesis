@@ -1,116 +1,102 @@
-# Kernel Agent — Iteration 9 Prompt
+# Iteration 10: Infra Agent - Audio Integration & Asset Loading
 
-## Context
+## Objective
+Integrate all audio components into the engine and set up asset loading pipeline.
 
-You are the **Kernel Agent** for Project Genesis, a 2D top-down game engine built with Rust/wgpu.
+## Tasks
 
-**Current State:**
-- Biome rendering with transitions working (K-32 to K-35)
-- Water animation shader complete
-- Cell-based world with multi-chunk streaming
-- Day/night cycle and weather effects
-
-**Iteration 9 Focus:** NPC rendering and collision detection.
-
----
-
-## Assigned Tasks
-
-### K-36: NPC sprite rendering (P0)
-
-**Goal:** Render NPC entities as sprites with direction and animation frames.
-
-**Implementation:**
-1. Create `NpcRenderData` struct:
-   - position: Vec2
-   - direction: Direction (N/S/E/W)
-   - animation_frame: u32
-   - npc_type: u8 (for sprite selection)
-   - scale: f32
-2. Add NPC render pass after cell rendering
-3. Use instanced rendering for efficiency
-4. Support 4-direction sprites (facing direction)
-
-**Files to modify:**
-- `crates/genesis-kernel/src/render.rs` — Add NPC rendering
-- Create `crates/genesis-kernel/src/npc_render.rs` if needed
-
+### 1. Audio Asset Loading (`crates/genesis-engine/src/audio_assets.rs`)
+Create audio asset management:
 ```rust
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-pub struct NpcInstance {
-    pub position: [f32; 2],
-    pub size: [f32; 2],
-    pub uv_offset: [f32; 2],
-    pub uv_size: [f32; 2],
-    pub tint: [f32; 4],
-}
+// Key components:
+// - AudioAssetLoader: loads MP3/WAV from assets/sounds/
+// - Caching strategy (SFX cached, music streamed)
+// - Asset validation on load
+// - Fallback/placeholder for missing files
+// - Hot-reload support for development
 ```
 
----
-
-### K-37: NPC collision detection (P0)
-
-**Goal:** Detect collisions between player and NPCs, and between NPCs.
-
-**Implementation:**
-1. Use circle collision for NPC bodies
-2. Add to existing collision system or create `npc_collision.rs`
-3. Return collision info: which NPC, penetration depth, normal
-4. Support interaction radius (larger than collision radius)
-
+### 2. Audio System Integration (`crates/genesis-engine/src/audio_integration.rs`)
+Wire up all audio components:
 ```rust
-pub struct NpcCollision {
-    pub npc_id: u32,
-    pub penetration: f32,
-    pub normal: Vec2,
-    pub in_interaction_range: bool,
-}
-
-pub fn check_npc_collisions(
-    player_pos: Vec2,
-    player_radius: f32,
-    npcs: &[NpcPosition],
-) -> Vec<NpcCollision>;
+// - Initialize audio device on startup
+// - Connect gameplay events to sound system
+// - Apply volume settings from UI
+// - Update spatial audio listener position
+// - Handle audio device changes
 ```
 
----
-
-### K-38: NPC batch rendering (P1)
-
-**Goal:** Efficiently render many NPCs using instancing.
-
-**Implementation:**
-1. Create instance buffer for NPC data
-2. Single draw call for all NPCs of same type
-3. Update instance buffer only when NPCs move
-4. Support up to 1000 NPCs visible at once
-
----
-
-### K-39: Speech bubble rendering (P1)
-
-**Goal:** Render dialogue text above NPCs.
-
-**Implementation:**
-1. Simple rounded rectangle background
-2. Text rendered using egui or custom text rendering
-3. Position above NPC sprite
-4. Fade in/out animation
-
----
-
-## Constraints
-
-1. **Performance:** NPC rendering must add < 2ms to frame time
-2. **GPU-friendly:** Use instanced rendering, minimize draw calls
-3. **No AI logic:** Only rendering and collision detection
-4. **Coordinate system:** Use same world coordinates as cells
-
----
-
-## Commit Format
-
+### 3. Game Loop Integration
+Update main loop in `crates/genesis-engine/src/lib.rs`:
+```rust
+// In game loop:
+// 1. Process sound event queue
+// 2. Update music based on game state
+// 3. Update ambient based on player position/biome
+// 4. Update spatial audio listener
+// 5. Clean up finished sounds
 ```
-[kernel] feat: K-36..K-39 NPC rendering and collision detection
+
+### 4. Audio State Management (`crates/genesis-engine/src/audio_state.rs`)
+Manage audio system state:
+```rust
+// - AudioState: current volumes, mute states
+// - MusicState: current track, crossfade progress
+// - AmbientState: active layers, transition progress
+// - Save/restore audio state
+```
+
+### 5. Update Engine Exports
+Add to `crates/genesis-engine/src/lib.rs`:
+```rust
+pub mod audio_assets;
+pub mod audio_integration;
+pub mod audio_state;
+```
+
+## Asset Structure
+```
+assets/sounds/
+├── SOUND_ASSETS.md      # Asset manifest (reference)
+├── music/               # Streaming MP3s (user provides)
+│   ├── *.mp3.stub       # Placeholder stubs
+├── ambient/             # Streaming ambient MP3s
+│   ├── *.mp3.stub       # Placeholder stubs
+└── sfx/                 # Short SFX (to be added)
+    ├── player/
+    ├── inventory/
+    ├── environment/
+    ├── npcs/
+    ├── monsters/
+    └── ui/
+```
+
+## Dependencies
+Ensure `Cargo.toml` includes:
+```toml
+# In genesis-engine
+rodio = { version = "0.19", features = ["mp3", "wav"] }
+```
+
+## Technical Requirements
+- Graceful handling of missing assets
+- Log warnings for stub files
+- Memory management for large audio
+- Clean shutdown of audio threads
+
+## Integration Checklist
+- [ ] Audio device initializes cleanly
+- [ ] Music plays based on biome
+- [ ] SFX play on game events
+- [ ] Ambient layers work
+- [ ] Volume controls function
+- [ ] No audio artifacts on transitions
+- [ ] Clean shutdown
+
+## Error Handling
+```rust
+// Handle missing/corrupt audio gracefully:
+// - Log error but don't crash
+// - Show "missing audio" indicator in debug UI
+// - Continue game without that sound
 ```
