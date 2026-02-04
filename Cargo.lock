@@ -1035,6 +1035,7 @@ dependencies = [
  "parking_lot",
  "pollster",
  "proptest",
+ "rodio",
  "thiserror 1.0.69",
  "tracing",
  "wgpu",
