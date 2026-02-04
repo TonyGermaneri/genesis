@@ -19,6 +19,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod combat;
 pub mod crafting;
 pub mod crafting_ui;
 pub mod economy;
@@ -30,12 +31,16 @@ pub mod interaction;
 pub mod inventory;
 pub mod inventory_ui;
 pub mod needs;
+pub mod npc;
 pub mod physics;
 pub mod player;
+pub mod quest;
 pub mod save;
+pub mod vehicle;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::combat::*;
     pub use crate::crafting::*;
     pub use crate::crafting_ui::*;
     pub use crate::economy::*;
@@ -47,9 +52,12 @@ pub mod prelude {
     pub use crate::inventory::*;
     pub use crate::inventory_ui::*;
     pub use crate::needs::*;
+    pub use crate::npc::*;
     pub use crate::physics::*;
     pub use crate::player::*;
+    pub use crate::quest::*;
     pub use crate::save::*;
+    pub use crate::vehicle::*;
 }
 
 pub use prelude::*;

@@ -128,6 +128,25 @@ pub trait CollisionQuery {
 
     /// Checks if a cell is climbable (ladders, vines).
     fn is_climbable(&self, x: i32, y: i32) -> bool;
+
+    /// Checks if an AABB collides with any solid cells.
+    /// Default implementation uses 1.0 cell size.
+    fn check_collision(&self, aabb: AABB) -> bool {
+        let cell_size = 1.0;
+        let min_x = (aabb.min_x / cell_size).floor() as i32;
+        let max_x = (aabb.max_x / cell_size).floor() as i32;
+        let min_y = (aabb.min_y / cell_size).floor() as i32;
+        let max_y = (aabb.max_y / cell_size).floor() as i32;
+
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                if self.is_solid(x, y) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 /// Mock collision query for testing.
@@ -147,6 +166,12 @@ impl MockCollision {
     /// Creates a new mock collision.
     #[must_use]
     pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a new mock collision with no solids (empty world).
+    #[must_use]
+    pub fn new_empty() -> Self {
         Self::default()
     }
 
