@@ -182,7 +182,12 @@ impl From<&Light> for GpuLight {
         Self {
             position: [light.position.0, light.position.1],
             direction: [light.direction.0, light.direction.1],
-            color_intensity: [light.color[0], light.color[1], light.color[2], light.intensity],
+            color_intensity: [
+                light.color[0],
+                light.color[1],
+                light.color[2],
+                light.intensity,
+            ],
             radius: light.radius,
             light_type: light.light_type as u32,
             enabled: u32::from(light.enabled),
@@ -275,11 +280,11 @@ fn get_cell(x: u32, y: u32) -> Cell {
 fn calculate_point_light(pixel_pos: vec2<f32>, light: Light) -> vec3<f32> {
     let diff = pixel_pos - light.position;
     let dist = length(diff);
-    
+
     if dist > light.radius {
         return vec3<f32>(0.0);
     }
-    
+
     // Smooth falloff
     let attenuation = 1.0 - smoothstep(0.0, light.radius, dist);
     let color = light.color_intensity.xyz;
@@ -300,33 +305,33 @@ fn calculate_directional_light(pixel_pos: vec2<f32>, light: Light) -> vec3<f32> 
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let x = id.x;
     let y = id.y;
-    
+
     if x >= params.width || y >= params.height {
         return;
     }
-    
+
     let pixel_pos = vec2<f32>(f32(x), f32(y));
-    
+
     // Start with ambient light
     var total_light = vec3<f32>(params.ambient);
-    
+
     // Add day/night cycle ambient
     let day_factor = sin(params.time_of_day * 3.14159);
     total_light += vec3<f32>(0.3, 0.3, 0.4) * max(0.0, day_factor);
-    
+
     // Check if this cell is underground (solid above)
     let is_underground = y > 0u && is_solid(get_cell(x, y - 1u));
-    
+
     // Accumulate light from all sources
     for (var i = 0u; i < params.light_count; i++) {
         let light = lights[i];
-        
+
         if light.enabled == 0u {
             continue;
         }
-        
+
         var contribution = vec3<f32>(0.0);
-        
+
         switch light.light_type {
             case 0u: { // Point light
                 contribution = calculate_point_light(pixel_pos, light);
@@ -343,10 +348,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             }
             default: {}
         }
-        
+
         total_light += contribution;
     }
-    
+
     // Clamp and store
     total_light = clamp(total_light, vec3<f32>(0.0), vec3<f32>(1.0));
     textureStore(light_map, vec2<i32>(i32(x), i32(y)), vec4<f32>(total_light, 1.0));

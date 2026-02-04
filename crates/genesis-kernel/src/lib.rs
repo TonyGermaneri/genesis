@@ -39,6 +39,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod audio;
 pub mod benchmark;
 pub mod biome;
 pub mod buffer;
@@ -59,6 +60,7 @@ pub mod worldgen;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::audio::*;
     pub use crate::benchmark::*;
     pub use crate::biome::*;
     pub use crate::buffer::*;

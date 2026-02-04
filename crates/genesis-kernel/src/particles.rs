@@ -537,7 +537,10 @@ impl ParticleSystem {
             cache: None,
         });
 
-        debug!("Created particle system with max {} particles", MAX_PARTICLES);
+        debug!(
+            "Created particle system with max {} particles",
+            MAX_PARTICLES
+        );
 
         Self {
             particle_buffer,

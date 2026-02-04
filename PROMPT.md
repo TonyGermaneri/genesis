@@ -1,7 +1,7 @@
-# PROMPT — Tools Agent — Iteration 3
+# PROMPT — Kernel Agent — Iteration 4
 
-> **Branch**: `tools-agent`
-> **Focus**: Inventory UI rendering, crafting UI rendering, minimap, debug console
+> **Branch**: `kernel-agent`
+> **Focus**: World generation, lighting system, particle effects, audio integration
 
 ## Your Mission
 
@@ -11,199 +11,205 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### T-12: Inventory UI Renderer (P0)
-**File**: `crates/genesis-tools/src/inventory_ui.rs`
+### K-16: Procedural World Generation (P0)
+**File**: `crates/genesis-kernel/src/worldgen.rs`
 
-Render inventory using egui:
+Implement procedural terrain generation:
 
 ```rust
-use egui::{Context, Window, Grid, Image, Response};
-use genesis_gameplay::inventory_ui::{InventoryUIModel, InventoryAction, SlotUIData};
+use crate::biome::{BiomeManager, BiomeId};
+use crate::cell::{Cell, MaterialId};
 
-pub struct InventoryUI {
-    pub is_open: bool,
-    slot_size: f32,
-    hotbar_y: f32,
+pub struct WorldGenerator {
+    seed: u64,
+    noise: FastNoiseLite,
+    biome_manager: BiomeManager,
 }
 
-impl InventoryUI {
+pub struct GenerationParams {
+    pub sea_level: i32,
+    pub terrain_scale: f32,
+    pub cave_threshold: f32,
+    pub ore_frequency: f32,
+}
+
+impl WorldGenerator {
+    pub fn new(seed: u64) -> Self;
+
+    pub fn generate_chunk(&self, chunk_x: i32, chunk_y: i32, params: &GenerationParams) -> Vec<Cell>;
+
+    fn generate_terrain_height(&self, world_x: i32) -> i32;
+    fn generate_cave_mask(&self, world_x: i32, world_y: i32) -> bool;
+    fn place_ores(&self, cells: &mut [Cell], chunk_x: i32, chunk_y: i32);
+    fn place_vegetation(&self, cells: &mut [Cell], chunk_x: i32, chunk_y: i32);
+}
+```
+
+Requirements:
+- Multi-octave noise for terrain height
+- Cave systems using 3D noise threshold
+- Ore veins with clustering
+- Surface vegetation (grass, trees as cell patterns)
+- Deterministic from seed
+
+### K-17: Dynamic Lighting System (P0)
+**File**: `crates/genesis-kernel/src/lighting.rs`
+
+Implement GPU-accelerated lighting:
+
+```rust
+pub struct LightingSystem {
+    light_buffer: wgpu::Buffer,
+    light_map: wgpu::Texture,
+    compute_pipeline: wgpu::ComputePipeline,
+}
+
+pub struct Light {
+    pub position: (f32, f32),
+    pub color: [f32; 3],
+    pub intensity: f32,
+    pub radius: f32,
+    pub light_type: LightType,
+}
+
+pub enum LightType {
+    Point,
+    Directional,
+    Ambient,
+}
+
+impl LightingSystem {
+    pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self;
+
+    pub fn add_light(&mut self, light: Light) -> LightId;
+    pub fn remove_light(&mut self, id: LightId);
+    pub fn update_light(&mut self, id: LightId, light: Light);
+
+    pub fn compute_lighting(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        cell_buffer: &wgpu::Buffer,
+    );
+
+    pub fn get_light_map(&self) -> &wgpu::Texture;
+}
+```
+
+Requirements:
+- Compute shader for light propagation
+- Light blocked by solid cells
+- Day/night cycle via ambient light
+- Smooth light falloff
+- Max 256 dynamic lights
+
+### K-18: Particle System (P1)
+**File**: `crates/genesis-kernel/src/particles.rs`
+
+Implement GPU particle effects:
+
+```rust
+pub struct ParticleSystem {
+    particle_buffer: wgpu::Buffer,
+    compute_pipeline: wgpu::ComputePipeline,
+    render_pipeline: wgpu::RenderPipeline,
+    max_particles: u32,
+}
+
+pub struct ParticleEmitter {
+    pub position: (f32, f32),
+    pub emission_rate: f32,
+    pub particle_lifetime: f32,
+    pub velocity_range: ((f32, f32), (f32, f32)),
+    pub color_start: [f32; 4],
+    pub color_end: [f32; 4],
+    pub size_range: (f32, f32),
+    pub gravity: f32,
+}
+
+pub enum ParticleEffect {
+    Explosion { position: (f32, f32), intensity: f32 },
+    Dust { position: (f32, f32), direction: (f32, f32) },
+    Fire { position: (f32, f32), size: f32 },
+    Water { position: (f32, f32), velocity: (f32, f32) },
+    Sparks { position: (f32, f32), count: u32 },
+}
+
+impl ParticleSystem {
+    pub fn new(device: &wgpu::Device, max_particles: u32) -> Self;
+
+    pub fn spawn_effect(&mut self, effect: ParticleEffect);
+    pub fn add_emitter(&mut self, emitter: ParticleEmitter) -> EmitterId;
+    pub fn remove_emitter(&mut self, id: EmitterId);
+
+    pub fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: f32);
+    pub fn render(&self, render_pass: &mut wgpu::RenderPass);
+}
+```
+
+Requirements:
+- GPU compute for particle physics
+- Instanced rendering for particles
+- Particle pooling (reuse dead particles)
+- Common effect presets
+- Collision with cells (optional)
+
+### K-19: Audio Spatial Integration (P1)
+**File**: `crates/genesis-kernel/src/audio.rs`
+
+Prepare spatial audio data:
+
+```rust
+pub struct AudioSpatialData {
+    pub listener_position: (f32, f32),
+    pub listener_velocity: (f32, f32),
+    pub environment: AudioEnvironment,
+}
+
+pub struct AudioSource {
+    pub id: AudioSourceId,
+    pub position: (f32, f32),
+    pub velocity: (f32, f32),
+    pub volume: f32,
+    pub pitch: f32,
+    pub loop_: bool,
+    pub attenuation: AttenuationModel,
+}
+
+pub enum AttenuationModel {
+    Linear { min_dist: f32, max_dist: f32 },
+    Inverse { ref_dist: f32, rolloff: f32 },
+    Exponential { ref_dist: f32, rolloff: f32 },
+}
+
+pub struct AudioEnvironment {
+    pub reverb: f32,
+    pub dampening: f32,
+    pub underground: bool,
+}
+
+pub struct SpatialAudioManager {
+    sources: HashMap<AudioSourceId, AudioSource>,
+    listener: AudioSpatialData,
+}
+
+impl SpatialAudioManager {
     pub fn new() -> Self;
 
-    pub fn show(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction>;
+    pub fn update_listener(&mut self, position: (f32, f32), velocity: (f32, f32));
+    pub fn add_source(&mut self, source: AudioSource) -> AudioSourceId;
+    pub fn remove_source(&mut self, id: AudioSourceId);
 
-    pub fn show_hotbar(&mut self, ctx: &Context, model: &InventoryUIModel) -> Option<InventoryAction>;
-
-    fn render_slot(&self, ui: &mut egui::Ui, slot: &SlotUIData) -> Response;
-
-    fn render_tooltip(&self, ui: &mut egui::Ui, tooltip: &TooltipData);
+    pub fn calculate_gains(&self) -> Vec<(AudioSourceId, f32, f32)>; // id, left, right
+    pub fn get_environment_at(&self, position: (f32, f32)) -> AudioEnvironment;
 }
 ```
 
 Requirements:
-- Grid layout for inventory slots
-- Hotbar always visible at bottom
-- Drag and drop between slots
-- Right-click context menu (use, drop, split)
-- Tooltip on hover
-- Item count overlay on slot
-
-### T-13: Crafting UI Renderer (P0)
-**File**: `crates/genesis-tools/src/crafting_ui.rs`
-
-Render crafting interface using egui:
-
-```rust
-use egui::{Context, Window, ScrollArea};
-use genesis_gameplay::crafting_ui::{CraftingUIModel, RecipeUIData};
-
-pub struct CraftingUI {
-    pub is_open: bool,
-    search_text: String,
-}
-
-impl CraftingUI {
-    pub fn new() -> Self;
-
-    pub fn show(&mut self, ctx: &Context, model: &mut CraftingUIModel) -> Option<CraftRequest>;
-
-    fn render_recipe_list(&mut self, ui: &mut egui::Ui, model: &CraftingUIModel) -> Option<usize>;
-
-    fn render_recipe_detail(&self, ui: &mut egui::Ui, recipe: &RecipeUIData);
-
-    fn render_crafting_queue(&self, ui: &mut egui::Ui, model: &CraftingUIModel);
-}
-
-pub struct CraftRequest {
-    pub recipe_id: RecipeId,
-    pub count: u32,
-}
-```
-
-Requirements:
-- Recipe list with filter/search
-- Recipe detail panel (ingredients, outputs)
-- "Craft" button (disabled if can't craft)
-- Crafting queue with progress bars
-- Visual feedback for missing ingredients
-
-### T-14: Minimap Renderer (P1)
-**File**: `crates/genesis-tools/src/minimap.rs`
-
-Implement minimap display:
-
-```rust
-use egui::{Context, Painter, Rect, Color32};
-
-pub struct Minimap {
-    pub is_visible: bool,
-    pub size: f32,
-    pub zoom: f32,
-    texture: Option<egui::TextureHandle>,
-}
-
-pub struct MinimapData {
-    pub player_pos: (f32, f32),
-    pub player_rotation: f32,
-    pub entities: Vec<MinimapEntity>,
-    pub terrain_colors: Vec<u8>,  // RGBA for terrain
-    pub width: u32,
-    pub height: u32,
-}
-
-pub struct MinimapEntity {
-    pub pos: (f32, f32),
-    pub entity_type: MinimapEntityType,
-}
-
-pub enum MinimapEntityType {
-    Player,
-    NPC,
-    Enemy,
-    Item,
-    Building,
-}
-
-impl Minimap {
-    pub fn new(size: f32) -> Self;
-
-    pub fn show(&mut self, ctx: &Context, data: &MinimapData);
-
-    pub fn update_terrain(&mut self, ctx: &Context, colors: &[u8], width: u32, height: u32);
-
-    fn world_to_minimap(&self, world_pos: (f32, f32), center: (f32, f32)) -> Option<(f32, f32)>;
-}
-```
-
-Requirements:
-- Corner overlay (top-right by default)
-- Terrain texture from chunk data
-- Entity markers with icons/colors
-- Player arrow showing direction
-- Zoom in/out controls
-- Click to set waypoint (optional)
-
-### T-15: Debug Console (P1)
-**File**: `crates/genesis-tools/src/console.rs`
-
-Implement in-game debug console:
-
-```rust
-use egui::{Context, Window, TextEdit, ScrollArea};
-
-pub struct DebugConsole {
-    pub is_open: bool,
-    input_buffer: String,
-    history: Vec<ConsoleEntry>,
-    command_history: Vec<String>,
-    history_index: Option<usize>,
-}
-
-pub struct ConsoleEntry {
-    pub timestamp: f64,
-    pub level: ConsoleLevel,
-    pub message: String,
-}
-
-pub enum ConsoleLevel {
-    Info,
-    Warning,
-    Error,
-    Command,
-    Result,
-}
-
-pub trait ConsoleCommand {
-    fn name(&self) -> &str;
-    fn help(&self) -> &str;
-    fn execute(&self, args: &[&str]) -> String;
-}
-
-impl DebugConsole {
-    pub fn new() -> Self;
-
-    pub fn show(&mut self, ctx: &Context, commands: &[Box<dyn ConsoleCommand>]) -> Option<String>;
-
-    pub fn log(&mut self, level: ConsoleLevel, message: String);
-
-    pub fn execute(&mut self, input: &str, commands: &[Box<dyn ConsoleCommand>]);
-}
-
-// Built-in commands
-pub struct HelpCommand;
-pub struct ClearCommand;
-pub struct TeleportCommand;
-pub struct SpawnCommand;
-pub struct GiveCommand;
-pub struct SetTimeCommand;
-```
-
-Requirements:
-- Toggle with backtick/tilde key
-- Command history (up/down arrows)
-- Tab completion for commands
-- Color-coded output levels
-- Scrollable history
-- Built-in debug commands
+- Position-based stereo panning
+- Distance attenuation
+- Environment detection (cave reverb)
+- Doppler effect preparation
+- Data only - actual audio in tools crate
 
 ---
 
@@ -224,18 +230,18 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[tools] feat: T-12 inventory UI renderer
-[tools] feat: T-13 crafting UI renderer
-[tools] feat: T-14 minimap renderer
-[tools] feat: T-15 debug console
+[kernel] feat: K-16 procedural world generation
+[kernel] feat: K-17 dynamic lighting system
+[kernel] feat: K-18 particle system
+[kernel] feat: K-19 audio spatial integration
 ```
 
 ---
 
 ## Integration Notes
 
-- T-12/T-13 consume data models from genesis-gameplay
-- Add genesis-gameplay dependency if not present
-- Use egui 0.30 (already in workspace)
+- K-16 uses BiomeManager from previous iteration
+- K-17 lighting affects cell rendering
+- K-18 particles render on top of cells
+- K-19 provides data for tools-agent audio playback
 - Export new modules in lib.rs
-- Test with mock data if gameplay types not available

@@ -126,7 +126,7 @@ impl WorldGenerator {
     ///
     /// # Arguments
     /// * `chunk_x` - Chunk X coordinate
-    /// * `chunk_y` - Chunk Y coordinate  
+    /// * `chunk_y` - Chunk Y coordinate
     /// * `params` - Generation parameters
     ///
     /// # Returns
@@ -227,7 +227,12 @@ impl WorldGenerator {
     /// Returns `true` if this cell should be carved out as cave.
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
-    pub fn generate_cave_mask(&self, world_x: i32, world_y: i32, params: &GenerationParams) -> bool {
+    pub fn generate_cave_mask(
+        &self,
+        world_x: i32,
+        world_y: i32,
+        params: &GenerationParams,
+    ) -> bool {
         let x = world_x as f64;
         let y = world_y as f64;
 
@@ -311,7 +316,12 @@ impl WorldGenerator {
 
     /// Determines which ore (if any) should be at this location.
     #[allow(clippy::cast_precision_loss)]
-    fn get_ore_at(&self, world_x: i32, world_y: i32, params: &GenerationParams) -> Option<MaterialId> {
+    fn get_ore_at(
+        &self,
+        world_x: i32,
+        world_y: i32,
+        params: &GenerationParams,
+    ) -> Option<MaterialId> {
         let x = world_x as f64;
         let y = world_y as f64;
 
@@ -396,7 +406,9 @@ impl WorldGenerator {
         let biome = self.biome_manager.get_biome_at(coord);
 
         // Vegetation density varies by location
-        let vegetation_noise = self.detail_noise.noise2d(world_x as f64 * 0.1, world_y as f64 * 0.1);
+        let vegetation_noise = self
+            .detail_noise
+            .noise2d(world_x as f64 * 0.1, world_y as f64 * 0.1);
 
         // Only place vegetation sometimes
         if vegetation_noise < 0.3 {
@@ -413,7 +425,7 @@ impl WorldGenerator {
                     // Simple tree pattern (vertical trunk)
                     self.place_tree(cells, local_x, local_y);
                 }
-            }
+            },
             biome_ids::DESERT => {
                 // Desert is mostly bare, occasional cactus
                 if vegetation_noise > 0.9 && local_y + 2 < self.chunk_size {
@@ -421,10 +433,10 @@ impl WorldGenerator {
                     let cactus_idx = ((local_y + 1) * self.chunk_size + local_x) as usize;
                     cells[cactus_idx] = Cell::new(material_ids::GRASS).with_flag(CellFlags::SOLID);
                 }
-            }
+            },
             _ => {
                 // Other biomes: minimal vegetation
-            }
+            },
         }
     }
 
@@ -493,7 +505,9 @@ mod tests {
         let params = GenerationParams::default();
 
         // Different X coordinates should generally give different heights
-        let heights: Vec<i32> = (0..100).map(|x| gen.generate_terrain_height(x, &params)).collect();
+        let heights: Vec<i32> = (0..100)
+            .map(|x| gen.generate_terrain_height(x, &params))
+            .collect();
         let unique: std::collections::HashSet<_> = heights.iter().collect();
 
         // Should have some variation
@@ -506,7 +520,10 @@ mod tests {
         let params = GenerationParams::default();
 
         let cells = gen.generate_chunk(0, 0, &params);
-        assert_eq!(cells.len(), (DEFAULT_CHUNK_SIZE * DEFAULT_CHUNK_SIZE) as usize);
+        assert_eq!(
+            cells.len(),
+            (DEFAULT_CHUNK_SIZE * DEFAULT_CHUNK_SIZE) as usize
+        );
     }
 
     #[test]
@@ -559,9 +576,7 @@ mod tests {
         // Count ore cells
         let ore_count = cells
             .iter()
-            .filter(|c| {
-                c.material >= ore_ids::COAL && c.material <= ore_ids::COPPER
-            })
+            .filter(|c| c.material >= ore_ids::COAL && c.material <= ore_ids::COPPER)
             .count();
 
         // Verify generation completed (ore_count can be any value including 0)
