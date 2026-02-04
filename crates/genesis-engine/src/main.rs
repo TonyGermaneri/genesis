@@ -23,6 +23,12 @@ mod world;
 
 /// Analytics module for opt-in gameplay telemetry
 pub mod analytics;
+/// Audio asset loading and caching
+pub mod audio_assets;
+/// Audio system integration
+pub mod audio_integration;
+/// Audio state management
+pub mod audio_state;
 /// Crash reporting and error capture
 pub mod crash_report;
 

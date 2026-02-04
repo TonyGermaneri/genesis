@@ -20,6 +20,7 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod ai;
+pub mod ambient;
 pub mod biome;
 pub mod collision_response;
 pub mod combat;
@@ -35,6 +36,7 @@ pub mod input;
 pub mod interaction;
 pub mod inventory;
 pub mod inventory_ui;
+pub mod music;
 pub mod needs;
 pub mod npc;
 pub mod npc_spawning;
@@ -43,6 +45,8 @@ pub mod plants;
 pub mod player;
 pub mod quest;
 pub mod save;
+pub mod sound_events;
+pub mod sound_triggers;
 pub mod spawn;
 pub mod terrain_manipulation;
 pub mod time;
@@ -52,6 +56,7 @@ pub mod weather;
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::ai::*;
+    pub use crate::ambient::*;
     pub use crate::biome::*;
     pub use crate::collision_response::*;
     pub use crate::combat::*;
@@ -67,6 +72,7 @@ pub mod prelude {
     pub use crate::interaction::*;
     pub use crate::inventory::*;
     pub use crate::inventory_ui::*;
+    pub use crate::music::*;
     pub use crate::needs::*;
     pub use crate::npc::*;
     pub use crate::npc_spawning::*;
@@ -75,6 +81,8 @@ pub mod prelude {
     pub use crate::player::*;
     pub use crate::quest::*;
     pub use crate::save::*;
+    pub use crate::sound_events::*;
+    pub use crate::sound_triggers::*;
     pub use crate::spawn::*;
     pub use crate::terrain_manipulation::*;
     pub use crate::time::*;

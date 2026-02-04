@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-04
-> Sprint: Iteration 10 — Sound System
+> Sprint: Iteration 11 — Crafting System
 
 ## Legend
 
@@ -12,7 +12,7 @@
 
 ---
 
-## Completed — Iterations 1-9
+## Completed — Iterations 1-10
 
 ### Kernel Agent
 | ID | Task | Status |
@@ -21,6 +21,7 @@
 | K-28 to K-31 | Multi-chunk streaming, chunk activation, env sim, day/night | 🟢 |
 | K-32 to K-35 | Biome rendering, transitions, water animation | 🟢 |
 | K-36 to K-39 | NPC rendering, collision, batch render, speech bubbles | 🟢 |
+| K-40 to K-43 | Audio backend, spatial audio, streaming, mixing | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
@@ -29,6 +30,7 @@
 | G-29 to G-32 | Grass interaction, weather, time, plant growth | 🟢 |
 | G-33 to G-36 | Biome terrain generation, resource distribution | 🟢 |
 | G-37 to G-40 | NPC entities, AI behaviors, spawning, dialogue | 🟢 |
+| G-41 to G-44 | Sound events, ambient rules, music state, NPC sounds | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
@@ -37,6 +39,7 @@
 | T-28 to T-31 | Inventory, stats, weather HUD, minimap | 🟢 |
 | T-32 to T-35 | Biome minimap, debug info, seed display | 🟢 |
 | T-36 to T-39 | Dialogue UI, NPC debug, spawn editor | 🟢 |
+| T-40 to T-43 | Sound settings, audio debug, sound test | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
@@ -45,68 +48,51 @@
 | I-24 to I-27 | ChunkManager wiring, env integration, profiling | 🟢 |
 | I-28 to I-31 | Biome generation wiring, seed management | 🟢 |
 | I-32 to I-35 | NPC manager, interaction, chunk loading | 🟢 |
+| I-36 to I-40 | Audio manager, asset loading, config, profiling | 🟢 |
 
 ---
 
-## Iteration 10 — Sound System
+## Iteration 11 — Crafting System
+
+---
+
+## Iteration 11 — Crafting System
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| K-40 | Audio backend initialization | ⚪ | P0 | Initialize rodio/kira audio device |
-| K-41 | Spatial audio positioning | ⚪ | P0 | 2D positional audio based on distance |
-| K-42 | Audio streaming for music | ⚪ | P1 | Stream large MP3 files for music |
-| K-43 | Audio mixing/channels | ⚪ | P1 | Separate channels for music/sfx/ambient |
+| K-44 | Crafting grid compute shader | ⚪ | P0 | GPU-accelerated recipe matching |
+| K-45 | Item stack management | ⚪ | P0 | Efficient item combining/splitting |
+| K-46 | Workbench interaction zones | ⚪ | P1 | Spatial detection for crafting stations |
+| K-47 | Crafting animation support | ⚪ | P1 | Progress bar, particle effects data |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| G-41 | Sound event system | ⚪ | P0 | Events for footsteps, attacks, pickups |
-| G-42 | Ambient sound rules | ⚪ | P0 | Biome-specific ambient sounds |
-| G-43 | Music state machine | ⚪ | P0 | Combat/explore/menu music transitions |
-| G-44 | NPC sound triggers | ⚪ | P1 | NPC voices, attack sounds |
+| G-45 | Recipe data structure | ⚪ | P0 | Define recipes, ingredients, outputs |
+| G-46 | Crafting logic | ⚪ | P0 | Validate recipes, consume items, produce output |
+| G-47 | Workbench types | ⚪ | P0 | Forge, anvil, alchemy table, etc. |
+| G-48 | Crafting progression | ⚪ | P1 | Unlock recipes via skills/discovery |
 
 ### Tools Agent (Branch: `tools-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| T-40 | Sound settings UI | ⚪ | P0 | Volume sliders for music/sfx/ambient |
-| T-41 | Audio debug panel | ⚪ | P0 | Show playing sounds, channels |
-| T-42 | Sound test panel | ⚪ | P1 | Preview sounds in debug mode |
-| T-43 | Jukebox/music player | ⚪ | P1 | Manual music selection (debug) |
+| T-44 | Crafting UI grid | ⚪ | P0 | Drag-drop crafting interface |
+| T-45 | Recipe book UI | ⚪ | P0 | Browse known recipes by category |
+| T-46 | Crafting result preview | ⚪ | P0 | Show output item before crafting |
+| T-47 | Workbench interaction UI | ⚪ | P1 | Station-specific crafting panels |
 
 ### Infra Agent (Branch: `infra-agent`)
 
 | ID | Task | Status | Priority | Description |
 |----|------|--------|----------|-------------|
-| I-36 | Audio manager integration | ⚪ | P0 | Add audio to game loop |
-| I-37 | Sound asset loading | ⚪ | P0 | Load MP3/WAV from assets folder |
-| I-38 | Audio config persistence | ⚪ | P0 | Save/load volume settings |
-| I-39 | Sound performance profiling | ⚪ | P1 | Track audio CPU usage
-| I-33 | NPC-player interaction | ⚪ | P0 | Detect interact key near NPCs |
-| I-34 | NPC chunk loading | ⚪ | P0 | Load/unload NPCs with chunks |
-| I-35 | NPC update profiling | ⚪ | P1 | Measure AI tick performance
-| G-36 | Biome-specific cell types | ⚪ | P1 | Sand, water, grass variants per biome |
-
-### Tools Agent (Branch: `tools-agent`)
-
-| ID | Task | Status | Priority | Description |
-|----|------|--------|----------|-------------|
-| T-32 | Biome minimap coloring | ⚪ | P0 | Color-coded biomes on minimap |
-| T-33 | Debug biome info panel | ⚪ | P0 | Show current biome, noise values |
-| T-34 | World seed display/input | ⚪ | P0 | Show seed, allow seed input for new worlds |
-| T-35 | Biome legend overlay | ⚪ | P1 | Color key for biome types |
-
-### Infra Agent (Branch: `infra-agent`)
-
-| ID | Task | Status | Priority | Description |
-|----|------|--------|----------|-------------|
-| I-28 | Wire biome generation | ⚪ | P0 | Call terrain gen on chunk creation |
-| I-29 | World seed management | ⚪ | P0 | Seed storage, deterministic generation |
-| I-30 | Chunk biome data flow | ⚪ | P0 | Pass biome info from gameplay to kernel |
-| I-31 | Biome generation profiling | ⚪ | P1 | Measure gen time per chunk |
+| I-41 | Recipe loading from assets | ⚪ | P0 | Load recipes from JSON/TOML files |
+| I-42 | Crafting event integration | ⚪ | P0 | Wire crafting to inventory/sound/stats |
+| I-43 | Crafting persistence | ⚪ | P0 | Save learned recipes, queue state |
+| I-44 | Crafting profiling | ⚪ | P1 | Measure recipe search performance |
 
 ---
 
