@@ -398,6 +398,27 @@ impl TerrainGenerationService {
         ChunkBiomeData::new(chunk_x, chunk_y, biome_id)
     }
 
+    /// Gets the biome name at a world position.
+    #[must_use]
+    pub fn get_biome_at(&self, world_x: f32, world_y: f32) -> String {
+        let coord = WorldCoord::new(world_x as i64, world_y as i64);
+        let biome_id = self.seed_manager.world_gen().biome_manager().get_biome_at(coord);
+        // Convert biome ID to name
+        #[allow(clippy::match_same_arms)]
+        match biome_id {
+            0 => "plains".to_string(),
+            1 => "forest".to_string(),
+            2 => "desert".to_string(),
+            3 => "snow".to_string(),
+            4 => "swamp".to_string(),
+            5 => "mountain".to_string(),
+            6 => "cave".to_string(),
+            7 => "ocean".to_string(),
+            8 => "beach".to_string(),
+            _ => "plains".to_string(),
+        }
+    }
+
     /// Generates detailed per-cell biome data.
     #[must_use]
     pub fn generate_detailed_biome_data(&mut self, chunk_x: i32, chunk_y: i32) -> ChunkBiomeData {

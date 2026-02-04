@@ -995,6 +995,7 @@ dependencies = [
  "genesis-tools",
  "genesis-world",
  "pollster",
+ "rodio",
  "serde",
  "serde_json",
  "tempfile",

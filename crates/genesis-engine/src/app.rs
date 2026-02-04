@@ -24,6 +24,8 @@ use crate::perf::PerfMetrics;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
+use crate::audio_integration::{AudioIntegration, SoundEvent};
+use crate::audio_assets::AudioCategory;
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -79,6 +81,10 @@ struct GenesisApp {
     /// Last player chunk position (for detecting chunk changes)
     last_player_chunk: (i32, i32),
 
+    // === Audio ===
+    /// Audio integration system
+    audio: AudioIntegration,
+
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -120,6 +126,16 @@ impl GenesisApp {
         let npc_spawn_config = genesis_gameplay::NPCSpawnConfig::with_seed(seed);
         let npc_spawner = genesis_gameplay::NPCChunkSpawner::new(npc_spawn_config);
 
+        // Initialize audio system
+        let mut audio = AudioIntegration::with_default_assets();
+        if audio.is_available() {
+            info!("Audio system initialized");
+            // Preload SFX for immediate playback
+            audio.preload_sfx();
+        } else {
+            warn!("Audio system not available - continuing without audio");
+        }
+
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
@@ -150,6 +166,7 @@ impl GenesisApp {
             terrain_service,
             npc_spawner,
             last_player_chunk: initial_chunk,
+            audio,
 
             gameplay,
             camera,
@@ -275,10 +292,10 @@ impl GenesisApp {
 
         // Time NPC updates (NPCs are updated inside gameplay.update via fixed_update)
         let npc_start = Instant::now();
-        
+
         // Update gameplay state (player, entities, etc.)
         self.gameplay.update(dt, &input);
-        
+
         // Record NPC update timing
         let npc_elapsed = npc_start.elapsed();
         self.npc_metrics.record_ai_time(npc_elapsed);
@@ -290,6 +307,9 @@ impl GenesisApp {
         // Update camera to follow player
         let player_pos = self.gameplay.player.position();
         self.camera.center_on(player_pos.x, player_pos.y);
+
+        // Update audio system
+        self.update_audio(dt, player_pos.x, player_pos.y);
 
         // Check for chunk changes and spawn/despawn NPCs
         self.update_npc_chunks();
@@ -322,7 +342,7 @@ impl GenesisApp {
     fn update_npc_chunks(&mut self) {
         let player_pos = self.gameplay.player_position();
         let chunk_size = self.npc_spawner.config().chunk_size as f32;
-        
+
         let current_chunk = (
             (player_pos.0 / chunk_size).floor() as i32,
             (player_pos.1 / chunk_size).floor() as i32,
@@ -358,7 +378,7 @@ impl GenesisApp {
                 // Check if this chunk is still visible from new position
                 let still_visible = (old_visible_chunk.0 - current_chunk.0).abs() <= render_distance
                     && (old_visible_chunk.1 - current_chunk.1).abs() <= render_distance;
-                
+
                 if !still_visible && self.npc_spawner.get_chunk_npcs(old_visible_chunk).is_some() {
                     chunks_to_unload.push(old_visible_chunk);
                 }
@@ -392,7 +412,7 @@ impl GenesisApp {
     fn spawn_initial_npcs(&mut self) {
         let chunk_size = self.npc_spawner.config().chunk_size as f32;
         let player_pos = self.gameplay.player_position();
-        
+
         let current_chunk = (
             (player_pos.0 / chunk_size).floor() as i32,
             (player_pos.1 / chunk_size).floor() as i32,
@@ -416,6 +436,110 @@ impl GenesisApp {
         if total_spawned > 0 {
             info!("Spawned {} initial NPCs around player", total_spawned);
         }
+    }
+
+    /// Updates audio system for the frame.
+    fn update_audio(&mut self, dt: f32, player_x: f32, player_y: f32) {
+        // Update listener position to player
+        self.audio.set_listener_position(player_x, player_y);
+
+        // Update music based on biome
+        self.update_biome_music();
+
+        // Update ambient based on environment
+        self.update_ambient_audio();
+
+        // Process queued sounds and update fades
+        self.audio.update(dt);
+    }
+
+    /// Updates music track based on current biome.
+    fn update_biome_music(&mut self) {
+        // Get current biome from player position
+        let player_pos = self.gameplay.player_position();
+        let biome = self.terrain_service.get_biome_at(player_pos.0, player_pos.1);
+
+        // Map biome to music track (if different from current)
+        #[allow(clippy::match_same_arms)]
+        let track_name = match biome.as_str() {
+            "plains" | "grassland" => "exploration_plains",
+            "forest" | "woodland" => "exploration_forest",
+            "desert" | "wasteland" => "exploration_desert",
+            "snow" | "tundra" | "arctic" => "exploration_snow",
+            "swamp" | "marsh" => "exploration_swamp",
+            "mountain" | "highland" => "exploration_mountain",
+            "cave" | "underground" => "exploration_cave",
+            _ => "exploration_plains", // Default
+        };
+
+        // Only change if different from current (to avoid resetting)
+        if self.audio.state().music.current_track.as_deref() != Some(track_name) {
+            // Check if we have this track, otherwise skip
+            if self.audio.state().music.is_playing() {
+                self.audio.crossfade_music(track_name, 3.0);
+            } else {
+                self.audio.play_music(track_name, Some(2.0));
+            }
+        }
+    }
+
+    /// Updates ambient audio based on environment state.
+    fn update_ambient_audio(&mut self) {
+        let hour = self.environment.time.hour();
+        let is_night = !(6..20).contains(&hour);
+        let is_dawn_dusk = (5..7).contains(&hour) || (18..20).contains(&hour);
+
+        // Day/night ambient layers
+        if is_night {
+            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.5, 2.0);
+            self.audio.fade_out_ambient("day", 2.0);
+        } else if is_dawn_dusk {
+            // Dawn/dusk transition - both layers at reduced volume
+            self.audio.fade_in_ambient("day", "ambient/birds", 0.3, 2.0);
+            self.audio.fade_in_ambient("night", "ambient/night_crickets", 0.2, 2.0);
+        } else {
+            self.audio.fade_in_ambient("day", "ambient/birds", 0.5, 2.0);
+            self.audio.fade_out_ambient("night", 2.0);
+        }
+
+        // Weather-based ambient
+        if self.environment.weather.is_raining() {
+            let rain_volume = self.environment.weather.rain_intensity();
+            self.audio.fade_in_ambient("rain", "ambient/rain", rain_volume, 1.0);
+        } else {
+            self.audio.fade_out_ambient("rain", 2.0);
+        }
+
+        if self.environment.weather.is_stormy() {
+            self.audio.fade_in_ambient("thunder", "ambient/thunder", 0.7, 0.5);
+        } else {
+            self.audio.fade_out_ambient("thunder", 1.0);
+        }
+
+        // Wind based on weather intensity
+        let wind_volume = self.environment.weather.wind_strength() * 0.4;
+        if wind_volume > 0.1 {
+            self.audio.fade_in_ambient("wind", "ambient/wind", wind_volume, 1.5);
+        } else {
+            self.audio.fade_out_ambient("wind", 2.0);
+        }
+    }
+
+    /// Plays a sound effect for a gameplay event.
+    #[allow(dead_code)]
+    pub fn play_sfx(&mut self, name: &str, position: Option<(f32, f32)>) {
+        let mut event = SoundEvent::new(AudioCategory::Sfx, name);
+        if let Some((x, y)) = position {
+            event = event.at_position(x, y);
+        }
+        self.audio.queue_sound(event);
+    }
+
+    /// Plays a UI sound effect.
+    #[allow(dead_code)]
+    pub fn play_ui_sound(&mut self, name: &str) {
+        let event = SoundEvent::new(AudioCategory::Ui, name);
+        self.audio.queue_sound(event);
     }
 
     /// Render the frame.
