@@ -375,6 +375,220 @@ impl<'a> WorldCollisionQuery<'a> {
     }
 }
 
+// =============================================================================
+// Terrain Collision Detection (K-26)
+// =============================================================================
+
+use crate::chunk_manager::VisibleChunkManager;
+
+/// Collision result from terrain check.
+#[derive(Debug, Clone, Default)]
+pub struct TerrainCollision {
+    /// Whether a collision occurred.
+    pub collided: bool,
+    /// Push direction (normalized normal).
+    pub normal: (f32, f32),
+    /// How far into the solid cell.
+    pub penetration: f32,
+    /// Material type that was hit (if any).
+    pub cell_type: Option<u16>,
+}
+
+impl TerrainCollision {
+    /// Creates a no-collision result.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self {
+            collided: false,
+            normal: (0.0, 0.0),
+            penetration: 0.0,
+            cell_type: None,
+        }
+    }
+
+    /// Creates a collision result.
+    #[must_use]
+    pub fn hit(normal: (f32, f32), penetration: f32, cell_type: u16) -> Self {
+        Self {
+            collided: true,
+            normal,
+            penetration,
+            cell_type: Some(cell_type),
+        }
+    }
+}
+
+/// Check collision between a circle and terrain.
+///
+/// Checks all cells within the circle's bounding box for solid cells,
+/// then calculates the push-out direction and penetration.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn check_terrain_collision(
+    chunk_manager: &VisibleChunkManager,
+    position: (f32, f32),
+    radius: f32,
+) -> TerrainCollision {
+    let mut total_normal = (0.0f32, 0.0f32);
+    let mut max_penetration = 0.0f32;
+    let mut hit_material: Option<u16> = None;
+
+    // Check all cells that could be touching the circle
+    let min_x = (position.0 - radius).floor() as i32;
+    let max_x = (position.0 + radius).ceil() as i32;
+    let min_y = (position.1 - radius).floor() as i32;
+    let max_y = (position.1 + radius).ceil() as i32;
+
+    for cell_y in min_y..=max_y {
+        for cell_x in min_x..=max_x {
+            if let Some(cell) = chunk_manager.get_cell(cell_x, cell_y) {
+                // Check if cell is solid
+                if cell.flags & CellFlags::SOLID != 0 {
+                    // Cell center
+                    let cell_cx = cell_x as f32 + 0.5;
+                    let cell_cy = cell_y as f32 + 0.5;
+
+                    // Find closest point on cell to circle center
+                    let closest_x = position.0.clamp(cell_x as f32, cell_x as f32 + 1.0);
+                    let closest_y = position.1.clamp(cell_y as f32, cell_y as f32 + 1.0);
+
+                    // Distance from circle center to closest point
+                    let dx = position.0 - closest_x;
+                    let dy = position.1 - closest_y;
+                    let dist_sq = dx * dx + dy * dy;
+                    let dist = dist_sq.sqrt();
+
+                    // Check if circle overlaps this cell
+                    if dist < radius {
+                        let penetration = radius - dist;
+
+                        // Calculate push direction (from cell to circle)
+                        let (nx, ny) = if dist > f32::EPSILON {
+                            (dx / dist, dy / dist)
+                        } else {
+                            // Circle center inside cell - push towards cell center's opposite
+                            let to_center_x = position.0 - cell_cx;
+                            let to_center_y = position.1 - cell_cy;
+                            let len =
+                                (to_center_x * to_center_x + to_center_y * to_center_y).sqrt();
+                            if len > f32::EPSILON {
+                                (to_center_x / len, to_center_y / len)
+                            } else {
+                                (0.0, -1.0) // Default: push up
+                            }
+                        };
+
+                        // Accumulate normals weighted by penetration
+                        total_normal.0 += nx * penetration;
+                        total_normal.1 += ny * penetration;
+
+                        if penetration > max_penetration {
+                            max_penetration = penetration;
+                            hit_material = Some(cell.material);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if max_penetration > 0.0 {
+        // Normalize the accumulated normal
+        let len = (total_normal.0 * total_normal.0 + total_normal.1 * total_normal.1).sqrt();
+        let normal = if len > f32::EPSILON {
+            (total_normal.0 / len, total_normal.1 / len)
+        } else {
+            (0.0, -1.0)
+        };
+
+        TerrainCollision::hit(normal, max_penetration, hit_material.unwrap_or(0))
+    } else {
+        TerrainCollision::none()
+    }
+}
+
+/// Check collision for a moving object (sweep test).
+///
+/// Returns the collision info and the safe position (last non-colliding position).
+#[must_use]
+pub fn sweep_terrain_collision(
+    chunk_manager: &VisibleChunkManager,
+    start: (f32, f32),
+    end: (f32, f32),
+    radius: f32,
+) -> (TerrainCollision, (f32, f32)) {
+    // Number of steps to check (based on distance)
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+    let dist = (dx * dx + dy * dy).sqrt();
+
+    if dist < f32::EPSILON {
+        // Not moving, just check current position
+        let collision = check_terrain_collision(chunk_manager, start, radius);
+        return (collision, start);
+    }
+
+    // Step size should be smaller than radius for accurate detection
+    let step_count = ((dist / (radius * 0.5)).ceil() as usize).max(2);
+    let step_x = dx / step_count as f32;
+    let step_y = dy / step_count as f32;
+
+    let mut last_safe = start;
+    let mut pos = start;
+
+    for _ in 0..=step_count {
+        let collision = check_terrain_collision(chunk_manager, pos, radius);
+        if collision.collided {
+            return (collision, last_safe);
+        }
+
+        last_safe = pos;
+        pos.0 += step_x;
+        pos.1 += step_y;
+    }
+
+    // No collision along path
+    (TerrainCollision::none(), end)
+}
+
+/// Resolve collision by pushing entity out of terrain.
+#[must_use]
+pub fn resolve_collision(position: (f32, f32), collision: &TerrainCollision) -> (f32, f32) {
+    if !collision.collided {
+        return position;
+    }
+
+    // Push out by penetration amount along normal
+    (
+        position.0 + collision.normal.0 * collision.penetration,
+        position.1 + collision.normal.1 * collision.penetration,
+    )
+}
+
+/// Checks if a point is inside solid terrain.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn is_point_in_terrain(chunk_manager: &VisibleChunkManager, x: f32, y: f32) -> bool {
+    let cell_x = x.floor() as i32;
+    let cell_y = y.floor() as i32;
+
+    chunk_manager
+        .get_cell(cell_x, cell_y)
+        .is_some_and(|cell| cell.flags & CellFlags::SOLID != 0)
+}
+
+/// Gets the terrain material at a world position.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn get_terrain_material(chunk_manager: &VisibleChunkManager, x: f32, y: f32) -> Option<u16> {
+    let cell_x = x.floor() as i32;
+    let cell_y = y.floor() as i32;
+
+    chunk_manager
+        .get_cell(cell_x, cell_y)
+        .map(|cell| cell.material)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,5 +748,37 @@ mod tests {
         // Cell should be solid at world (105, 205)
         assert!(query.is_solid(WorldCoord::new(105, 205)));
         assert!(!query.is_solid(WorldCoord::new(5, 5))); // Wrong - that's outside this chunk
+    }
+
+    #[test]
+    fn test_terrain_collision_no_hit() {
+        let collision = TerrainCollision::none();
+        assert!(!collision.collided);
+        assert!(collision.cell_type.is_none());
+    }
+
+    #[test]
+    fn test_terrain_collision_hit() {
+        let collision = TerrainCollision::hit((0.0, -1.0), 0.5, 5);
+        assert!(collision.collided);
+        assert_eq!(collision.normal, (0.0, -1.0));
+        assert!((collision.penetration - 0.5).abs() < f32::EPSILON);
+        assert_eq!(collision.cell_type, Some(5));
+    }
+
+    #[test]
+    fn test_resolve_collision() {
+        let position = (10.0, 10.0);
+
+        // No collision - position unchanged
+        let no_hit = TerrainCollision::none();
+        let resolved = resolve_collision(position, &no_hit);
+        assert_eq!(resolved, position);
+
+        // With collision - pushed out
+        let hit = TerrainCollision::hit((0.0, -1.0), 0.5, 5);
+        let resolved = resolve_collision(position, &hit);
+        assert!((resolved.0 - 10.0).abs() < f32::EPSILON);
+        assert!((resolved.1 - 9.5).abs() < f32::EPSILON);
     }
 }
