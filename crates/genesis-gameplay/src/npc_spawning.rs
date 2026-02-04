@@ -104,7 +104,7 @@ impl NPCChunkSpawner {
     #[must_use]
     pub fn generate_spawn_data(&self, chunk_pos: (i32, i32)) -> Vec<NPCSpawnData> {
         let mut spawns = Vec::new();
-        
+
         // Create deterministic RNG from seed + chunk position
         let chunk_seed = self.chunk_seed(chunk_pos);
         let mut rng_state = chunk_seed;
@@ -115,7 +115,7 @@ impl NPCChunkSpawner {
         for i in 0..num_spawn_points {
             // Advance RNG
             rng_state = Self::next_rng(rng_state);
-            
+
             // Check spawn chance
             let roll = (rng_state % 1000) as f32 / 1000.0;
             if roll > self.config.spawn_chance {
@@ -254,10 +254,10 @@ mod tests {
     #[test]
     fn test_generate_spawn_data_deterministic() {
         let spawner = NPCChunkSpawner::new(NPCSpawnConfig::with_seed(12345));
-        
+
         let spawns1 = spawner.generate_spawn_data((0, 0));
         let spawns2 = spawner.generate_spawn_data((0, 0));
-        
+
         assert_eq!(spawns1.len(), spawns2.len());
         for (s1, s2) in spawns1.iter().zip(spawns2.iter()) {
             assert_eq!(s1.position, s2.position);
@@ -268,10 +268,10 @@ mod tests {
     #[test]
     fn test_different_chunks_different_spawns() {
         let spawner = NPCChunkSpawner::new(NPCSpawnConfig::with_seed(12345));
-        
+
         let spawns_00 = spawner.generate_spawn_data((0, 0));
         let spawns_10 = spawner.generate_spawn_data((1, 0));
-        
+
         // They should be different (unless very unlikely RNG collision)
         if !spawns_00.is_empty() && !spawns_10.is_empty() {
             let pos_00 = spawns_00[0].position;
@@ -292,7 +292,7 @@ mod tests {
         let mut npc_manager = NPCManager::new();
 
         let count = spawner.on_chunk_loaded((0, 0), &mut npc_manager);
-        
+
         assert!(count > 0);
         assert_eq!(npc_manager.len(), count);
         assert!(spawner.get_chunk_npcs((0, 0)).is_some());
@@ -310,9 +310,9 @@ mod tests {
 
         spawner.on_chunk_loaded((0, 0), &mut npc_manager);
         let initial_count = npc_manager.len();
-        
+
         let despawned = spawner.on_chunk_unloaded((0, 0), &mut npc_manager);
-        
+
         assert_eq!(despawned, initial_count);
         assert_eq!(npc_manager.len(), 0);
         assert!(spawner.get_chunk_npcs((0, 0)).is_none());
@@ -330,7 +330,7 @@ mod tests {
 
         let count1 = spawner.on_chunk_loaded((0, 0), &mut npc_manager);
         let count2 = spawner.on_chunk_loaded((0, 0), &mut npc_manager);
-        
+
         assert!(count1 > 0);
         assert_eq!(count2, 0); // Second load should not spawn more
         assert_eq!(npc_manager.len(), count1);

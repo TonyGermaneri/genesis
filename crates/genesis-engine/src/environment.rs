@@ -338,6 +338,35 @@ impl WeatherSystem {
         self.rain_intensity() > 0.1
     }
 
+    /// Returns whether it's currently stormy.
+    #[must_use]
+    pub fn is_stormy(&self) -> bool {
+        matches!(self.current_weather, WeatherType::Storm)
+            || (self.transition_progress < 1.0 && matches!(self.target_weather, WeatherType::Storm))
+    }
+
+    /// Returns the wind strength (0.0-1.0).
+    #[must_use]
+    pub fn wind_strength(&self) -> f32 {
+        let current = match self.current_weather {
+            WeatherType::Clear => 0.1,
+            WeatherType::Cloudy => 0.2,
+            WeatherType::Rain => 0.4,
+            WeatherType::Storm => 0.9,
+            WeatherType::Snow => 0.5,
+            WeatherType::Fog => 0.0,
+        };
+        let target = match self.target_weather {
+            WeatherType::Clear => 0.1,
+            WeatherType::Cloudy => 0.2,
+            WeatherType::Rain => 0.4,
+            WeatherType::Storm => 0.9,
+            WeatherType::Snow => 0.5,
+            WeatherType::Fog => 0.0,
+        };
+        current + (target - current) * self.transition_progress
+    }
+
     /// Returns the ambient light modifier (0.0-1.0).
     #[must_use]
     pub fn ambient_modifier(&self) -> f32 {
