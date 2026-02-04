@@ -1,328 +1,237 @@
-# PROMPT — Infra Agent — Iteration 4
+# PROMPT — Gameplay Agent — Iteration 6
 
-> **Branch**: `infra-agent`
-> **Focus**: Asset pipeline, localization, crash reporting, analytics
+> **Branch**: `gameplay-agent`
+> **Focus**: Terrain manipulation, top-down player controller, collision response, interaction system
 
 ## Your Mission
 
-Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
+Make the world interactive! Players need to dig, place materials, and collide with terrain. Convert the platformer physics to smooth top-down movement.
 
 ---
 
 ## Tasks
 
-### I-12: Asset Pipeline (P0)
-**File**: `crates/genesis-tools/src/assets.rs` and `scripts/build_assets.sh`
+### G-25: Terrain Manipulation System (P0)
+**File**: `crates/genesis-gameplay/src/terrain_manipulation.rs`
 
-Implement asset loading and processing:
-
-```rust
-use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
-
-pub struct AssetManager {
-    base_path: PathBuf,
-    cache: HashMap<AssetId, CachedAsset>,
-    manifest: AssetManifest,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetManifest {
-    pub version: u32,
-    pub assets: HashMap<String, AssetEntry>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AssetEntry {
-    pub path: String,
-    pub asset_type: AssetType,
-    pub hash: String,
-    pub size: u64,
-    pub compressed: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub enum AssetType {
-    Texture,
-    Sound,
-    Music,
-    Font,
-    Shader,
-    Data,
-    Localization,
-}
-
-pub struct CachedAsset {
-    pub data: Vec<u8>,
-    pub asset_type: AssetType,
-    pub loaded_at: std::time::Instant,
-}
-
-impl AssetManager {
-    pub fn new(base_path: impl AsRef<Path>) -> Result<Self, AssetError>;
-
-    pub fn load(&mut self, id: &str) -> Result<&CachedAsset, AssetError>;
-    pub fn load_async(&mut self, id: &str) -> AssetHandle;
-    pub fn unload(&mut self, id: &str);
-
-    pub fn preload_group(&mut self, group: &str);
-    pub fn get_memory_usage(&self) -> usize;
-    pub fn clear_cache(&mut self);
-}
-
-pub enum AssetError {
-    NotFound(String),
-    IoError(std::io::Error),
-    DecompressionError,
-    ManifestCorrupt,
-}
-```
-
-Also create `scripts/build_assets.sh`:
-```bash
-#!/bin/bash
-# Build and compress game assets
-
-set -e
-
-ASSET_DIR="${1:-assets}"
-OUTPUT_DIR="${2:-target/assets}"
-
-echo "Building assets from $ASSET_DIR to $OUTPUT_DIR"
-
-# Create manifest, compress textures, etc.
-```
-
-Requirements:
-- Manifest-based asset tracking
-- LZ4 compression for large assets
-- Async loading with handles
-- Memory budget enforcement
-- Hot reload in debug mode
-
-### I-13: Localization System (P0)
-**File**: `crates/genesis-tools/src/localization.rs`
-
-Implement multi-language support:
+Implement dig/place system for terrain modification:
 
 ```rust
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-
-pub struct Localization {
-    current_locale: String,
-    strings: HashMap<String, HashMap<String, String>>, // locale -> key -> value
-    fallback_locale: String,
+/// Actions the player can perform on terrain
+#[derive(Debug, Clone, Copy)]
+pub enum TerrainAction {
+    Dig { radius: f32 },
+    Place { material: u16, radius: f32 },
+    Fill { material: u16, radius: f32 },  // Only fills air
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LocaleFile {
-    pub locale: String,
-    pub name: String,
-    pub strings: HashMap<String, String>,
+/// Terrain manipulation system
+pub struct TerrainManipulator {
+    /// Current selected material for placing
+    pub selected_material: u16,
+    /// Dig/place radius
+    pub brush_radius: f32,
+    /// Cooldown between actions
+    pub action_cooldown: f32,
+    /// Time until next action allowed
+    cooldown_timer: f32,
 }
 
-impl Localization {
-    pub fn new(default_locale: &str) -> Self;
-
-    pub fn load_locale(&mut self, path: impl AsRef<Path>) -> Result<(), LocaleError>;
-    pub fn set_locale(&mut self, locale: &str) -> Result<(), LocaleError>;
-    pub fn get_locale(&self) -> &str;
-    pub fn available_locales(&self) -> Vec<&str>;
-
-    pub fn get(&self, key: &str) -> &str;
-    pub fn get_formatted(&self, key: &str, args: &[(&str, &str)]) -> String;
-    pub fn get_plural(&self, key: &str, count: u32) -> String;
+impl TerrainManipulator {
+    pub fn new() -> Self;
+    
+    /// Attempt to perform terrain action at world position
+    /// Returns the cells that were modified
+    pub fn perform_action(
+        &mut self,
+        action: TerrainAction,
+        world_pos: (f32, f32),
+        chunk_manager: &mut ChunkManager,
+    ) -> Vec<(i32, i32, Cell)>;
+    
+    /// Update cooldown timer
+    pub fn update(&mut self, dt: f32);
+    
+    /// Check if action is ready
+    pub fn can_act(&self) -> bool;
+    
+    /// Set brush radius (clamped)
+    pub fn set_radius(&mut self, radius: f32);
+    
+    /// Cycle to next material
+    pub fn next_material(&mut self);
+    
+    /// Cycle to previous material
+    pub fn prev_material(&mut self);
 }
 
-// Macro for compile-time key checking (optional)
-#[macro_export]
-macro_rules! t {
-    ($loc:expr, $key:literal) => {
-        $loc.get($key)
-    };
-    ($loc:expr, $key:literal, $($arg:tt)*) => {
-        $loc.get_formatted($key, &[$($arg)*])
-    };
-}
+/// Generate intent for GPU kernel to apply terrain change
+pub fn create_terrain_intent(
+    action: TerrainAction,
+    center: (i32, i32),
+) -> Vec<Intent>;
 ```
-
-Create locale files structure:
-```
-assets/locales/
-├── en.json
-├── es.json
-├── fr.json
-├── de.json
-├── ja.json
-└── zh.json
-```
-
-Requirements:
-- JSON locale files
-- Fallback to default locale
-- Format string interpolation
-- Plural forms support
-- Runtime language switching
-
-### I-14: Crash Reporting (P1)
-**File**: `crates/genesis-engine/src/crash_report.rs`
-
-Implement crash capture and reporting:
-
-```rust
-use std::panic;
-use backtrace::Backtrace;
-
-pub struct CrashReporter {
-    report_dir: PathBuf,
-    app_version: String,
-    enabled: bool,
-}
-
-#[derive(Serialize)]
-pub struct CrashReport {
-    pub timestamp: String,
-    pub app_version: String,
-    pub os: String,
-    pub arch: String,
-    pub panic_message: String,
-    pub backtrace: String,
-    pub system_info: SystemInfo,
-    pub recent_logs: Vec<String>,
-}
-
-#[derive(Serialize)]
-pub struct SystemInfo {
-    pub os_version: String,
-    pub cpu: String,
-    pub ram_mb: u64,
-    pub gpu: Option<String>,
-}
-
-impl CrashReporter {
-    pub fn new(report_dir: impl AsRef<Path>, app_version: &str) -> Self;
-
-    pub fn install_panic_hook(&self);
-
-    fn capture_crash(&self, panic_info: &panic::PanicInfo) -> CrashReport;
-    fn write_report(&self, report: &CrashReport) -> Result<PathBuf, std::io::Error>;
-
-    pub fn get_pending_reports(&self) -> Vec<PathBuf>;
-    pub fn submit_report(&self, path: &Path) -> Result<(), ReportError>;
-    pub fn delete_report(&self, path: &Path);
-}
-
-pub enum ReportError {
-    IoError(std::io::Error),
-    NetworkError(String),
-    ServerError(u16),
-}
-```
-
-Requirements:
-- Custom panic hook
-- Backtrace capture
-- System info collection
-- Report file persistence
-- Optional upload (disabled by default)
-
-### I-15: Telemetry & Analytics (P2)
-**File**: `crates/genesis-engine/src/analytics.rs`
-
-Implement opt-in gameplay analytics:
-
-```rust
-use serde::Serialize;
-
-pub struct Analytics {
-    enabled: bool,
-    session_id: String,
-    events: Vec<AnalyticsEvent>,
-    flush_interval: std::time::Duration,
-}
-
-#[derive(Serialize)]
-pub struct AnalyticsEvent {
-    pub timestamp: u64,
-    pub event_type: String,
-    pub properties: HashMap<String, serde_json::Value>,
-}
-
-pub struct AnalyticsConfig {
-    pub enabled: bool,
-    pub endpoint: Option<String>,
-    pub flush_interval_secs: u64,
-    pub batch_size: usize,
-}
-
-impl Analytics {
-    pub fn new(config: AnalyticsConfig) -> Self;
-
-    pub fn track(&mut self, event_type: &str, properties: HashMap<String, serde_json::Value>);
-
-    // Pre-defined events
-    pub fn track_session_start(&mut self);
-    pub fn track_session_end(&mut self, play_time_secs: u64);
-    pub fn track_level_complete(&mut self, level: &str, time_secs: u64);
-    pub fn track_death(&mut self, cause: &str, location: (f32, f32));
-    pub fn track_achievement(&mut self, achievement: &str);
-
-    pub fn flush(&mut self);
-
-    pub fn set_enabled(&mut self, enabled: bool);
-    pub fn is_enabled(&self) -> bool;
-}
-```
-
-Requirements:
-- Disabled by default (opt-in)
-- Local event buffering
-- Batch submission
-- No PII collection
-- Session tracking
 
 ---
 
-## Validation Loop
+### G-26: Top-Down Player Controller (P0)
+**File**: `crates/genesis-gameplay/src/player.rs` (modify existing)
+
+Convert platformer controller to top-down:
+
+```rust
+/// Top-down player configuration (replace PlayerConfig)
+#[derive(Debug, Clone)]
+pub struct TopDownPlayerConfig {
+    pub walk_speed: f32,        // Normal movement speed
+    pub run_speed: f32,         // Sprint speed (shift held)
+    pub acceleration: f32,      // How fast to reach target speed
+    pub friction: f32,          // How fast to stop (0-1, lower = more slide)
+    pub interaction_range: f32, // How far player can interact
+    pub dig_radius: f32,        // Default dig radius
+    pub place_radius: f32,      // Default place radius
+}
+
+impl Player {
+    /// Update for top-down movement (replace update method)
+    pub fn update_topdown(&mut self, input: &Input, terrain: &ChunkManager, dt: f32) {
+        // 1. Get input direction
+        // 2. Apply acceleration towards target velocity
+        // 3. Apply friction when no input
+        // 4. Check collision with terrain
+        // 5. Resolve collision (slide along walls)
+        // 6. Update position
+    }
+    
+    /// Get position player is aiming at (for dig/place)
+    pub fn aim_position(&self, mouse_world: (f32, f32)) -> (f32, f32);
+    
+    /// Check if player can interact with position
+    pub fn can_interact_at(&self, world_pos: (f32, f32)) -> bool;
+}
+```
+
+Key changes from platformer:
+- No gravity
+- Full 8-direction movement
+- Friction-based slowdown
+- Collision slides along walls instead of stopping
+
+---
+
+### G-27: Player-World Collision Response (P0)
+**File**: `crates/genesis-gameplay/src/collision_response.rs`
+
+Handle collision response for smooth movement:
+
+```rust
+/// Collision response behavior
+#[derive(Debug, Clone, Copy)]
+pub enum CollisionBehavior {
+    Stop,           // Stop movement on collision
+    Slide,          // Slide along surface
+    Bounce(f32),    // Bounce with coefficient
+}
+
+/// Process movement with collision
+pub fn move_with_collision(
+    position: &mut (f32, f32),
+    velocity: &mut (f32, f32),
+    radius: f32,
+    chunk_manager: &ChunkManager,
+    behavior: CollisionBehavior,
+    dt: f32,
+) -> bool;  // Returns true if collision occurred
+
+/// Slide movement along walls (feels good for RPG)
+pub fn slide_movement(
+    start: (f32, f32),
+    desired_end: (f32, f32),
+    radius: f32,
+    chunk_manager: &ChunkManager,
+) -> (f32, f32);  // Returns actual end position
+
+/// Check what terrain type player is standing on
+pub fn terrain_at_feet(
+    position: (f32, f32),
+    chunk_manager: &ChunkManager,
+) -> Option<u16>;
+```
+
+---
+
+### G-28: Interaction System (P1)
+**File**: `crates/genesis-gameplay/src/interaction.rs` (extend)
+
+Wire up terrain manipulation to player input:
+
+```rust
+/// Player interaction handler
+pub struct InteractionHandler {
+    manipulator: TerrainManipulator,
+    interaction_mode: InteractionMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InteractionMode {
+    Normal,     // Interact with objects
+    Dig,        // Primary action = dig
+    Place,      // Primary action = place
+    Inspect,    // Show cell info
+}
+
+impl InteractionHandler {
+    pub fn new() -> Self;
+    
+    /// Handle primary action (left click)
+    pub fn primary_action(
+        &mut self,
+        player: &Player,
+        world_pos: (f32, f32),
+        chunk_manager: &mut ChunkManager,
+    ) -> Option<InteractionResult>;
+    
+    /// Handle secondary action (right click)
+    pub fn secondary_action(
+        &mut self,
+        player: &Player,
+        world_pos: (f32, f32),
+        chunk_manager: &mut ChunkManager,
+    ) -> Option<InteractionResult>;
+    
+    /// Toggle interaction mode
+    pub fn set_mode(&mut self, mode: InteractionMode);
+    
+    /// Update (cooldowns, etc)
+    pub fn update(&mut self, dt: f32);
+}
+
+pub enum InteractionResult {
+    TerrainModified(Vec<(i32, i32)>),
+    ItemPickedUp(ItemTypeId),
+    ObjectInteracted(EntityId),
+    Nothing,
+}
+```
+
+---
+
+## Validation
 
 After each task:
-
 ```bash
-cargo fmt
+cargo fmt --check
 cargo clippy -- -D warnings
-cargo test --workspace
+cargo test -p genesis-gameplay
 ```
 
-If ANY step fails, FIX IT before committing.
-
----
-
-## Commit Convention
-
+## Commit Format
 ```
-[infra] feat: I-12 asset pipeline
-[infra] feat: I-13 localization system
-[infra] feat: I-14 crash reporting
-[infra] feat: I-15 telemetry and analytics
+[gameplay] feat: G-XX description
 ```
 
----
-
-## Dependencies
-
-Add to `crates/genesis-engine/Cargo.toml`:
-```toml
-backtrace = "0.3"
-lz4 = "1.24"
-```
-
----
-
-## Integration Notes
-
-- I-12 assets used by all crates for loading resources
-- I-13 localization integrated with all UI
-- I-14 crash reporter installed at startup
-- I-15 analytics tracks gameplay events
-- Create sample locale files in `assets/locales/`
+## Done Criteria
+- [ ] Left-click digs terrain, right-click places
+- [ ] Player slides smoothly along walls
+- [ ] Movement feels responsive (no ice skating, no instant stop)
+- [ ] Different terrain affects movement speed
