@@ -572,6 +572,362 @@ impl InteractionManager {
     }
 }
 
+// ============================================================
+// Interaction Handler (for terrain manipulation integration)
+// ============================================================
+
+/// Interaction mode for different player actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum InteractionMode {
+    /// Normal mode - interact with objects
+    #[default]
+    Normal,
+    /// Dig mode - primary action performs digging
+    Dig,
+    /// Place mode - primary action places material
+    Place,
+    /// Inspect mode - show cell info
+    Inspect,
+}
+
+impl InteractionMode {
+    /// Get display name for the mode.
+    #[must_use]
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Dig => "Dig",
+            Self::Place => "Place",
+            Self::Inspect => "Inspect",
+        }
+    }
+
+    /// Cycle to the next mode.
+    #[must_use]
+    pub fn next(&self) -> Self {
+        match self {
+            Self::Normal => Self::Dig,
+            Self::Dig => Self::Place,
+            Self::Place => Self::Inspect,
+            Self::Inspect => Self::Normal,
+        }
+    }
+
+    /// Cycle to the previous mode.
+    #[must_use]
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::Normal => Self::Inspect,
+            Self::Dig => Self::Normal,
+            Self::Place => Self::Dig,
+            Self::Inspect => Self::Place,
+        }
+    }
+}
+
+/// Result of an interaction action.
+#[derive(Debug, Clone)]
+pub enum TerrainInteractionResult {
+    /// Terrain was modified at these positions
+    TerrainModified(Vec<(i32, i32)>),
+    /// Item was picked up
+    ItemPickedUp(ItemTypeId),
+    /// Object was interacted with
+    ObjectInteracted(EntityId),
+    /// Cell inspection result
+    CellInspected {
+        /// X coordinate
+        x: i32,
+        /// Y coordinate
+        y: i32,
+        /// Cell type at position
+        cell_type: CellType,
+    },
+    /// Nothing happened
+    Nothing,
+}
+
+impl TerrainInteractionResult {
+    /// Check if this result indicates something happened.
+    #[must_use]
+    pub fn is_something(&self) -> bool {
+        !matches!(self, Self::Nothing)
+    }
+
+    /// Get the number of cells modified (if terrain modified).
+    #[must_use]
+    pub fn modified_count(&self) -> usize {
+        match self {
+            Self::TerrainModified(cells) => cells.len(),
+            _ => 0,
+        }
+    }
+}
+
+/// Player interaction handler for terrain manipulation.
+///
+/// This struct wraps the interaction and terrain manipulation systems
+/// to provide a unified interface for player actions.
+#[derive(Debug)]
+pub struct InteractionHandler {
+    /// Interaction manager for dig/place
+    manager: InteractionManager,
+    /// Current interaction mode
+    interaction_mode: InteractionMode,
+    /// Selected material for placing (material ID)
+    selected_material: u16,
+    /// Brush radius for dig/place
+    brush_radius: f32,
+    /// Cooldown between actions
+    action_cooldown: f32,
+    /// Current cooldown timer
+    cooldown_timer: f32,
+}
+
+impl Default for InteractionHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Default brush radius for interactions.
+const DEFAULT_HANDLER_BRUSH_RADIUS: f32 = 1.5;
+/// Default action cooldown in seconds.
+const DEFAULT_HANDLER_COOLDOWN: f32 = 0.1;
+
+impl InteractionHandler {
+    /// Create a new interaction handler.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            manager: InteractionManager::new(),
+            interaction_mode: InteractionMode::Normal,
+            selected_material: 1, // Dirt
+            brush_radius: DEFAULT_HANDLER_BRUSH_RADIUS,
+            action_cooldown: DEFAULT_HANDLER_COOLDOWN,
+            cooldown_timer: 0.0,
+        }
+    }
+
+    /// Create with custom configuration.
+    #[must_use]
+    pub fn with_config(config: InteractionConfig) -> Self {
+        Self {
+            manager: InteractionManager::with_config(config),
+            interaction_mode: InteractionMode::Normal,
+            selected_material: 1,
+            brush_radius: DEFAULT_HANDLER_BRUSH_RADIUS,
+            action_cooldown: DEFAULT_HANDLER_COOLDOWN,
+            cooldown_timer: 0.0,
+        }
+    }
+
+    /// Get current interaction mode.
+    #[must_use]
+    pub fn mode(&self) -> InteractionMode {
+        self.interaction_mode
+    }
+
+    /// Set interaction mode.
+    pub fn set_mode(&mut self, mode: InteractionMode) {
+        self.interaction_mode = mode;
+    }
+
+    /// Cycle to next interaction mode.
+    pub fn next_mode(&mut self) {
+        self.interaction_mode = self.interaction_mode.next();
+    }
+
+    /// Cycle to previous interaction mode.
+    pub fn prev_mode(&mut self) {
+        self.interaction_mode = self.interaction_mode.prev();
+    }
+
+    /// Get selected material.
+    #[must_use]
+    pub fn selected_material(&self) -> u16 {
+        self.selected_material
+    }
+
+    /// Set selected material.
+    pub fn set_selected_material(&mut self, material: u16) {
+        self.selected_material = material;
+    }
+
+    /// Get brush radius.
+    #[must_use]
+    pub fn brush_radius(&self) -> f32 {
+        self.brush_radius
+    }
+
+    /// Set brush radius.
+    pub fn set_brush_radius(&mut self, radius: f32) {
+        self.brush_radius = radius.clamp(0.5, 10.0);
+    }
+
+    /// Check if can perform action (cooldown elapsed).
+    #[must_use]
+    pub fn can_act(&self) -> bool {
+        self.cooldown_timer <= 0.0
+    }
+
+    /// Handle primary action (left click).
+    pub fn primary_action<W: WorldQuery>(
+        &mut self,
+        player: &Player,
+        world_pos: Vec2,
+        world: &W,
+        inventory: &mut crate::inventory::Inventory,
+        dt: f32,
+    ) -> TerrainInteractionResult {
+        if !self.can_act() {
+            return TerrainInteractionResult::Nothing;
+        }
+
+        match self.interaction_mode {
+            InteractionMode::Normal => {
+                // Normal mode - interact with objects (placeholder)
+                TerrainInteractionResult::Nothing
+            },
+            InteractionMode::Dig => {
+                // Dig terrain
+                match self
+                    .manager
+                    .try_dig(player, world_pos, world, inventory, dt)
+                {
+                    Ok(Some(intent)) => {
+                        self.cooldown_timer = self.action_cooldown;
+                        let pos = intent.position();
+                        TerrainInteractionResult::TerrainModified(vec![(
+                            pos.x as i32,
+                            pos.y as i32,
+                        )])
+                    },
+                    Ok(None) | Err(_) => TerrainInteractionResult::Nothing, // Still digging or error
+                }
+            },
+            InteractionMode::Place => {
+                // Place terrain (using selected material as item ID)
+                let item = ItemTypeId::new(u32::from(self.selected_material));
+                match self
+                    .manager
+                    .try_place(player, world_pos, item, world, inventory)
+                {
+                    Ok(intent) => {
+                        self.cooldown_timer = self.action_cooldown;
+                        let pos = intent.position();
+                        TerrainInteractionResult::TerrainModified(vec![(
+                            pos.x as i32,
+                            pos.y as i32,
+                        )])
+                    },
+                    Err(_) => TerrainInteractionResult::Nothing,
+                }
+            },
+            InteractionMode::Inspect => {
+                // Inspect cell
+                let x = world_pos.x.floor() as i64;
+                let y = world_pos.y.floor() as i64;
+                let cell_type = world.get_cell(x, y);
+                TerrainInteractionResult::CellInspected {
+                    x: x as i32,
+                    y: y as i32,
+                    cell_type,
+                }
+            },
+        }
+    }
+
+    /// Handle secondary action (right click).
+    pub fn secondary_action<W: WorldQuery>(
+        &mut self,
+        player: &Player,
+        world_pos: Vec2,
+        world: &W,
+        inventory: &mut crate::inventory::Inventory,
+    ) -> TerrainInteractionResult {
+        if !self.can_act() {
+            return TerrainInteractionResult::Nothing;
+        }
+
+        match self.interaction_mode {
+            InteractionMode::Normal | InteractionMode::Place => {
+                // Right click places in normal/place mode
+                let item = ItemTypeId::new(u32::from(self.selected_material));
+                match self
+                    .manager
+                    .try_place(player, world_pos, item, world, inventory)
+                {
+                    Ok(intent) => {
+                        self.cooldown_timer = self.action_cooldown;
+                        let pos = intent.position();
+                        TerrainInteractionResult::TerrainModified(vec![(
+                            pos.x as i32,
+                            pos.y as i32,
+                        )])
+                    },
+                    Err(_) => TerrainInteractionResult::Nothing,
+                }
+            },
+            InteractionMode::Dig => {
+                // Right click in dig mode also places
+                let item = ItemTypeId::new(u32::from(self.selected_material));
+                match self
+                    .manager
+                    .try_place(player, world_pos, item, world, inventory)
+                {
+                    Ok(intent) => {
+                        self.cooldown_timer = self.action_cooldown;
+                        let pos = intent.position();
+                        TerrainInteractionResult::TerrainModified(vec![(
+                            pos.x as i32,
+                            pos.y as i32,
+                        )])
+                    },
+                    Err(_) => TerrainInteractionResult::Nothing,
+                }
+            },
+            InteractionMode::Inspect => {
+                // Right click in inspect mode does nothing special
+                TerrainInteractionResult::Nothing
+            },
+        }
+    }
+
+    /// Update handler (cooldowns, etc).
+    pub fn update(&mut self, dt: f32) {
+        self.cooldown_timer = (self.cooldown_timer - dt).max(0.0);
+    }
+
+    /// Cancel any ongoing action (e.g., digging).
+    pub fn cancel(&mut self) {
+        self.manager.cancel_dig();
+    }
+
+    /// Get reference to internal interaction manager.
+    #[must_use]
+    pub fn manager(&self) -> &InteractionManager {
+        &self.manager
+    }
+
+    /// Get mutable reference to internal interaction manager.
+    pub fn manager_mut(&mut self) -> &mut InteractionManager {
+        &mut self.manager
+    }
+
+    /// Get the digging progress (0.0 to 1.0).
+    #[must_use]
+    pub fn digging_progress(&self) -> f32 {
+        self.manager.digging_state().progress
+    }
+
+    /// Check if currently digging.
+    #[must_use]
+    pub fn is_digging(&self) -> bool {
+        self.manager.digging_state().is_digging()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

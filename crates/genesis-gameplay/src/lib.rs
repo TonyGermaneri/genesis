@@ -19,6 +19,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod collision_response;
 pub mod combat;
 pub mod crafting;
 pub mod crafting_ui;
@@ -38,10 +39,12 @@ pub mod player;
 pub mod quest;
 pub mod save;
 pub mod spawn;
+pub mod terrain_manipulation;
 pub mod vehicle;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::collision_response::*;
     pub use crate::combat::*;
     pub use crate::crafting::*;
     pub use crate::crafting_ui::*;
@@ -61,6 +64,7 @@ pub mod prelude {
     pub use crate::quest::*;
     pub use crate::save::*;
     pub use crate::spawn::*;
+    pub use crate::terrain_manipulation::*;
     pub use crate::vehicle::*;
 }
 
