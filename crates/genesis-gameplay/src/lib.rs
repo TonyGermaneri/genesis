@@ -27,7 +27,9 @@ pub mod faction;
 pub mod input;
 pub mod interaction;
 pub mod inventory;
+pub mod inventory_ui;
 pub mod needs;
+pub mod physics;
 pub mod player;
 
 /// Prelude for convenient imports
@@ -40,7 +42,9 @@ pub mod prelude {
     pub use crate::input::*;
     pub use crate::interaction::*;
     pub use crate::inventory::*;
+    pub use crate::inventory_ui::*;
     pub use crate::needs::*;
+    pub use crate::physics::*;
     pub use crate::player::*;
 }
 
