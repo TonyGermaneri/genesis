@@ -18,13 +18,9 @@ use genesis_gameplay::GameState as GameplayState;
 use genesis_kernel::Camera;
 
 use crate::config::EngineConfig;
-use crate::crafting_events::CraftingEventHandler;
-use crate::crafting_profile::CraftingProfiler;
-use crate::crafting_save::CraftingPersistence;
 use crate::environment::EnvironmentState;
 use crate::input::InputHandler;
 use crate::perf::PerfMetrics;
-use crate::recipe_loader::RecipeLoader;
 use crate::renderer::Renderer;
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::world::TerrainGenerationService;
@@ -34,6 +30,12 @@ use crate::combat_events::CombatEventHandler;
 use crate::combat_save::CombatPersistence;
 use crate::combat_profile::CombatProfiler;
 use crate::weapon_loader::WeaponLoader;
+use crate::crafting_events::CraftingEventHandler;
+use crate::crafting_save::CraftingPersistence;
+use crate::crafting_profile::CraftingProfiler;
+use crate::recipe_loader::RecipeLoader;
+use crate::autosave::{AutoSaveConfig, AutoSaveManager};
+use crate::save_manager::{SaveFileBuilder, SaveManager};
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -105,6 +107,28 @@ struct GenesisApp {
     /// Whether crafting UI is open
     show_crafting: bool,
 
+    // === Combat ===
+    /// Weapon loader for loading weapon definitions
+    weapon_loader: WeaponLoader,
+    /// Combat event handler
+    combat_events: CombatEventHandler,
+    /// Combat persistence (health, stats, equipment)
+    combat_persistence: CombatPersistence,
+    /// Combat profiler for performance tracking
+    combat_profiler: CombatProfiler,
+    /// Whether attack input is held (for charge attacks)
+    attack_held: bool,
+    /// Time attack has been held
+    attack_hold_time: f32,
+
+    // === Save System ===
+    /// Save file manager
+    save_manager: SaveManager,
+    /// Auto-save manager
+    autosave_manager: AutoSaveManager,
+    /// Current save slot name
+    current_save_slot: Option<String>,
+
     // === Gameplay State ===
     /// Gameplay state (player, entities, etc.)
     gameplay: GameplayState,
@@ -168,6 +192,23 @@ impl GenesisApp {
         let crafting_persistence = CraftingPersistence::with_starter_recipes([1, 2, 3, 4, 5]);
         let crafting_profiler = CraftingProfiler::new();
 
+        // Initialize combat system
+        let mut weapon_loader = WeaponLoader::with_default_path();
+        if let Err(e) = weapon_loader.load_all() {
+            warn!("Failed to load weapons: {}", e);
+        } else {
+            info!("Loaded {} weapons", weapon_loader.registry().len());
+        }
+        let combat_events = CombatEventHandler::new();
+        let combat_persistence = CombatPersistence::new();
+        let combat_profiler = CombatProfiler::new();
+
+        // Initialize save system
+        let save_manager = SaveManager::new("saves");
+        let autosave_config = AutoSaveConfig::default();
+        let autosave_manager = AutoSaveManager::new(autosave_config);
+        info!("Save system initialized");
+
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(4.0); // 4x zoom for bigger pixels
@@ -204,6 +245,17 @@ impl GenesisApp {
             crafting_persistence,
             crafting_profiler,
             show_crafting: false,
+
+            weapon_loader,
+            combat_events,
+            combat_persistence,
+            combat_profiler,
+            attack_held: false,
+            attack_hold_time: 0.0,
+
+            save_manager,
+            autosave_manager,
+            current_save_slot: None,
 
             gameplay,
             camera,
@@ -256,7 +308,11 @@ impl GenesisApp {
             self.show_crafting = !self.show_crafting;
             info!(
                 "Crafting: {}",
-                if self.show_crafting { "OPEN" } else { "CLOSED" }
+                if self.show_crafting {
+                    "OPEN"
+                } else {
+                    "CLOSED"
+                }
             );
         }
 
@@ -359,6 +415,12 @@ impl GenesisApp {
 
         // Update crafting system (check hot-reload, process events)
         self.update_crafting(dt);
+
+        // Update combat system (process events, update cooldowns)
+        self.update_combat(dt);
+
+        // Update save system (auto-save timer, check triggers)
+        self.update_save_system(dt);
 
         // Check for chunk changes and spawn/despawn NPCs
         self.update_npc_chunks();
@@ -608,8 +670,7 @@ impl GenesisApp {
 
             // Record for profiling
             if let Some(recipe) = self.recipe_loader.get_recipe(recipe_id.raw()) {
-                self.crafting_profiler
-                    .record_craft(recipe_id.raw(), &recipe.category);
+                self.crafting_profiler.record_craft(recipe_id.raw(), &recipe.category);
             }
         }
 
@@ -621,6 +682,306 @@ impl GenesisApp {
         // Update playtime for frequency stats
         let playtime = self.gameplay.game_time();
         self.crafting_profiler.update_playtime(playtime);
+    }
+
+    /// Updates combat system for the frame.
+    fn update_combat(&mut self, dt: f32) {
+        // Check for weapon hot-reload in debug mode
+        if self.weapon_loader.check_hot_reload().unwrap_or(false) {
+            info!("Weapons hot-reloaded");
+        }
+
+        // Handle attack input
+        let attack_pressed = self.input.is_key_just_pressed(genesis_gameplay::input::KeyCode::Space);
+        let attack_held_input = self.input.is_key_pressed(genesis_gameplay::input::KeyCode::Space);
+
+        // Track attack hold time for charge attacks
+        if attack_held_input {
+            if !self.attack_held {
+                // Just started holding
+                self.attack_held = true;
+                self.attack_hold_time = 0.0;
+            } else {
+                self.attack_hold_time += dt;
+            }
+        } else if self.attack_held {
+            // Just released - could trigger charged attack based on hold_time
+            self.attack_held = false;
+            // Reset hold time
+            self.attack_hold_time = 0.0;
+        }
+
+        // Process attack if button was just pressed
+        if attack_pressed {
+            // Get player position and direction for attack
+            let player_pos = self.gameplay.player.position();
+            let player_vel = self.gameplay.player.velocity();
+
+            // Determine attack direction from movement or facing
+            let direction = if player_vel.x.abs() > 0.1 || player_vel.y.abs() > 0.1 {
+                let len = (player_vel.x * player_vel.x + player_vel.y * player_vel.y).sqrt();
+                (player_vel.x / len, player_vel.y / len)
+            } else {
+                (1.0, 0.0) // Default facing right
+            };
+
+            // Check if player can attack (has stamina, no cooldown)
+            let stamina_cost = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                self.weapon_loader.registry().get(weapon_id)
+                    .map(|w| w.stamina_cost)
+                    .unwrap_or(10.0)
+            } else {
+                5.0 // Unarmed attack cost
+            };
+
+            if self.combat_persistence.player().can_attack(stamina_cost) {
+                use crate::combat_events::{AttackCategory, AttackTarget, CombatEventHandler};
+
+                // Determine attack type based on equipped weapon
+                let attack_type = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                    self.weapon_loader.registry().get(weapon_id)
+                        .map(|w| match w.category {
+                            crate::weapon_loader::WeaponCategory::Sword |
+                            crate::weapon_loader::WeaponCategory::Greatsword |
+                            crate::weapon_loader::WeaponCategory::Axe |
+                            crate::weapon_loader::WeaponCategory::Greataxe => AttackCategory::MeleeSwing,
+                            crate::weapon_loader::WeaponCategory::Dagger |
+                            crate::weapon_loader::WeaponCategory::Spear => AttackCategory::MeleeThrust,
+                            crate::weapon_loader::WeaponCategory::Bow |
+                            crate::weapon_loader::WeaponCategory::Crossbow => AttackCategory::RangedBow,
+                            crate::weapon_loader::WeaponCategory::Gun => AttackCategory::RangedGun,
+                            crate::weapon_loader::WeaponCategory::Staff => AttackCategory::MagicSpell,
+                            _ => AttackCategory::MeleeSwing,
+                        })
+                        .unwrap_or(AttackCategory::Unarmed)
+                } else {
+                    AttackCategory::Unarmed
+                };
+
+                // Create attack event
+                let event = CombatEventHandler::make_attack_event(
+                    genesis_common::EntityId::from_raw(1), // Player entity ID
+                    AttackTarget::Direction(direction.0, direction.1),
+                    attack_type,
+                    (player_pos.x, player_pos.y),
+                    direction,
+                );
+                self.combat_events.queue_event(event);
+
+                // Consume stamina
+                let current_stamina = self.combat_persistence.player().stamina;
+                self.combat_persistence.player_mut().set_stamina(current_stamina - stamina_cost);
+
+                // Set attack cooldown based on weapon
+                let cooldown = if let Some(weapon_id) = self.combat_persistence.player().equipped_weapon {
+                    self.weapon_loader.registry().get(weapon_id)
+                        .map(|w| 1.0 / w.attack_speed)
+                        .unwrap_or(0.5)
+                } else {
+                    0.3 // Unarmed attack cooldown
+                };
+                self.combat_persistence.player_mut().attack_cooldown = cooldown;
+
+                debug!("Player attacked with {:?}", attack_type);
+            }
+        }
+
+        // Start profiling event processing
+        self.combat_profiler.start_event_processing();
+
+        // Process pending combat events
+        let result = self.combat_events.process_events(Some(&mut self.audio));
+
+        // End profiling
+        self.combat_profiler.end_event_processing(
+            result.attacks.len() + result.hits.len() + result.deaths.len()
+        );
+
+        // Handle deaths
+        for death in &result.deaths {
+            if death.entity.raw() == 1 {
+                // Player died
+                self.combat_persistence.record_death(5.0); // 5 second respawn
+                info!("Player died!");
+            } else {
+                // Enemy died - record kill
+                self.combat_persistence.record_kill("enemy", 0, death.experience.into());
+            }
+        }
+
+        // Update combat persistence (cooldowns, status effects)
+        self.combat_persistence.update(dt);
+
+        // Regenerate stamina when not attacking
+        if !self.attack_held && self.combat_persistence.player().attack_cooldown <= 0.0 {
+            let current_stamina = self.combat_persistence.player().stamina;
+            let max_stamina = self.combat_persistence.player().max_stamina;
+            let regen_rate = 20.0; // Stamina per second
+            let new_stamina = (current_stamina + regen_rate * dt).min(max_stamina);
+            self.combat_persistence.player_mut().stamina = new_stamina;
+        }
+
+        // Update combat memory usage for profiling
+        self.combat_profiler.update_memory(
+            1, // Player entity
+            0, // Active projectiles (would come from a projectile system)
+            self.combat_persistence.player().status_effects.len(),
+            self.weapon_loader.registry().len(),
+        );
+
+        // End combat profiler frame
+        self.combat_profiler.end_frame();
+    }
+
+    /// Updates save system for the frame.
+    fn update_save_system(&mut self, dt: f32) {
+        // Update auto-save timer
+        self.autosave_manager.update(dt as f64);
+
+        // Check for quicksave input (Ctrl+S - using S key here, real implementation would check modifiers)
+        // For now use Num5 as quicksave key
+        if self.input.is_key_just_pressed(genesis_gameplay::input::KeyCode::Num5) {
+            self.quicksave();
+        }
+
+        // Check for quickload input (Num9 as quickload key)
+        if self.input.is_key_just_pressed(genesis_gameplay::input::KeyCode::Num9) {
+            self.quickload();
+        }
+
+        // Process auto-save if conditions are met
+        if self.app_mode == AppMode::Playing {
+            let save_data = self.build_save_data("autosave");
+            if self.autosave_manager.check_and_save(&mut self.save_manager, &save_data) {
+                debug!("Auto-save completed");
+            }
+        }
+
+        // Check for auto-save pause conditions
+        // (Combat pause is handled by combat_events integration)
+    }
+
+    /// Builds save file data from current game state.
+    fn build_save_data(&self, slot_name: &str) -> crate::save_manager::SaveFileData {
+        let player_pos = self.gameplay.player.position();
+
+        SaveFileBuilder::new(slot_name)
+            .display_name(format!("Slot {}", slot_name))
+            .player_position(player_pos.x, player_pos.y)
+            .world_seed(self.terrain_service.seed())
+            .game_time(self.gameplay.game_time() as f64)
+            .playtime(self.gameplay.game_time() as f64)
+            .player_level(self.combat_persistence.data().combat_level)
+            .location("Unknown".to_string())
+            .crafting(self.crafting_persistence.save_data().clone())
+            .combat(self.combat_persistence.save_data())
+            .build()
+    }
+
+    /// Performs a quicksave operation.
+    fn quicksave(&mut self) {
+        info!("Quicksave requested");
+        let save_data = self.build_save_data("quicksave");
+
+        match self.save_manager.quicksave(&save_data) {
+            Ok(()) => {
+                self.current_save_slot = Some("quicksave".to_string());
+                info!("Quicksave successful");
+            }
+            Err(e) => {
+                warn!("Quicksave failed: {}", e);
+            }
+        }
+    }
+
+    /// Performs a quickload operation.
+    fn quickload(&mut self) {
+        info!("Quickload requested");
+
+        match self.save_manager.quickload() {
+            Ok(save_data) => {
+                self.apply_save_data(&save_data);
+                self.current_save_slot = Some("quicksave".to_string());
+                info!("Quickload successful");
+            }
+            Err(e) => {
+                warn!("Quickload failed: {}", e);
+            }
+        }
+    }
+
+    /// Saves the game to a specific slot.
+    #[allow(dead_code)]
+    fn save_game(&mut self, slot_name: &str) -> Result<()> {
+        info!("Saving game to slot: {}", slot_name);
+        let save_data = self.build_save_data(slot_name);
+
+        self.save_manager.save(slot_name, &save_data)
+            .map_err(|e| anyhow::anyhow!("Save failed: {}", e))?;
+
+        self.current_save_slot = Some(slot_name.to_string());
+        info!("Game saved to slot: {}", slot_name);
+        Ok(())
+    }
+
+    /// Loads the game from a specific slot.
+    #[allow(dead_code)]
+    fn load_game(&mut self, slot_name: &str) -> Result<()> {
+        info!("Loading game from slot: {}", slot_name);
+
+        let save_data = self.save_manager.load(slot_name)
+            .map_err(|e| anyhow::anyhow!("Load failed: {}", e))?;
+
+        self.apply_save_data(&save_data);
+        self.current_save_slot = Some(slot_name.to_string());
+        info!("Game loaded from slot: {}", slot_name);
+        Ok(())
+    }
+
+    /// Applies loaded save data to the game state.
+    fn apply_save_data(&mut self, save_data: &crate::save_manager::SaveFileData) {
+        // Restore player position using Vec2
+        let pos = genesis_gameplay::Vec2::new(
+            save_data.player_position.0,
+            save_data.player_position.1,
+        );
+        self.gameplay.player.set_position(pos);
+
+        // Restore crafting state
+        self.crafting_persistence.load_data(&save_data.crafting);
+
+        // Restore combat state
+        self.combat_persistence.load_data(&save_data.combat);
+
+        // Update camera to follow restored player position
+        self.camera.center_on(save_data.player_position.0, save_data.player_position.1);
+
+        // Reset auto-save timer after load
+        self.autosave_manager.reset_timer();
+
+        debug!("Save data applied: position=({}, {}), playtime={}",
+            save_data.player_position.0,
+            save_data.player_position.1,
+            save_data.metadata.playtime_seconds
+        );
+    }
+
+    /// Called when combat starts (pauses auto-save).
+    #[allow(dead_code)]
+    fn on_combat_start(&mut self) {
+        self.autosave_manager.on_combat_start();
+    }
+
+    /// Called when combat ends (resumes auto-save).
+    #[allow(dead_code)]
+    fn on_combat_end(&mut self) {
+        self.autosave_manager.on_combat_end();
+    }
+
+    /// Called when entering a new area (triggers auto-save if configured).
+    #[allow(dead_code)]
+    fn on_area_transition(&mut self) {
+        self.autosave_manager.on_area_transition();
     }
 
     /// Render the frame.
