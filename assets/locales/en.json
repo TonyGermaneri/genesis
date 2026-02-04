@@ -1,0 +1,96 @@
+{
+  "locale": "en",
+  "name": "English",
+  "description": "English (US)",
+  "strings": {
+    "game.title": "Project Genesis",
+    "game.version": "Version {version}",
+
+    "menu.main.new_game": "New Game",
+    "menu.main.continue": "Continue",
+    "menu.main.load_game": "Load Game",
+    "menu.main.settings": "Settings",
+    "menu.main.mods": "Mods",
+    "menu.main.credits": "Credits",
+    "menu.main.quit": "Quit",
+
+    "menu.pause.resume": "Resume",
+    "menu.pause.save": "Save Game",
+    "menu.pause.load": "Load Game",
+    "menu.pause.settings": "Settings",
+    "menu.pause.quit_menu": "Quit to Menu",
+    "menu.pause.quit_desktop": "Quit to Desktop",
+
+    "settings.graphics": "Graphics",
+    "settings.audio": "Audio",
+    "settings.controls": "Controls",
+    "settings.gameplay": "Gameplay",
+    "settings.language": "Language",
+    "settings.accessibility": "Accessibility",
+
+    "settings.graphics.resolution": "Resolution",
+    "settings.graphics.fullscreen": "Fullscreen",
+    "settings.graphics.vsync": "V-Sync",
+    "settings.graphics.quality": "Quality",
+    "settings.graphics.quality.low": "Low",
+    "settings.graphics.quality.medium": "Medium",
+    "settings.graphics.quality.high": "High",
+    "settings.graphics.quality.ultra": "Ultra",
+
+    "settings.audio.master": "Master Volume",
+    "settings.audio.music": "Music Volume",
+    "settings.audio.sfx": "Sound Effects",
+    "settings.audio.voice": "Voice Volume",
+
+    "hud.health": "Health",
+    "hud.energy": "Energy",
+    "hud.hunger": "Hunger",
+    "hud.thirst": "Thirst",
+
+    "inventory.title": "Inventory",
+    "inventory.weight": "Weight: {current}/{max}",
+    "inventory.empty": "Empty",
+
+    "crafting.title": "Crafting",
+    "crafting.materials": "Materials",
+    "crafting.craft": "Craft",
+    "crafting.craft_all": "Craft All",
+    "crafting.missing_materials": "Missing materials",
+    "crafting.requires_station": "Requires: {station}",
+
+    "dialog.confirm": "Confirm",
+    "dialog.cancel": "Cancel",
+    "dialog.yes": "Yes",
+    "dialog.no": "No",
+    "dialog.ok": "OK",
+
+    "notification.item_added": "{item} added to inventory",
+    "notification.item_removed": "{item} removed from inventory",
+    "notification.quest_started": "Quest started: {quest}",
+    "notification.quest_completed": "Quest completed: {quest}",
+    "notification.level_up": "Level Up! You are now level {level}",
+    "notification.achievement": "Achievement Unlocked: {name}",
+
+    "error.save_failed": "Failed to save game",
+    "error.load_failed": "Failed to load game",
+    "error.connection_lost": "Connection lost"
+  },
+  "plurals": {
+    "items": {
+      "one": "{count} item",
+      "other": "{count} items"
+    },
+    "days": {
+      "one": "{count} day",
+      "other": "{count} days"
+    },
+    "hours": {
+      "one": "{count} hour",
+      "other": "{count} hours"
+    },
+    "minutes": {
+      "one": "{count} minute",
+      "other": "{count} minutes"
+    }
+  }
+}

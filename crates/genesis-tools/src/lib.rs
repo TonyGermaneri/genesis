@@ -8,11 +8,14 @@
 //! - Cell inspector probe
 //! - Performance HUD
 //! - Event log viewer
+//! - Asset management
+//! - Localization
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod assets;
 pub mod audio;
 pub mod cell_inspector;
 pub mod chunk_viewer;
@@ -24,6 +27,7 @@ pub mod event_log;
 pub mod hot_reload;
 pub mod inspector;
 pub mod inventory_ui;
+pub mod localization;
 pub mod memory_profiler;
 pub mod minimap;
 pub mod perf;
@@ -35,6 +39,10 @@ pub mod test_harness;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::assets::{
+        AssetEntry, AssetError, AssetHandle, AssetId, AssetLoadState, AssetManager, AssetManifest,
+        AssetType, CachedAsset,
+    };
     pub use crate::audio::*;
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
@@ -43,9 +51,10 @@ pub mod prelude {
     pub use crate::crafting_ui::*;
     pub use crate::dialogue_ui::*;
     pub use crate::event_log::*;
-    pub use crate::hot_reload::*;
+    pub use crate::hot_reload::HotReloader;
     pub use crate::inspector::*;
     pub use crate::inventory_ui::*;
+    pub use crate::localization::*;
     pub use crate::memory_profiler::*;
     pub use crate::minimap::*;
     pub use crate::perf::*;

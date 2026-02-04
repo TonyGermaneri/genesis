@@ -110,14 +110,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      
+
       - name: Collect build metrics
         id: metrics
         run: |
           chmod +x scripts/telemetry.sh
           ./scripts/telemetry.sh --json > telemetry.json
           cat telemetry.json
-          
+
           # Extract values for outputs
           echo "build_time=$(jq -r '.build_time_seconds' telemetry.json)" >> $GITHUB_OUTPUT
           echo "binary_size=$(jq -r '.binary_size_bytes' telemetry.json)" >> $GITHUB_OUTPUT
@@ -137,9 +137,9 @@ jobs:
           CURRENT_SIZE=${{ steps.metrics.outputs.binary_size }}
           # Set threshold at 100MB (adjust as needed)
           THRESHOLD=104857600
-          
+
           if [ "$CURRENT_SIZE" -gt "$THRESHOLD" ]; then
             echo "::warning::Binary size ($CURRENT_SIZE bytes) exceeds threshold ($THRESHOLD bytes)"
           fi
-          
+
           echo "Binary size: $CURRENT_SIZE bytes"

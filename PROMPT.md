@@ -1,7 +1,7 @@
-# PROMPT — Tools Agent — Iteration 4
+# PROMPT — Infra Agent — Iteration 4
 
-> **Branch**: `tools-agent`
-> **Focus**: Audio playback, quest UI, NPC dialogue, combat HUD
+> **Branch**: `infra-agent`
+> **Focus**: Asset pipeline, localization, crash reporting, analytics
 
 ## Your Mission
 
@@ -11,269 +11,276 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### T-16: Audio Engine Integration (P0)
-**File**: `crates/genesis-tools/src/audio.rs`
+### I-12: Asset Pipeline (P0)
+**File**: `crates/genesis-tools/src/assets.rs` and `scripts/build_assets.sh`
 
-Implement audio playback with rodio:
+Implement asset loading and processing:
 
 ```rust
-use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
-use genesis_kernel::audio::{SpatialAudioManager, AudioSourceId};
+use std::path::{Path, PathBuf};
+use serde::{Serialize, Deserialize};
 
-pub struct AudioEngine {
-    _stream: OutputStream,
-    stream_handle: OutputStreamHandle,
-    sinks: HashMap<AudioSourceId, Sink>,
-    music_sink: Option<Sink>,
-    master_volume: f32,
-    sfx_volume: f32,
-    music_volume: f32,
+pub struct AssetManager {
+    base_path: PathBuf,
+    cache: HashMap<AssetId, CachedAsset>,
+    manifest: AssetManifest,
 }
 
-pub struct SoundEffect {
-    pub id: SoundId,
+#[derive(Serialize, Deserialize)]
+pub struct AssetManifest {
+    pub version: u32,
+    pub assets: HashMap<String, AssetEntry>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AssetEntry {
+    pub path: String,
+    pub asset_type: AssetType,
+    pub hash: String,
+    pub size: u64,
+    pub compressed: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub enum AssetType {
+    Texture,
+    Sound,
+    Music,
+    Font,
+    Shader,
+    Data,
+    Localization,
+}
+
+pub struct CachedAsset {
     pub data: Vec<u8>,
-    pub sample_rate: u32,
-    pub channels: u16,
+    pub asset_type: AssetType,
+    pub loaded_at: std::time::Instant,
 }
 
-impl AudioEngine {
-    pub fn new() -> Result<Self, AudioError>;
+impl AssetManager {
+    pub fn new(base_path: impl AsRef<Path>) -> Result<Self, AssetError>;
 
-    pub fn play_sound(&mut self, sound: &SoundEffect, position: Option<(f32, f32)>) -> AudioSourceId;
-    pub fn play_music(&mut self, music: &SoundEffect, fade_in: f32);
-    pub fn stop_music(&mut self, fade_out: f32);
+    pub fn load(&mut self, id: &str) -> Result<&CachedAsset, AssetError>;
+    pub fn load_async(&mut self, id: &str) -> AssetHandle;
+    pub fn unload(&mut self, id: &str);
 
-    pub fn update_spatial(&mut self, spatial: &SpatialAudioManager);
-
-    pub fn set_master_volume(&mut self, volume: f32);
-    pub fn set_sfx_volume(&mut self, volume: f32);
-    pub fn set_music_volume(&mut self, volume: f32);
-
-    pub fn stop_sound(&mut self, id: AudioSourceId);
-    pub fn stop_all(&mut self);
+    pub fn preload_group(&mut self, group: &str);
+    pub fn get_memory_usage(&self) -> usize;
+    pub fn clear_cache(&mut self);
 }
 
-pub enum AudioError {
-    NoOutputDevice,
-    DecodingError(String),
-    PlaybackError(String),
+pub enum AssetError {
+    NotFound(String),
+    IoError(std::io::Error),
+    DecompressionError,
+    ManifestCorrupt,
 }
 ```
 
+Also create `scripts/build_assets.sh`:
+```bash
+#!/bin/bash
+# Build and compress game assets
+
+set -e
+
+ASSET_DIR="${1:-assets}"
+OUTPUT_DIR="${2:-target/assets}"
+
+echo "Building assets from $ASSET_DIR to $OUTPUT_DIR"
+
+# Create manifest, compress textures, etc.
+```
+
 Requirements:
-- rodio for cross-platform audio
-- Spatial positioning from kernel data
-- Separate volume controls
-- Music crossfading
-- Sound pooling for frequent effects
+- Manifest-based asset tracking
+- LZ4 compression for large assets
+- Async loading with handles
+- Memory budget enforcement
+- Hot reload in debug mode
 
-### T-17: Quest UI (P0)
-**File**: `crates/genesis-tools/src/quest_ui.rs`
+### I-13: Localization System (P0)
+**File**: `crates/genesis-tools/src/localization.rs`
 
-Render quest tracker and log:
+Implement multi-language support:
 
 ```rust
-use egui::{Context, Window};
-use genesis_gameplay::quest::{QuestManager, QuestProgress, QuestObjective};
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
-pub struct QuestUI {
-    pub tracker_visible: bool,
-    pub log_open: bool,
-    selected_quest: Option<QuestId>,
+pub struct Localization {
+    current_locale: String,
+    strings: HashMap<String, HashMap<String, String>>, // locale -> key -> value
+    fallback_locale: String,
 }
 
-pub struct QuestUIData {
-    pub active_quests: Vec<QuestDisplayData>,
-    pub available_quests: Vec<QuestDisplayData>,
-    pub completed_count: u32,
-}
-
-pub struct QuestDisplayData {
-    pub id: QuestId,
+#[derive(Serialize, Deserialize)]
+pub struct LocaleFile {
+    pub locale: String,
     pub name: String,
-    pub description: String,
-    pub objectives: Vec<ObjectiveDisplayData>,
-    pub rewards: Vec<String>,
-    pub tracked: bool,
+    pub strings: HashMap<String, String>,
 }
 
-pub struct ObjectiveDisplayData {
-    pub description: String,
-    pub progress: u32,
-    pub required: u32,
-    pub complete: bool,
+impl Localization {
+    pub fn new(default_locale: &str) -> Self;
+
+    pub fn load_locale(&mut self, path: impl AsRef<Path>) -> Result<(), LocaleError>;
+    pub fn set_locale(&mut self, locale: &str) -> Result<(), LocaleError>;
+    pub fn get_locale(&self) -> &str;
+    pub fn available_locales(&self) -> Vec<&str>;
+
+    pub fn get(&self, key: &str) -> &str;
+    pub fn get_formatted(&self, key: &str, args: &[(&str, &str)]) -> String;
+    pub fn get_plural(&self, key: &str, count: u32) -> String;
 }
 
-impl QuestUI {
-    pub fn new() -> Self;
-
-    // Compact tracker (corner of screen)
-    pub fn show_tracker(&mut self, ctx: &Context, data: &QuestUIData);
-
-    // Full quest log window
-    pub fn show_log(&mut self, ctx: &Context, data: &QuestUIData) -> Option<QuestAction>;
-
-    fn render_objective(&self, ui: &mut egui::Ui, obj: &ObjectiveDisplayData);
-}
-
-pub enum QuestAction {
-    Track(QuestId),
-    Untrack(QuestId),
-    Abandon(QuestId),
-    SelectQuest(QuestId),
+// Macro for compile-time key checking (optional)
+#[macro_export]
+macro_rules! t {
+    ($loc:expr, $key:literal) => {
+        $loc.get($key)
+    };
+    ($loc:expr, $key:literal, $($arg:tt)*) => {
+        $loc.get_formatted($key, &[$($arg)*])
+    };
 }
 ```
 
+Create locale files structure:
+```
+assets/locales/
+├── en.json
+├── es.json
+├── fr.json
+├── de.json
+├── ja.json
+└── zh.json
+```
+
 Requirements:
-- Compact tracker (tracked quests only)
-- Full quest log with categories
-- Objective progress bars
-- Track/untrack toggle
-- Quest details panel
+- JSON locale files
+- Fallback to default locale
+- Format string interpolation
+- Plural forms support
+- Runtime language switching
 
-### T-18: Dialogue System UI (P0)
-**File**: `crates/genesis-tools/src/dialogue_ui.rs`
+### I-14: Crash Reporting (P1)
+**File**: `crates/genesis-engine/src/crash_report.rs`
 
-Implement NPC dialogue interface:
+Implement crash capture and reporting:
 
 ```rust
-use egui::{Context, Window, RichText};
+use std::panic;
+use backtrace::Backtrace;
 
-pub struct DialogueUI {
-    pub is_active: bool,
-    current_node: Option<DialogueNodeId>,
-    history: Vec<DialogueLine>,
-    typewriter_progress: f32,
+pub struct CrashReporter {
+    report_dir: PathBuf,
+    app_version: String,
+    enabled: bool,
 }
 
-pub struct DialogueTree {
-    pub nodes: HashMap<DialogueNodeId, DialogueNode>,
-    pub start_node: DialogueNodeId,
+#[derive(Serialize)]
+pub struct CrashReport {
+    pub timestamp: String,
+    pub app_version: String,
+    pub os: String,
+    pub arch: String,
+    pub panic_message: String,
+    pub backtrace: String,
+    pub system_info: SystemInfo,
+    pub recent_logs: Vec<String>,
 }
 
-pub struct DialogueNode {
-    pub speaker: String,
-    pub portrait: Option<String>,
-    pub text: String,
-    pub choices: Vec<DialogueChoice>,
-    pub on_enter: Vec<DialogueEffect>,
+#[derive(Serialize)]
+pub struct SystemInfo {
+    pub os_version: String,
+    pub cpu: String,
+    pub ram_mb: u64,
+    pub gpu: Option<String>,
 }
 
-pub struct DialogueChoice {
-    pub text: String,
-    pub next_node: Option<DialogueNodeId>,
-    pub condition: Option<DialogueCondition>,
-    pub effects: Vec<DialogueEffect>,
+impl CrashReporter {
+    pub fn new(report_dir: impl AsRef<Path>, app_version: &str) -> Self;
+
+    pub fn install_panic_hook(&self);
+
+    fn capture_crash(&self, panic_info: &panic::PanicInfo) -> CrashReport;
+    fn write_report(&self, report: &CrashReport) -> Result<PathBuf, std::io::Error>;
+
+    pub fn get_pending_reports(&self) -> Vec<PathBuf>;
+    pub fn submit_report(&self, path: &Path) -> Result<(), ReportError>;
+    pub fn delete_report(&self, path: &Path);
 }
 
-pub enum DialogueCondition {
-    HasItem(ItemId, u32),
-    QuestComplete(QuestId),
-    QuestActive(QuestId),
-    ReputationAbove(FactionId, i32),
-    Custom(String),
-}
-
-pub enum DialogueEffect {
-    GiveItem(ItemId, u32),
-    TakeItem(ItemId, u32),
-    StartQuest(QuestId),
-    CompleteQuest(QuestId),
-    AddReputation(FactionId, i32),
-    OpenShop(ShopId),
-}
-
-impl DialogueUI {
-    pub fn new() -> Self;
-
-    pub fn start_dialogue(&mut self, tree: &DialogueTree, npc_name: &str);
-    pub fn show(&mut self, ctx: &Context, tree: &DialogueTree) -> Vec<DialogueEffect>;
-    pub fn end_dialogue(&mut self);
-
-    fn render_speaker(&self, ui: &mut egui::Ui, node: &DialogueNode);
-    fn render_choices(&self, ui: &mut egui::Ui, choices: &[DialogueChoice]) -> Option<usize>;
+pub enum ReportError {
+    IoError(std::io::Error),
+    NetworkError(String),
+    ServerError(u16),
 }
 ```
 
 Requirements:
-- Typewriter text effect
-- Speaker portrait display
-- Choice buttons with conditions
-- Dialogue history scroll
-- Effects returned for gameplay
+- Custom panic hook
+- Backtrace capture
+- System info collection
+- Report file persistence
+- Optional upload (disabled by default)
 
-### T-19: Combat HUD (P1)
-**File**: `crates/genesis-tools/src/combat_hud.rs`
+### I-15: Telemetry & Analytics (P2)
+**File**: `crates/genesis-engine/src/analytics.rs`
 
-Render combat-related UI:
+Implement opt-in gameplay analytics:
 
 ```rust
-use egui::{Context, Painter, Pos2, Color32};
-use genesis_gameplay::combat::{CombatStats, DamageEvent};
+use serde::Serialize;
 
-pub struct CombatHUD {
-    damage_numbers: Vec<DamageNumber>,
-    health_bars: HashMap<EntityId, HealthBarState>,
-    crosshair_style: CrosshairStyle,
+pub struct Analytics {
+    enabled: bool,
+    session_id: String,
+    events: Vec<AnalyticsEvent>,
+    flush_interval: std::time::Duration,
 }
 
-pub struct DamageNumber {
-    pub value: f32,
-    pub position: (f32, f32),
-    pub color: Color32,
-    pub lifetime: f32,
-    pub velocity: (f32, f32),
+#[derive(Serialize)]
+pub struct AnalyticsEvent {
+    pub timestamp: u64,
+    pub event_type: String,
+    pub properties: HashMap<String, serde_json::Value>,
 }
 
-pub struct HealthBarState {
-    pub current: f32,
-    pub max: f32,
-    pub damage_preview: f32,
-    pub heal_preview: f32,
+pub struct AnalyticsConfig {
+    pub enabled: bool,
+    pub endpoint: Option<String>,
+    pub flush_interval_secs: u64,
+    pub batch_size: usize,
 }
 
-pub enum CrosshairStyle {
-    None,
-    Dot,
-    Cross,
-    Circle,
-    Custom(String),
-}
+impl Analytics {
+    pub fn new(config: AnalyticsConfig) -> Self;
 
-impl CombatHUD {
-    pub fn new() -> Self;
+    pub fn track(&mut self, event_type: &str, properties: HashMap<String, serde_json::Value>);
 
-    // Player health/mana bars
-    pub fn show_player_vitals(&self, ctx: &Context, stats: &CombatStats);
+    // Pre-defined events
+    pub fn track_session_start(&mut self);
+    pub fn track_session_end(&mut self, play_time_secs: u64);
+    pub fn track_level_complete(&mut self, level: &str, time_secs: u64);
+    pub fn track_death(&mut self, cause: &str, location: (f32, f32));
+    pub fn track_achievement(&mut self, achievement: &str);
 
-    // Enemy health bars (world-space)
-    pub fn show_enemy_health_bars(
-        &self,
-        painter: &Painter,
-        enemies: &[(EntityId, (f32, f32), &CombatStats)],
-        camera: &Camera,
-    );
+    pub fn flush(&mut self);
 
-    // Floating damage numbers
-    pub fn spawn_damage_number(&mut self, event: &DamageEvent);
-    pub fn update_damage_numbers(&mut self, dt: f32);
-    pub fn render_damage_numbers(&self, painter: &Painter, camera: &Camera);
-
-    // Crosshair
-    pub fn show_crosshair(&self, ctx: &Context);
-
-    // Cooldown indicators
-    pub fn show_ability_cooldowns(&self, ctx: &Context, cooldowns: &[f32]);
+    pub fn set_enabled(&mut self, enabled: bool);
+    pub fn is_enabled(&self) -> bool;
 }
 ```
 
 Requirements:
-- Animated health bars
-- Floating damage numbers
-- Critical hit emphasis
-- Low health warning effect
-- Target lock indicator
+- Disabled by default (opt-in)
+- Local event buffering
+- Batch submission
+- No PII collection
+- Session tracking
 
 ---
 
@@ -294,27 +301,28 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[tools] feat: T-16 audio engine integration
-[tools] feat: T-17 quest UI
-[tools] feat: T-18 dialogue system UI
-[tools] feat: T-19 combat HUD
+[infra] feat: I-12 asset pipeline
+[infra] feat: I-13 localization system
+[infra] feat: I-14 crash reporting
+[infra] feat: I-15 telemetry and analytics
 ```
 
 ---
 
 ## Dependencies
 
-Add to `crates/genesis-tools/Cargo.toml`:
+Add to `crates/genesis-engine/Cargo.toml`:
 ```toml
-rodio = "0.19"
+backtrace = "0.3"
+lz4 = "1.24"
 ```
 
 ---
 
 ## Integration Notes
 
-- T-16 uses SpatialAudioManager data from genesis-kernel
-- T-17 displays QuestManager data from genesis-gameplay
-- T-18 controls NPC dialogue flow
-- T-19 visualizes combat events
-- Export new modules in lib.rs
+- I-12 assets used by all crates for loading resources
+- I-13 localization integrated with all UI
+- I-14 crash reporter installed at startup
+- I-15 analytics tracks gameplay events
+- Create sample locale files in `assets/locales/`

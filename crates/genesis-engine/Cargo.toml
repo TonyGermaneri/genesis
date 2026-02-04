@@ -24,6 +24,9 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 bytemuck = { workspace = true }
 pollster = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 # UI library (per UI RULE - use existing libraries)
 egui = { workspace = true }
@@ -32,6 +35,7 @@ egui-winit = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

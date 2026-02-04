@@ -1,0 +1,78 @@
+{
+  "locale": "es",
+  "name": "Español",
+  "description": "Spanish",
+  "strings": {
+    "game.title": "Proyecto Genesis",
+    "game.version": "Versión {version}",
+
+    "menu.main.new_game": "Nueva Partida",
+    "menu.main.continue": "Continuar",
+    "menu.main.load_game": "Cargar Partida",
+    "menu.main.settings": "Configuración",
+    "menu.main.mods": "Mods",
+    "menu.main.credits": "Créditos",
+    "menu.main.quit": "Salir",
+
+    "menu.pause.resume": "Reanudar",
+    "menu.pause.save": "Guardar Partida",
+    "menu.pause.load": "Cargar Partida",
+    "menu.pause.settings": "Configuración",
+    "menu.pause.quit_menu": "Salir al Menú",
+    "menu.pause.quit_desktop": "Salir al Escritorio",
+
+    "settings.graphics": "Gráficos",
+    "settings.audio": "Audio",
+    "settings.controls": "Controles",
+    "settings.gameplay": "Jugabilidad",
+    "settings.language": "Idioma",
+    "settings.accessibility": "Accesibilidad",
+
+    "hud.health": "Salud",
+    "hud.energy": "Energía",
+    "hud.hunger": "Hambre",
+    "hud.thirst": "Sed",
+
+    "inventory.title": "Inventario",
+    "inventory.weight": "Peso: {current}/{max}",
+    "inventory.empty": "Vacío",
+
+    "crafting.title": "Fabricación",
+    "crafting.materials": "Materiales",
+    "crafting.craft": "Fabricar",
+    "crafting.craft_all": "Fabricar Todo",
+    "crafting.missing_materials": "Materiales insuficientes",
+    "crafting.requires_station": "Requiere: {station}",
+
+    "dialog.confirm": "Confirmar",
+    "dialog.cancel": "Cancelar",
+    "dialog.yes": "Sí",
+    "dialog.no": "No",
+    "dialog.ok": "Aceptar",
+
+    "notification.item_added": "{item} añadido al inventario",
+    "notification.item_removed": "{item} eliminado del inventario",
+    "notification.quest_started": "Misión iniciada: {quest}",
+    "notification.quest_completed": "Misión completada: {quest}",
+    "notification.level_up": "¡Subiste de nivel! Ahora eres nivel {level}",
+    "notification.achievement": "Logro Desbloqueado: {name}"
+  },
+  "plurals": {
+    "items": {
+      "one": "{count} objeto",
+      "other": "{count} objetos"
+    },
+    "days": {
+      "one": "{count} día",
+      "other": "{count} días"
+    },
+    "hours": {
+      "one": "{count} hora",
+      "other": "{count} horas"
+    },
+    "minutes": {
+      "one": "{count} minuto",
+      "other": "{count} minutos"
+    }
+  }
+}

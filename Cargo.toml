@@ -73,6 +73,7 @@ egui-winit = "0.30"
 # Testing
 criterion = "0.5"
 proptest = "1.4"
+tempfile = "3.10"
 
 # Async utilities
 pollster = "0.3"
