@@ -294,7 +294,8 @@ impl GameState {
     /// Updates the nearest interactable NPC (call each frame).
     pub fn update_nearest_interactable(&mut self) {
         const INTERACTION_RANGE: f32 = 3.0;
-        self.npc_interaction.nearest_interactable = self.find_nearest_interactable(INTERACTION_RANGE);
+        self.npc_interaction.nearest_interactable =
+            self.find_nearest_interactable(INTERACTION_RANGE);
     }
 
     /// Attempts to start an interaction with the nearest NPC.
