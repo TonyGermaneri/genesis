@@ -1,90 +1,137 @@
-# Kernel Agent — Iteration 8 Prompt
+# Infra Agent — Iteration 9 Prompt
 
 ## Context
 
-You are the **Kernel Agent** for Project Genesis, a 2D top-down game engine built with Rust/wgpu.
+You are the **Infra Agent** for Project Genesis, a 2D top-down game engine built with Rust.
 
 **Current State:**
-- Multi-chunk streaming render is working (K-28)
-- Quadtree chunk activation for simulation (K-29)
-- Environment simulation shader for grass/rain (K-30)
-- Day/night cycle rendering (K-31)
-- Biome system exists in biome.rs with SimplexNoise, BiomeManager, BiomeConfig
-- WorldGenerator uses biomes for material selection
+- Biome generation wiring complete (I-28 to I-31)
+- ChunkManager handles chunk loading/unloading
+- Game loop processes input, updates, renders
+- Player interaction system working
 
-**Iteration 8 Focus:** Enhance biome rendering with visual distinction and smooth transitions.
+**Iteration 9 Focus:** Wire NPC system into game loop and chunk management.
 
 ---
 
 ## Assigned Tasks
 
-### K-32: Biome-aware cell coloring (P0)
+### I-32: NPC manager integration (P0)
 
-**Goal:** Modify the render shader to use biome-specific color palettes.
+**Goal:** Add NPC system to the main game loop.
 
 **Implementation:**
-1. Add biome_id field to RenderParams or compute from noise in shader
-2. Create color palettes for each biome:
-   - Forest: Lush greens (grass #4a7c23, dirt #8b6914)
-   - Desert: Warm yellows/oranges (sand #c2a655, sandstone #b8956e)
-   - Lake/Ocean: Blues (water #3a7ca5, deep #1e4d6b)
-   - Plains: Light greens/yellows (grass #7cb342, dirt #a08060)
-   - Mountain: Grays/whites (stone #7a7a7a, snow #e8e8e8)
-3. Use material_id AND biome_id to determine final color
+1. Create/use NpcManager from gameplay crate
+2. In App struct, add:
+   ```rust
+   npc_manager: NpcManager,
+   ```
+3. In game loop:
+   - Update AI behaviors each tick
+   - Update NPC positions
+   - Check for state transitions
+4. Pass NPC data to renderer
 
-**Files to modify:**
-- crates/genesis-kernel/src/render.rs
-- Inline WGSL shader code
+```rust
+// In update loop
+self.npc_manager.update(dt, &self.world, &self.player);
+
+// Before render
+let npc_render_data = self.npc_manager.get_render_data();
+renderer.render_npcs(&npc_render_data);
+```
 
 ---
 
-### K-33: Biome transition blending (P0)
+### I-33: NPC-player interaction (P0)
 
-**Goal:** Smooth visual transitions between adjacent biomes.
+**Goal:** Detect when player wants to interact with NPC.
 
 **Implementation:**
-1. Sample biome at neighboring cells in shader
-2. Apply gradient blending using noise-based weights
-3. Blend over 3-5 cells for natural transition
-4. Use dithering or noise for organic boundary appearance
+1. Check for interact key (E) press
+2. Find nearest NPC within interaction range
+3. If found, start dialogue or interaction
+4. Handle interaction state:
+   - Lock player movement during dialogue
+   - Unlock when dialogue ends
+
+```rust
+pub fn handle_npc_interaction(&mut self, input: &Input) {
+    if input.interact_just_pressed {
+        if let Some(npc_id) = self.find_nearest_interactable_npc() {
+            self.start_interaction(npc_id);
+        }
+    }
+    
+    if self.in_dialogue {
+        // Handle dialogue input
+        if let Some(choice) = self.dialogue_ui.get_choice() {
+            self.dialogue_manager.select_choice(choice);
+        }
+    }
+}
+```
 
 ---
 
-### K-34: Lake/water rendering (P0)
+### I-34: NPC chunk loading (P0)
 
-**Goal:** Add animated water shader for lake biomes.
+**Goal:** Spawn and despawn NPCs with chunk loading.
 
 **Implementation:**
-1. Detect water material cells in render shader (material_id == 4)
-2. Add wave animation using time uniform and sine functions
-3. Add subtle color variation based on depth
-4. Water should have slight transparency (alpha < 1.0)
+1. On chunk load:
+   - Generate spawn positions using seed + chunk coords
+   - Create NPCs according to spawn rules
+   - Add to NpcManager
+2. On chunk unload:
+   - Save NPC state if modified
+   - Remove NPCs from NpcManager
+3. Persistent NPCs (named/quest NPCs) handled separately
+
+```rust
+// In ChunkManager
+pub fn on_chunk_loaded(&mut self, chunk_pos: (i32, i32), npc_manager: &mut NpcManager) {
+    let spawn_data = self.terrain_gen.get_npc_spawns(chunk_pos);
+    for spawn in spawn_data {
+        npc_manager.spawn(spawn.npc_type, spawn.position);
+    }
+}
+
+pub fn on_chunk_unloaded(&mut self, chunk_pos: (i32, i32), npc_manager: &mut NpcManager) {
+    npc_manager.despawn_in_chunk(chunk_pos);
+}
+```
 
 ---
 
-### K-35: Mountain/elevation rendering (P1)
+### I-35: NPC update profiling (P1)
 
-**Goal:** Add elevation-based rendering for mountain biomes.
+**Goal:** Measure and report NPC system performance.
 
 **Implementation:**
-1. Use noise to generate elevation values
-2. Higher elevations get snow-capped appearance
-3. Add shadow/highlight based on light direction
+1. Time NPC AI update
+2. Time NPC collision checks
+3. Time NPC rendering
+4. Report in debug panel:
+   - AI update: X.XXms
+   - Collision: X.XXms
+   - Render: X.XXms
+   - Active NPCs: N
+   - NPCs in view: N
 
 ---
 
 ## Constraints
 
-1. Performance: Biome calculations must not exceed 1ms per chunk
-2. GPU-friendly: Use uniforms, not per-cell CPU computation
-3. No gameplay logic: Only rendering
-4. Existing APIs: Use existing SimplexNoise and BiomeManager
-5. Backward compatible: Existing cell rendering must still work
+1. **Minimal coupling:** Use traits/interfaces between crates
+2. **Thread-safe:** NPC updates could be parallelized later
+3. **Deterministic:** Same seed = same NPC spawns
+4. **Memory efficient:** Unload NPCs when chunks unload
 
 ---
 
 ## Commit Format
 
 ```
-[kernel] feat: K-32..K-35 Biome rendering with transitions and water animation
+[infra] feat: I-32..I-35 NPC manager integration and chunk loading
 ```
