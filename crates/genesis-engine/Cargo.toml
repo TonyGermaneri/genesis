@@ -35,6 +35,9 @@ egui = { workspace = true }
 egui-wgpu = { workspace = true }
 egui-winit = { workspace = true }
 
+# Audio playback
+rodio = "0.19"
+
 [dev-dependencies]
 criterion = { workspace = true }
 tempfile = { workspace = true }
