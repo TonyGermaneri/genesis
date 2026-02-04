@@ -8,6 +8,7 @@ description = "Development tools: replay, inspectors, perf HUD"
 
 [dependencies]
 genesis-common = { path = "../genesis-common" }
+genesis-gameplay = { path = "../genesis-gameplay" }
 genesis-kernel = { path = "../genesis-kernel" }
 genesis-world = { path = "../genesis-world" }
 

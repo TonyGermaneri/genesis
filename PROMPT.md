@@ -1,87 +1,241 @@
-# Tools Agent — Current Prompt
+# PROMPT — Tools Agent — Iteration 3
 
-> Updated: 2026-02-03 — Iteration 2 by Orchestrator
+> **Branch**: `tools-agent`
+> **Focus**: Inventory UI rendering, crafting UI rendering, minimap, debug console
 
-## Status
+## Your Mission
 
-✅ **Iteration 1 Complete!** T-1 through T-7 merged to main.
+Complete the following tasks. Work through them sequentially. After each task, run the validation loop. Commit after each task passes.
 
-Branch synced with main. Ready for Iteration 2.
+---
 
-## Next Priority Tasks
+## Tasks
 
-| ID | Task | Priority |
-|----|------|----------|
-| T-8 | Integration test harness | P0 |
-| T-9 | Automated screenshot tests | P1 |
-| T-10 | Memory profiler integration | P1 |
-| T-11 | Hot reload support | P2 |
+### T-12: Inventory UI Renderer (P0)
+**File**: `crates/genesis-tools/src/inventory_ui.rs`
 
-### T-8: Integration Test Harness
-
-Create a harness for end-to-end testing:
-- Headless mode (no window, software renderer)
-- Simulate N frames with scripted inputs
-- Assert on world state after simulation
-- Compare against golden files
+Render inventory using egui:
 
 ```rust
-pub struct TestHarness {
-    world: World,
-    kernel: Kernel,
-    gameplay: Gameplay,
+use egui::{Context, Window, Grid, Image, Response};
+use genesis_gameplay::inventory_ui::{InventoryUIModel, InventoryAction, SlotUIData};
+
+pub struct InventoryUI {
+    pub is_open: bool,
+    slot_size: f32,
+    hotbar_y: f32,
 }
 
-impl TestHarness {
-    pub fn new_headless() -> Self;
-    pub fn load_scenario(&mut self, path: &Path);
-    pub fn simulate(&mut self, frames: u32, inputs: &[Input]);
-    pub fn assert_cell(&self, pos: (u32, u32), expected: Cell);
-    pub fn assert_entity_exists(&self, id: EntityId);
-    pub fn snapshot(&self) -> WorldSnapshot;
+impl InventoryUI {
+    pub fn new() -> Self;
+
+    pub fn show(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction>;
+
+    pub fn show_hotbar(&mut self, ctx: &Context, model: &InventoryUIModel) -> Option<InventoryAction>;
+
+    fn render_slot(&self, ui: &mut egui::Ui, slot: &SlotUIData) -> Response;
+
+    fn render_tooltip(&self, ui: &mut egui::Ui, tooltip: &TooltipData);
 }
 ```
 
-### T-9: Automated Screenshot Tests
+Requirements:
+- Grid layout for inventory slots
+- Hotbar always visible at bottom
+- Drag and drop between slots
+- Right-click context menu (use, drop, split)
+- Tooltip on hover
+- Item count overlay on slot
 
-Visual regression testing:
-- Render frame to image buffer
-- Compare against golden screenshot
-- Report pixel differences
-- Store golden images in `tests/golden/`
+### T-13: Crafting UI Renderer (P0)
+**File**: `crates/genesis-tools/src/crafting_ui.rs`
+
+Render crafting interface using egui:
 
 ```rust
-pub fn screenshot_test(name: &str, harness: &TestHarness) -> TestResult {
-    let actual = harness.render_to_image();
-    let golden = load_golden(name)?;
-    compare_images(&actual, &golden, threshold: 0.01)
+use egui::{Context, Window, ScrollArea};
+use genesis_gameplay::crafting_ui::{CraftingUIModel, RecipeUIData};
+
+pub struct CraftingUI {
+    pub is_open: bool,
+    search_text: String,
+}
+
+impl CraftingUI {
+    pub fn new() -> Self;
+
+    pub fn show(&mut self, ctx: &Context, model: &mut CraftingUIModel) -> Option<CraftRequest>;
+
+    fn render_recipe_list(&mut self, ui: &mut egui::Ui, model: &CraftingUIModel) -> Option<usize>;
+
+    fn render_recipe_detail(&self, ui: &mut egui::Ui, recipe: &RecipeUIData);
+
+    fn render_crafting_queue(&self, ui: &mut egui::Ui, model: &CraftingUIModel);
+}
+
+pub struct CraftRequest {
+    pub recipe_id: RecipeId,
+    pub count: u32,
 }
 ```
 
-### T-10: Memory Profiler Integration
+Requirements:
+- Recipe list with filter/search
+- Recipe detail panel (ingredients, outputs)
+- "Craft" button (disabled if can't craft)
+- Crafting queue with progress bars
+- Visual feedback for missing ingredients
 
-Track memory usage:
-- Allocator wrapper that counts allocations
-- Per-system memory tracking (kernel, gameplay, world)
-- Memory usage in perf HUD
-- Detect memory leaks in tests
+### T-14: Minimap Renderer (P1)
+**File**: `crates/genesis-tools/src/minimap.rs`
 
-### T-11: Hot Reload Support (stretch)
+Implement minimap display:
 
-Reload assets without restart:
-- Watch material definitions
-- Watch shader files
-- Reload on file change
-- Useful for rapid iteration
+```rust
+use egui::{Context, Painter, Rect, Color32};
 
-## Rules
+pub struct Minimap {
+    pub is_visible: bool,
+    pub size: f32,
+    pub zoom: f32,
+    texture: Option<egui::TextureHandle>,
+}
 
-1. Work ONLY in `crates/genesis-tools`
-2. Run validation after EVERY change
-3. Commit only when validation passes
+pub struct MinimapData {
+    pub player_pos: (f32, f32),
+    pub player_rotation: f32,
+    pub entities: Vec<MinimapEntity>,
+    pub terrain_colors: Vec<u8>,  // RGBA for terrain
+    pub width: u32,
+    pub height: u32,
+}
 
-## Validation Command
+pub struct MinimapEntity {
+    pub pos: (f32, f32),
+    pub entity_type: MinimapEntityType,
+}
+
+pub enum MinimapEntityType {
+    Player,
+    NPC,
+    Enemy,
+    Item,
+    Building,
+}
+
+impl Minimap {
+    pub fn new(size: f32) -> Self;
+
+    pub fn show(&mut self, ctx: &Context, data: &MinimapData);
+
+    pub fn update_terrain(&mut self, ctx: &Context, colors: &[u8], width: u32, height: u32);
+
+    fn world_to_minimap(&self, world_pos: (f32, f32), center: (f32, f32)) -> Option<(f32, f32)>;
+}
+```
+
+Requirements:
+- Corner overlay (top-right by default)
+- Terrain texture from chunk data
+- Entity markers with icons/colors
+- Player arrow showing direction
+- Zoom in/out controls
+- Click to set waypoint (optional)
+
+### T-15: Debug Console (P1)
+**File**: `crates/genesis-tools/src/console.rs`
+
+Implement in-game debug console:
+
+```rust
+use egui::{Context, Window, TextEdit, ScrollArea};
+
+pub struct DebugConsole {
+    pub is_open: bool,
+    input_buffer: String,
+    history: Vec<ConsoleEntry>,
+    command_history: Vec<String>,
+    history_index: Option<usize>,
+}
+
+pub struct ConsoleEntry {
+    pub timestamp: f64,
+    pub level: ConsoleLevel,
+    pub message: String,
+}
+
+pub enum ConsoleLevel {
+    Info,
+    Warning,
+    Error,
+    Command,
+    Result,
+}
+
+pub trait ConsoleCommand {
+    fn name(&self) -> &str;
+    fn help(&self) -> &str;
+    fn execute(&self, args: &[&str]) -> String;
+}
+
+impl DebugConsole {
+    pub fn new() -> Self;
+
+    pub fn show(&mut self, ctx: &Context, commands: &[Box<dyn ConsoleCommand>]) -> Option<String>;
+
+    pub fn log(&mut self, level: ConsoleLevel, message: String);
+
+    pub fn execute(&mut self, input: &str, commands: &[Box<dyn ConsoleCommand>]);
+}
+
+// Built-in commands
+pub struct HelpCommand;
+pub struct ClearCommand;
+pub struct TeleportCommand;
+pub struct SpawnCommand;
+pub struct GiveCommand;
+pub struct SetTimeCommand;
+```
+
+Requirements:
+- Toggle with backtick/tilde key
+- Command history (up/down arrows)
+- Tab completion for commands
+- Color-coded output levels
+- Scrollable history
+- Built-in debug commands
+
+---
+
+## Validation Loop
+
+After each task:
 
 ```bash
-cargo fmt && cargo clippy -- -D warnings && cargo test
+cargo fmt
+cargo clippy -- -D warnings
+cargo test --workspace
 ```
+
+If ANY step fails, FIX IT before committing.
+
+---
+
+## Commit Convention
+
+```
+[tools] feat: T-12 inventory UI renderer
+[tools] feat: T-13 crafting UI renderer
+[tools] feat: T-14 minimap renderer
+[tools] feat: T-15 debug console
+```
+
+---
+
+## Integration Notes
+
+- T-12/T-13 consume data models from genesis-gameplay
+- Add genesis-gameplay dependency if not present
+- Use egui 0.30 (already in workspace)
+- Export new modules in lib.rs
+- Test with mock data if gameplay types not available
