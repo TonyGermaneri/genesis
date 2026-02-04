@@ -16,6 +16,7 @@
 pub mod audio;
 pub mod cell_inspector;
 pub mod chunk_viewer;
+pub mod combat_hud;
 pub mod console;
 pub mod crafting_ui;
 pub mod dialogue_ui;
@@ -37,6 +38,7 @@ pub mod prelude {
     pub use crate::audio::*;
     pub use crate::cell_inspector::*;
     pub use crate::chunk_viewer::*;
+    pub use crate::combat_hud::*;
     pub use crate::console::*;
     pub use crate::crafting_ui::*;
     pub use crate::dialogue_ui::*;
