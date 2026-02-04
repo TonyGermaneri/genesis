@@ -328,7 +328,10 @@ mod tests {
 
         let low = metrics.low_fps();
         // With 10% slow frames, the 1% low should pick up some slow frames
-        assert!(low < 50.0, "1% low should be impacted by slow frames, got {low}");
+        assert!(
+            low < 50.0,
+            "1% low should be impacted by slow frames, got {low}"
+        );
     }
 
     #[test]

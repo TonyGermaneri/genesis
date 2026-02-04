@@ -2,13 +2,14 @@
 //!
 //! Integrates the cell simulation compute pipeline with visual rendering.
 //! Supports egui UI overlay for debug HUD and game menus.
+//! Supports both single-chunk and multi-chunk rendering modes.
 
 #![allow(unsafe_code)]
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use genesis_gameplay::GameState;
-use genesis_kernel::{Camera, CellBuffer, CellComputePipeline, CellRenderPipeline};
+use genesis_kernel::{Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager};
 use genesis_tools::EguiIntegration;
 use tracing::info;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
@@ -32,8 +33,10 @@ pub struct Renderer {
     compute_pipeline: CellComputePipeline,
     /// Cell render pipeline
     render_pipeline: CellRenderPipeline,
-    /// Cell buffer (double-buffered)
+    /// Cell buffer (double-buffered) - for single-chunk mode
     cell_buffer: CellBuffer,
+    /// Chunk manager for multi-chunk mode (optional)
+    chunk_manager: Option<ChunkManager>,
     /// Render bind group for current buffer
     render_bind_group: wgpu::BindGroup,
     /// Egui integration for UI overlay
@@ -143,11 +146,48 @@ impl Renderer {
             compute_pipeline,
             render_pipeline,
             cell_buffer,
+            chunk_manager: None, // Single-chunk mode by default
             render_bind_group,
             egui,
             simulation_running: true,
             frame_count: 0,
         })
+    }
+
+    /// Enables multi-chunk rendering mode.
+    ///
+    /// When enabled, the renderer will use the ChunkManager for multi-chunk
+    /// streaming and rendering instead of the single CellBuffer.
+    pub fn enable_multi_chunk(&mut self) {
+        if self.chunk_manager.is_none() {
+            info!("Enabling multi-chunk rendering mode");
+            self.chunk_manager = Some(ChunkManager::new(DEFAULT_CHUNK_SIZE));
+        }
+    }
+
+    /// Disables multi-chunk rendering mode.
+    pub fn disable_multi_chunk(&mut self) {
+        if self.chunk_manager.is_some() {
+            info!("Disabling multi-chunk rendering mode");
+            self.chunk_manager = None;
+        }
+    }
+
+    /// Returns whether multi-chunk rendering is enabled.
+    #[must_use]
+    pub const fn is_multi_chunk_enabled(&self) -> bool {
+        self.chunk_manager.is_some()
+    }
+
+    /// Returns the chunk manager if multi-chunk mode is enabled.
+    #[must_use]
+    pub fn chunk_manager(&self) -> Option<&ChunkManager> {
+        self.chunk_manager.as_ref()
+    }
+
+    /// Returns a mutable reference to the chunk manager.
+    pub fn chunk_manager_mut(&mut self) -> Option<&mut ChunkManager> {
+        self.chunk_manager.as_mut()
     }
 
     /// Resizes the renderer to match the new window size.
@@ -508,6 +548,59 @@ impl Renderer {
     #[must_use]
     pub fn surface_format(&self) -> wgpu::TextureFormat {
         self.config.format
+    }
+
+    /// Returns the compute pipeline.
+    #[must_use]
+    pub fn compute_pipeline(&self) -> &CellComputePipeline {
+        &self.compute_pipeline
+    }
+
+    /// Returns the number of visible/active chunks.
+    ///
+    /// In single-chunk mode, this always returns 1.
+    /// In multi-chunk mode, this returns the number of active chunks from the ChunkManager.
+    #[must_use]
+    pub fn visible_chunk_count(&self) -> usize {
+        match &self.chunk_manager {
+            Some(cm) => cm.active_chunk_count(),
+            None => 1, // Single chunk mode
+        }
+    }
+
+    /// Returns the total number of cells being simulated.
+    #[must_use]
+    pub fn total_cell_count(&self) -> u64 {
+        let cells_per_chunk = DEFAULT_CHUNK_SIZE as u64 * DEFAULT_CHUNK_SIZE as u64;
+        match &self.chunk_manager {
+            Some(cm) => cm.active_chunk_count() as u64 * cells_per_chunk,
+            None => cells_per_chunk, // Single chunk
+        }
+    }
+
+    /// Updates the chunk manager camera position for multi-chunk mode.
+    ///
+    /// Call this when the camera moves to ensure correct chunks are loaded.
+    pub fn update_camera_position(&mut self, camera: &Camera) {
+        if let Some(cm) = &mut self.chunk_manager {
+            cm.update_camera(camera.position.0 as i32, camera.position.1 as i32);
+        }
+    }
+
+    /// Prepares chunks for simulation in multi-chunk mode.
+    ///
+    /// This loads/unloads chunks based on camera position.
+    pub fn prepare_multi_chunk_simulation(&mut self) {
+        if let Some(cm) = &mut self.chunk_manager {
+            cm.prepare_simulation(&self.device, &self.compute_pipeline);
+        }
+    }
+
+    /// Steps simulation for all active chunks in multi-chunk mode.
+    pub fn step_multi_chunk_simulation(&mut self) {
+        if let Some(cm) = &mut self.chunk_manager {
+            cm.step_simulation(&self.device, &self.queue, &self.compute_pipeline);
+        }
     }
 }
 
