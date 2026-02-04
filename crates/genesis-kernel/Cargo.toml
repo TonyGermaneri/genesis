@@ -17,6 +17,7 @@ parking_lot = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+pollster = { workspace = true }
 
 [lints]
 workspace = true

@@ -895,6 +895,7 @@ dependencies = [
  "bytemuck",
  "genesis-common",
  "parking_lot",
+ "pollster",
  "proptest",
  "thiserror 1.0.69",
  "tracing",

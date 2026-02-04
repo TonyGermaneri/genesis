@@ -40,27 +40,35 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod benchmark;
+pub mod biome;
 pub mod buffer;
 pub mod cell;
 pub mod chunk;
+pub mod collision;
 pub mod compute;
 pub mod edge;
 pub mod event;
 pub mod intent;
+pub mod readback;
 pub mod render;
+pub mod streaming;
 pub mod validation;
 
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::benchmark::*;
+    pub use crate::biome::*;
     pub use crate::buffer::*;
     pub use crate::cell::*;
     pub use crate::chunk::*;
+    pub use crate::collision::*;
     pub use crate::compute::*;
     pub use crate::edge::*;
     pub use crate::event::*;
     pub use crate::intent::*;
+    pub use crate::readback::*;
     pub use crate::render::*;
+    pub use crate::streaming::*;
     pub use crate::validation::*;
 }
 

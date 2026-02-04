@@ -346,6 +346,33 @@ impl ChunkManager {
     pub const fn camera_position(&self) -> (i32, i32) {
         (self.camera_x, self.camera_y)
     }
+
+    /// Loads a specific chunk.
+    pub fn load_chunk(
+        &mut self,
+        device: &wgpu::Device,
+        pipeline: &CellComputePipeline,
+        chunk_id: ChunkId,
+    ) {
+        use std::collections::hash_map::Entry;
+
+        if let Entry::Vacant(entry) = self.chunks.entry(chunk_id) {
+            let state = ChunkState::new(chunk_id, device, pipeline, self.chunk_size);
+            entry.insert(state);
+        }
+    }
+
+    /// Unloads a specific chunk.
+    pub fn unload_chunk(&mut self, chunk_id: &ChunkId) {
+        self.chunks.remove(chunk_id);
+        self.active_chunks.remove(chunk_id);
+    }
+
+    /// Returns whether a chunk is loaded.
+    #[must_use]
+    pub fn is_chunk_loaded(&self, chunk_id: &ChunkId) -> bool {
+        self.chunks.contains_key(chunk_id)
+    }
 }
 
 #[cfg(test)]
