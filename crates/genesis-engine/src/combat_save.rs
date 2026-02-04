@@ -61,7 +61,12 @@ pub struct StatusEffectSaveData {
 impl StatusEffectSaveData {
     /// Creates save data from a status effect.
     #[must_use]
-    pub fn from_effect(effect: StatusEffect, duration: f32, stacks: u32, source: Option<EntityId>) -> Self {
+    pub fn from_effect(
+        effect: StatusEffect,
+        duration: f32,
+        stacks: u32,
+        source: Option<EntityId>,
+    ) -> Self {
         Self {
             effect_type: format!("{effect:?}"),
             duration,
@@ -242,7 +247,9 @@ impl EntityCombatSaveData {
     /// Returns true if entity has a specific status effect.
     #[must_use]
     pub fn has_status_effect(&self, effect_type: &str) -> bool {
-        self.status_effects.iter().any(|e| e.effect_type == effect_type)
+        self.status_effects
+            .iter()
+            .any(|e| e.effect_type == effect_type)
     }
 
     /// Returns true if entity can attack (not dead, no cooldown, has stamina).
@@ -409,7 +416,10 @@ impl CombatSaveData {
     /// Gets total kills for an entity type.
     #[must_use]
     pub fn get_kills(&self, entity_type: &str) -> u64 {
-        self.kill_records.get(entity_type).map(|r| r.count).unwrap_or(0)
+        self.kill_records
+            .get(entity_type)
+            .map(|r| r.count)
+            .unwrap_or(0)
     }
 
     /// Adds combat experience and handles leveling.
@@ -422,7 +432,8 @@ impl CombatSaveData {
             self.combat_level += 1;
             // Experience curve: level * 100 * 1.5^(level/5)
             let level_factor = 1.5_f64.powf(f64::from(self.combat_level) / 5.0);
-            self.experience_to_next_level = (f64::from(self.combat_level) * 100.0 * level_factor) as u64;
+            self.experience_to_next_level =
+                (f64::from(self.combat_level) * 100.0 * level_factor) as u64;
             leveled_up = Some(self.combat_level);
             info!("Combat level up: {}", self.combat_level);
         }
@@ -433,7 +444,10 @@ impl CombatSaveData {
     /// Gets weapon proficiency level.
     #[must_use]
     pub fn get_proficiency(&self, weapon_type: &str) -> u32 {
-        self.weapon_proficiencies.get(weapon_type).copied().unwrap_or(0)
+        self.weapon_proficiencies
+            .get(weapon_type)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Adds weapon proficiency experience.
@@ -486,13 +500,14 @@ impl CombatSaveData {
 
     /// Serializes to JSON (pretty).
     pub fn to_json_pretty(&self) -> CombatSaveResult<String> {
-        serde_json::to_string_pretty(self).map_err(|e| CombatSaveError::Serialization(e.to_string()))
+        serde_json::to_string_pretty(self)
+            .map_err(|e| CombatSaveError::Serialization(e.to_string()))
     }
 
     /// Deserializes from JSON.
     pub fn from_json(json: &str) -> CombatSaveResult<Self> {
-        let data: Self =
-            serde_json::from_str(json).map_err(|e| CombatSaveError::Serialization(e.to_string()))?;
+        let data: Self = serde_json::from_str(json)
+            .map_err(|e| CombatSaveError::Serialization(e.to_string()))?;
         data.migrate()
     }
 
@@ -588,7 +603,8 @@ impl CombatPersistence {
 
         // Update player attack cooldown
         if self.data.player.attack_cooldown > 0.0 {
-            self.data.player.attack_cooldown = (self.data.player.attack_cooldown - delta_time).max(0.0);
+            self.data.player.attack_cooldown =
+                (self.data.player.attack_cooldown - delta_time).max(0.0);
         }
 
         // Update respawn timer
@@ -703,7 +719,10 @@ impl CombatPersistence {
         self.data.player.status_effects.clear();
         self.data.player.attack_cooldown = 0.0;
         self.dirty = true;
-        info!("Player respawned with {}% health", (health_percent * 100.0) as u32);
+        info!(
+            "Player respawned with {}% health",
+            (health_percent * 100.0) as u32
+        );
     }
 }
 
@@ -877,12 +896,15 @@ mod tests {
     fn test_combat_persistence_update() {
         let mut persistence = CombatPersistence::new();
         persistence.data.player.attack_cooldown = 1.0;
-        persistence.data.player.add_status_effect(StatusEffectSaveData {
-            effect_type: "Burning".to_string(),
-            duration: 0.5,
-            stacks: 1,
-            source: None,
-        });
+        persistence
+            .data
+            .player
+            .add_status_effect(StatusEffectSaveData {
+                effect_type: "Burning".to_string(),
+                duration: 0.5,
+                stacks: 1,
+                source: None,
+            });
 
         persistence.update(0.3);
         assert!((persistence.data.player.attack_cooldown - 0.7).abs() < 0.01);

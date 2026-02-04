@@ -465,7 +465,7 @@ impl ExportDialog {
                 } else {
                     format!("{bytes} bytes")
                 }
-            }
+            },
             None => String::from("Unknown"),
         }
     }
@@ -540,7 +540,10 @@ impl ImportDialog {
     pub fn can_import(&self) -> bool {
         self.path.is_some()
             && self.selected_slot.is_some()
-            && self.validation.as_ref().is_some_and(ImportValidation::can_import)
+            && self
+                .validation
+                .as_ref()
+                .is_some_and(ImportValidation::can_import)
     }
 
     /// Check if would overwrite

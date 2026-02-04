@@ -10,6 +10,7 @@
 //! - Crafting UI (grid, recipe book, preview, workbench)
 //! - Combat UI (health bars, combat HUD, equipment stats, combat debug)
 //! - Save/Load UI (save menu, save preview, autosave indicator, save management)
+//! - Menu UI (main menu, pause menu, options menu, new game wizard)
 
 pub mod audio_debug;
 pub mod audio_settings;
@@ -23,7 +24,11 @@ pub mod environment;
 pub mod equipment_stats;
 pub mod health_bars;
 pub mod inventory;
+pub mod main_menu;
 pub mod minimap;
+pub mod new_game_wizard;
+pub mod options_menu;
+pub mod pause_menu;
 pub mod recipe_book;
 pub mod save_management;
 pub mod save_menu;
@@ -44,7 +49,11 @@ pub use environment::*;
 pub use equipment_stats::*;
 pub use health_bars::*;
 pub use inventory::*;
+pub use main_menu::*;
 pub use minimap::*;
+pub use new_game_wizard::*;
+pub use options_menu::*;
+pub use pause_menu::*;
 pub use recipe_book::*;
 pub use save_management::*;
 pub use save_menu::*;

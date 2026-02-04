@@ -27,8 +27,8 @@
 //! }
 //! ```
 
-use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 /// Save priority for chunks.
@@ -228,7 +228,8 @@ impl ChunkDelta {
 
     /// Add a fill range operation.
     pub fn fill_range(&mut self, start: u32, count: u32, data: [u8; 8]) {
-        self.operations.push(DeltaOp::FillRange { start, count, data });
+        self.operations
+            .push(DeltaOp::FillRange { start, count, data });
     }
 
     /// Check if delta is empty.
@@ -317,7 +318,8 @@ impl IncrementalSaver {
     /// Mark a chunk as dirty.
     pub fn mark_dirty(&mut self, position: (i32, i32), priority: SavePriority) {
         // Update chunk state
-        let state = self.chunk_states
+        let state = self
+            .chunk_states
             .entry(position)
             .or_insert_with(|| ChunkState::new(position));
 
@@ -342,7 +344,8 @@ impl IncrementalSaver {
             return;
         }
 
-        let state = self.chunk_states
+        let state = self
+            .chunk_states
             .entry(position)
             .or_insert_with(|| ChunkState::new(position));
 
