@@ -910,6 +910,7 @@ dependencies = [
  "bytemuck",
  "egui",
  "genesis-common",
+ "genesis-gameplay",
  "genesis-kernel",
  "genesis-world",
  "parking_lot",

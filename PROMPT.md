@@ -1,7 +1,7 @@
-# PROMPT — Gameplay Agent — Iteration 3
+# PROMPT — Tools Agent — Iteration 3
 
-> **Branch**: `gameplay-agent`
-> **Focus**: Player physics, inventory UI data, crafting UI, save/load
+> **Branch**: `tools-agent`
+> **Focus**: Inventory UI rendering, crafting UI rendering, minimap, debug console
 
 ## Your Mission
 
@@ -11,198 +11,199 @@ Complete the following tasks. Work through them sequentially. After each task, r
 
 ## Tasks
 
-### G-13: Player Physics Integration (P0)
-**File**: `crates/genesis-gameplay/src/physics.rs`
+### T-12: Inventory UI Renderer (P0)
+**File**: `crates/genesis-tools/src/inventory_ui.rs`
 
-Integrate player movement with kernel collision:
+Render inventory using egui:
 
 ```rust
-use genesis_kernel::collision::CollisionQuery;
+use egui::{Context, Window, Grid, Image, Response};
+use genesis_gameplay::inventory_ui::{InventoryUIModel, InventoryAction, SlotUIData};
 
-pub struct PlayerPhysics {
-    pub gravity: f32,
-    pub move_speed: f32,
-    pub jump_velocity: f32,
-    pub friction: f32,
+pub struct InventoryUI {
+    pub is_open: bool,
+    slot_size: f32,
+    hotbar_y: f32,
 }
 
-impl PlayerPhysics {
+impl InventoryUI {
     pub fn new() -> Self;
-    pub fn update(
-        &self,
-        player: &mut Player,
-        input: &InputState,
-        collision: &CollisionQuery,
-        dt: f32,
-    );
-    pub fn is_grounded(&self, player: &Player, collision: &CollisionQuery) -> bool;
+
+    pub fn show(&mut self, ctx: &Context, model: &mut InventoryUIModel) -> Vec<InventoryAction>;
+
+    pub fn show_hotbar(&mut self, ctx: &Context, model: &InventoryUIModel) -> Option<InventoryAction>;
+
+    fn render_slot(&self, ui: &mut egui::Ui, slot: &SlotUIData) -> Response;
+
+    fn render_tooltip(&self, ui: &mut egui::Ui, tooltip: &TooltipData);
 }
 ```
 
 Requirements:
-- AABB collision with cell grid
-- Gravity when not grounded
-- Wall sliding (don't stick to walls)
-- Jump only when grounded
-- Velocity clamping
+- Grid layout for inventory slots
+- Hotbar always visible at bottom
+- Drag and drop between slots
+- Right-click context menu (use, drop, split)
+- Tooltip on hover
+- Item count overlay on slot
 
-### G-14: Inventory UI Model (P0)
-**File**: `crates/genesis-gameplay/src/inventory_ui.rs`
+### T-13: Crafting UI Renderer (P0)
+**File**: `crates/genesis-tools/src/crafting_ui.rs`
 
-Prepare inventory data for UI rendering:
-
-```rust
-pub struct InventoryUIModel {
-    pub slots: Vec<SlotUIData>,
-    pub selected_slot: Option<usize>,
-    pub drag_item: Option<ItemStack>,
-    pub tooltip: Option<TooltipData>,
-}
-
-pub struct SlotUIData {
-    pub index: usize,
-    pub item: Option<ItemStack>,
-    pub is_hotbar: bool,
-    pub is_selected: bool,
-}
-
-pub struct TooltipData {
-    pub item_name: String,
-    pub description: String,
-    pub stats: Vec<(String, String)>,
-}
-
-impl InventoryUIModel {
-    pub fn from_inventory(inv: &Inventory, hotbar_size: usize) -> Self;
-    pub fn handle_click(&mut self, slot: usize, button: MouseButton) -> InventoryAction;
-    pub fn handle_drag(&mut self, from: usize, to: usize) -> InventoryAction;
-}
-
-pub enum InventoryAction {
-    None,
-    Move { from: usize, to: usize },
-    Split { slot: usize },
-    Drop { slot: usize, count: u32 },
-    Use { slot: usize },
-}
-```
-
-Requirements:
-- Transform Inventory → display model
-- Handle slot click/drag actions
-- Return actions for Inventory to execute
-- Tooltip generation from item metadata
-
-### G-15: Crafting UI Model (P0)
-**File**: `crates/genesis-gameplay/src/crafting_ui.rs`
-
-Prepare crafting data for UI rendering:
+Render crafting interface using egui:
 
 ```rust
-pub struct CraftingUIModel {
-    pub available_recipes: Vec<RecipeUIData>,
-    pub selected_recipe: Option<usize>,
-    pub crafting_queue: Vec<CraftingQueueItem>,
-    pub filter: RecipeFilter,
+use egui::{Context, Window, ScrollArea};
+use genesis_gameplay::crafting_ui::{CraftingUIModel, RecipeUIData};
+
+pub struct CraftingUI {
+    pub is_open: bool,
+    search_text: String,
 }
 
-pub struct RecipeUIData {
+impl CraftingUI {
+    pub fn new() -> Self;
+
+    pub fn show(&mut self, ctx: &Context, model: &mut CraftingUIModel) -> Option<CraftRequest>;
+
+    fn render_recipe_list(&mut self, ui: &mut egui::Ui, model: &CraftingUIModel) -> Option<usize>;
+
+    fn render_recipe_detail(&self, ui: &mut egui::Ui, recipe: &RecipeUIData);
+
+    fn render_crafting_queue(&self, ui: &mut egui::Ui, model: &CraftingUIModel);
+}
+
+pub struct CraftRequest {
     pub recipe_id: RecipeId,
-    pub name: String,
-    pub icon: String,
-    pub can_craft: bool,
-    pub missing_ingredients: Vec<String>,
-    pub inputs: Vec<IngredientUIData>,
-    pub outputs: Vec<IngredientUIData>,
-}
-
-pub struct IngredientUIData {
-    pub item_name: String,
-    pub required: u32,
-    pub available: u32,
-}
-
-pub struct CraftingQueueItem {
-    pub recipe_id: RecipeId,
-    pub progress: f32,
-    pub time_remaining: f32,
-}
-
-pub enum RecipeFilter {
-    All,
-    Craftable,
-    Category(String),
-    Search(String),
-}
-
-impl CraftingUIModel {
-    pub fn from_state(
-        recipes: &[CraftingRecipe],
-        inventory: &Inventory,
-        queue: &CraftingQueue,
-        filter: RecipeFilter,
-    ) -> Self;
-    pub fn select_recipe(&mut self, index: usize);
-    pub fn queue_craft(&self) -> Option<RecipeId>;
+    pub count: u32,
 }
 ```
 
 Requirements:
-- Filter recipes by craftability, category, search
-- Show ingredient availability
-- Display crafting queue progress
-- Sort by name/category/craftable
+- Recipe list with filter/search
+- Recipe detail panel (ingredients, outputs)
+- "Craft" button (disabled if can't craft)
+- Crafting queue with progress bars
+- Visual feedback for missing ingredients
 
-### G-16: Save/Load Game State (P1)
-**File**: `crates/genesis-gameplay/src/save.rs`
+### T-14: Minimap Renderer (P1)
+**File**: `crates/genesis-tools/src/minimap.rs`
 
-Implement game state serialization:
+Implement minimap display:
 
 ```rust
-use serde::{Serialize, Deserialize};
+use egui::{Context, Painter, Rect, Color32};
 
-#[derive(Serialize, Deserialize)]
-pub struct SaveGame {
-    pub version: u32,
-    pub timestamp: u64,
-    pub player: PlayerSaveData,
-    pub entities: Vec<EntitySaveData>,
-    pub world_seed: u64,
-    pub game_time: f64,
+pub struct Minimap {
+    pub is_visible: bool,
+    pub size: f32,
+    pub zoom: f32,
+    texture: Option<egui::TextureHandle>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct PlayerSaveData {
-    pub position: (f32, f32),
-    pub health: f32,
-    pub inventory: Vec<ItemStackSaveData>,
-    pub equipped: Vec<Option<ItemStackSaveData>>,
+pub struct MinimapData {
+    pub player_pos: (f32, f32),
+    pub player_rotation: f32,
+    pub entities: Vec<MinimapEntity>,
+    pub terrain_colors: Vec<u8>,  // RGBA for terrain
+    pub width: u32,
+    pub height: u32,
 }
 
-pub struct SaveManager {
-    save_dir: PathBuf,
+pub struct MinimapEntity {
+    pub pos: (f32, f32),
+    pub entity_type: MinimapEntityType,
 }
 
-impl SaveManager {
-    pub fn new(save_dir: PathBuf) -> Self;
-    pub fn save(&self, name: &str, data: &SaveGame) -> Result<(), SaveError>;
-    pub fn load(&self, name: &str) -> Result<SaveGame, SaveError>;
-    pub fn list_saves(&self) -> Vec<SaveMetadata>;
-    pub fn delete(&self, name: &str) -> Result<(), SaveError>;
+pub enum MinimapEntityType {
+    Player,
+    NPC,
+    Enemy,
+    Item,
+    Building,
 }
 
-pub struct SaveMetadata {
-    pub name: String,
-    pub timestamp: u64,
-    pub playtime: f64,
+impl Minimap {
+    pub fn new(size: f32) -> Self;
+
+    pub fn show(&mut self, ctx: &Context, data: &MinimapData);
+
+    pub fn update_terrain(&mut self, ctx: &Context, colors: &[u8], width: u32, height: u32);
+
+    fn world_to_minimap(&self, world_pos: (f32, f32), center: (f32, f32)) -> Option<(f32, f32)>;
 }
 ```
 
 Requirements:
-- Binary format (bincode) for compactness
-- Version field for migrations
-- Save metadata without loading full save
-- Atomic writes (write temp, rename)
+- Corner overlay (top-right by default)
+- Terrain texture from chunk data
+- Entity markers with icons/colors
+- Player arrow showing direction
+- Zoom in/out controls
+- Click to set waypoint (optional)
+
+### T-15: Debug Console (P1)
+**File**: `crates/genesis-tools/src/console.rs`
+
+Implement in-game debug console:
+
+```rust
+use egui::{Context, Window, TextEdit, ScrollArea};
+
+pub struct DebugConsole {
+    pub is_open: bool,
+    input_buffer: String,
+    history: Vec<ConsoleEntry>,
+    command_history: Vec<String>,
+    history_index: Option<usize>,
+}
+
+pub struct ConsoleEntry {
+    pub timestamp: f64,
+    pub level: ConsoleLevel,
+    pub message: String,
+}
+
+pub enum ConsoleLevel {
+    Info,
+    Warning,
+    Error,
+    Command,
+    Result,
+}
+
+pub trait ConsoleCommand {
+    fn name(&self) -> &str;
+    fn help(&self) -> &str;
+    fn execute(&self, args: &[&str]) -> String;
+}
+
+impl DebugConsole {
+    pub fn new() -> Self;
+
+    pub fn show(&mut self, ctx: &Context, commands: &[Box<dyn ConsoleCommand>]) -> Option<String>;
+
+    pub fn log(&mut self, level: ConsoleLevel, message: String);
+
+    pub fn execute(&mut self, input: &str, commands: &[Box<dyn ConsoleCommand>]);
+}
+
+// Built-in commands
+pub struct HelpCommand;
+pub struct ClearCommand;
+pub struct TeleportCommand;
+pub struct SpawnCommand;
+pub struct GiveCommand;
+pub struct SetTimeCommand;
+```
+
+Requirements:
+- Toggle with backtick/tilde key
+- Command history (up/down arrows)
+- Tab completion for commands
+- Color-coded output levels
+- Scrollable history
+- Built-in debug commands
 
 ---
 
@@ -223,17 +224,18 @@ If ANY step fails, FIX IT before committing.
 ## Commit Convention
 
 ```
-[gameplay] feat: G-13 player physics integration
-[gameplay] feat: G-14 inventory UI model
-[gameplay] feat: G-15 crafting UI model
-[gameplay] feat: G-16 save/load game state
+[tools] feat: T-12 inventory UI renderer
+[tools] feat: T-13 crafting UI renderer
+[tools] feat: T-14 minimap renderer
+[tools] feat: T-15 debug console
 ```
 
 ---
 
 ## Integration Notes
 
-- G-13 uses CollisionQuery from genesis-kernel (add dependency)
-- G-14/G-15 provide data models, actual UI in genesis-tools
-- G-16 coordinates with chunk save in genesis-world
+- T-12/T-13 consume data models from genesis-gameplay
+- Add genesis-gameplay dependency if not present
+- Use egui 0.30 (already in workspace)
 - Export new modules in lib.rs
+- Test with mock data if gameplay types not available
