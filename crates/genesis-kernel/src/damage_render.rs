@@ -76,17 +76,17 @@ impl DamageType {
     #[must_use]
     pub const fn color(&self) -> [f32; 4] {
         match self {
-            Self::Normal => [1.0, 1.0, 1.0, 1.0],      // White
-            Self::Critical => [1.0, 0.85, 0.0, 1.0],   // Gold
+            Self::Normal => [1.0, 1.0, 1.0, 1.0],       // White
+            Self::Critical => [1.0, 0.85, 0.0, 1.0],    // Gold
             Self::PlayerDamage => [1.0, 0.2, 0.2, 1.0], // Red
-            Self::Healing => [0.2, 1.0, 0.2, 1.0],     // Green
-            Self::Poison => [0.7, 0.2, 0.9, 1.0],      // Purple
-            Self::Fire => [1.0, 0.5, 0.0, 1.0],        // Orange
-            Self::Ice => [0.4, 0.9, 1.0, 1.0],         // Cyan
-            Self::Lightning => [0.4, 0.6, 1.0, 1.0],   // Blue
-            Self::Blocked => [0.6, 0.6, 0.6, 1.0],     // Gray
-            Self::Miss => [0.8, 0.8, 0.8, 1.0],        // Light gray
-            Self::Experience => [1.0, 0.9, 0.4, 1.0],  // Bright gold
+            Self::Healing => [0.2, 1.0, 0.2, 1.0],      // Green
+            Self::Poison => [0.7, 0.2, 0.9, 1.0],       // Purple
+            Self::Fire => [1.0, 0.5, 0.0, 1.0],         // Orange
+            Self::Ice => [0.4, 0.9, 1.0, 1.0],          // Cyan
+            Self::Lightning => [0.4, 0.6, 1.0, 1.0],    // Blue
+            Self::Blocked => [0.6, 0.6, 0.6, 1.0],      // Gray
+            Self::Miss => [0.8, 0.8, 0.8, 1.0],         // Light gray
+            Self::Experience => [1.0, 0.9, 0.4, 1.0],   // Bright gold
         }
     }
 
@@ -326,7 +326,7 @@ impl DamageNumber {
                 if progress > 0.7 {
                     self.alpha = 1.0 - ((progress - 0.7) / 0.3);
                 }
-            }
+            },
             AnimationStyle::Pop => {
                 // Start big, shrink to target
                 if progress < 0.2 {
@@ -340,7 +340,7 @@ impl DamageNumber {
                 if progress > 0.5 {
                     self.alpha = 1.0 - ((progress - 0.5) / 0.5);
                 }
-            }
+            },
             AnimationStyle::Arc => {
                 // Arc to the side
                 let dir = if self.random_offset > 0.0 { 1.0 } else { -1.0 };
@@ -350,7 +350,7 @@ impl DamageNumber {
                 if progress > 0.6 {
                     self.alpha = 1.0 - ((progress - 0.6) / 0.4);
                 }
-            }
+            },
             AnimationStyle::Shake => {
                 // Shake horizontally
                 let shake = (self.lifetime * 30.0).sin() * (1.0 - progress) * 5.0;
@@ -361,19 +361,20 @@ impl DamageNumber {
                 if progress > 0.5 {
                     self.alpha = 1.0 - ((progress - 0.5) / 0.5);
                 }
-            }
+            },
             AnimationStyle::Bounce => {
                 // Bounce physics
                 let bounce_height = 30.0;
                 let bounces = 3.0;
                 let decay = (1.0 - progress).powi(2);
-                let y_offset = (progress * std::f32::consts::PI * bounces).sin().abs() * bounce_height * decay;
+                let y_offset =
+                    (progress * std::f32::consts::PI * bounces).sin().abs() * bounce_height * decay;
                 self.position.1 -= y_offset * dt * 5.0;
                 // Fade out
                 if progress > 0.7 {
                     self.alpha = 1.0 - ((progress - 0.7) / 0.3);
                 }
-            }
+            },
         }
     }
 }
@@ -750,8 +751,7 @@ mod tests {
 
     #[test]
     fn test_damage_number_update() {
-        let mut num = DamageNumber::new(100, (0.0, 0.0), DamageType::Normal)
-            .with_lifetime(1.0);
+        let mut num = DamageNumber::new(100, (0.0, 0.0), DamageType::Normal).with_lifetime(1.0);
 
         num.update(0.5);
         assert!(num.is_active());
@@ -763,8 +763,7 @@ mod tests {
 
     #[test]
     fn test_damage_number_alpha_fade() {
-        let mut num = DamageNumber::new(100, (0.0, 0.0), DamageType::Normal)
-            .with_lifetime(1.0);
+        let mut num = DamageNumber::new(100, (0.0, 0.0), DamageType::Normal).with_lifetime(1.0);
 
         num.update(0.6);
         assert!(num.alpha > 0.9); // Not yet fading

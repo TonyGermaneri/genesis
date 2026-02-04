@@ -29,6 +29,12 @@ pub mod audio_assets;
 pub mod audio_integration;
 /// Audio state management
 pub mod audio_state;
+/// Combat event integration
+pub mod combat_events;
+/// Combat profiling and metrics
+pub mod combat_profile;
+/// Combat persistence
+pub mod combat_save;
 /// Crafting event integration
 pub mod crafting_events;
 /// Crafting profiling and metrics
@@ -39,6 +45,8 @@ pub mod crafting_save;
 pub mod crash_report;
 /// Recipe asset loading
 pub mod recipe_loader;
+/// Weapon data loading
+pub mod weapon_loader;
 
 use anyhow::Result;
 use tracing::info;

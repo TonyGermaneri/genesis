@@ -1,0 +1,245 @@
+# Core weapons - ranged weapons
+version = "1.0.0"
+
+[[weapons]]
+id = 100
+name = "Wooden Bow"
+description = "A simple wooden bow. Good for beginners."
+category = "bow"
+base_damage = 12.0
+damage_variance = 0.1
+damage_type = "physical"
+attack_speed = 0.9
+reach = 25.0
+crit_chance = 0.08
+crit_multiplier = 2.5
+knockback = 0.3
+stamina_cost = 8.0
+durability = 60
+required_level = 1
+required_dexterity = 5
+item_id = 200
+rarity = "common"
+sound_set = "bow_wooden"
+
+[weapons.projectile]
+projectile_type = "arrow"
+speed = 25.0
+gravity = 0.5
+piercing = false
+
+[[weapons]]
+id = 101
+name = "Hunting Bow"
+description = "A well-crafted hunting bow with good range."
+category = "bow"
+base_damage = 18.0
+damage_variance = 0.1
+damage_type = "physical"
+attack_speed = 0.85
+reach = 30.0
+crit_chance = 0.12
+crit_multiplier = 2.5
+knockback = 0.4
+stamina_cost = 10.0
+durability = 80
+required_level = 5
+required_dexterity = 10
+item_id = 201
+rarity = "uncommon"
+sound_set = "bow_composite"
+
+[weapons.projectile]
+projectile_type = "arrow"
+speed = 30.0
+gravity = 0.4
+piercing = false
+
+[[weapons]]
+id = 102
+name = "Longbow"
+description = "A powerful longbow with excellent range."
+category = "bow"
+base_damage = 28.0
+damage_variance = 0.12
+damage_type = "physical"
+attack_speed = 0.7
+reach = 40.0
+crit_chance = 0.15
+crit_multiplier = 2.8
+knockback = 0.5
+stamina_cost = 15.0
+durability = 100
+required_level = 10
+required_strength = 8
+required_dexterity = 15
+item_id = 202
+rarity = "rare"
+sound_set = "bow_longbow"
+
+[weapons.projectile]
+projectile_type = "arrow"
+speed = 40.0
+gravity = 0.3
+piercing = true
+max_pierce = 1
+
+[[weapons]]
+id = 103
+name = "Iron Crossbow"
+description = "A heavy crossbow. Slow but devastating."
+category = "crossbow"
+base_damage = 35.0
+damage_variance = 0.08
+damage_type = "physical"
+attack_speed = 0.45
+reach = 35.0
+crit_chance = 0.2
+crit_multiplier = 3.0
+knockback = 0.8
+armor_penetration = 10.0
+stamina_cost = 5.0
+durability = 120
+required_level = 8
+required_strength = 10
+item_id = 203
+rarity = "uncommon"
+sound_set = "crossbow"
+
+[weapons.projectile]
+projectile_type = "bolt"
+speed = 45.0
+gravity = 0.2
+piercing = true
+max_pierce = 2
+
+[[weapons]]
+id = 104
+name = "Flintlock Pistol"
+description = "A single-shot pistol. High damage, slow reload."
+category = "gun"
+base_damage = 50.0
+damage_variance = 0.15
+damage_type = "physical"
+attack_speed = 0.3
+reach = 15.0
+crit_chance = 0.25
+crit_multiplier = 3.5
+knockback = 1.0
+armor_penetration = 20.0
+stamina_cost = 0.0
+durability = 80
+required_level = 12
+required_dexterity = 12
+item_id = 204
+rarity = "rare"
+sound_set = "pistol"
+
+[weapons.projectile]
+projectile_type = "bullet"
+speed = 100.0
+gravity = 0.0
+piercing = false
+
+[[weapons]]
+id = 105
+name = "Throwing Knife"
+description = "A balanced knife for throwing."
+category = "thrown"
+base_damage = 15.0
+damage_variance = 0.05
+damage_type = "physical"
+attack_speed = 1.3
+reach = 12.0
+crit_chance = 0.18
+crit_multiplier = 2.5
+knockback = 0.2
+stamina_cost = 6.0
+durability = 1
+required_level = 3
+required_dexterity = 8
+item_id = 205
+rarity = "common"
+sound_set = "thrown_knife"
+
+[weapons.projectile]
+projectile_type = "thrown_weapon"
+speed = 20.0
+gravity = 0.8
+piercing = false
+
+[[weapons]]
+id = 106
+name = "Fire Bow"
+description = "A bow enchanted to ignite arrows."
+category = "bow"
+base_damage = 22.0
+damage_variance = 0.1
+damage_type = "fire"
+attack_speed = 0.8
+reach = 28.0
+crit_chance = 0.12
+crit_multiplier = 2.5
+knockback = 0.4
+stamina_cost = 12.0
+durability = 150
+required_level = 15
+required_dexterity = 15
+item_id = 206
+rarity = "rare"
+sound_set = "bow_fire"
+
+[weapons.projectile]
+projectile_type = "arrow"
+speed = 28.0
+gravity = 0.4
+piercing = false
+
+[[weapons.status_effects]]
+effect = "burning"
+chance = 0.35
+duration = 4.0
+stacks = 1
+
+[[weapons]]
+id = 107
+name = "Storm Crossbow"
+description = "A crossbow imbued with the power of storms."
+category = "crossbow"
+base_damage = 40.0
+damage_variance = 0.1
+damage_type = "electric"
+attack_speed = 0.5
+reach = 32.0
+crit_chance = 0.22
+crit_multiplier = 3.0
+knockback = 0.6
+armor_penetration = 15.0
+stamina_cost = 8.0
+durability = 180
+required_level = 18
+required_strength = 12
+required_dexterity = 12
+item_id = 207
+rarity = "epic"
+sound_set = "crossbow_electric"
+
+[weapons.projectile]
+projectile_type = "bolt"
+speed = 50.0
+gravity = 0.15
+piercing = true
+max_pierce = 3
+
+[[weapons.status_effects]]
+effect = "stunned"
+chance = 0.1
+duration = 0.5
+stacks = 1
+
+[[weapons.abilities]]
+name = "Chain Lightning"
+description = "Bolts arc to nearby enemies."
+cooldown = 15.0
+cost = 30.0
+damage_multiplier = 0.5
