@@ -1044,6 +1044,8 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "egui",
+ "egui-wgpu",
+ "egui-winit",
  "genesis-common",
  "genesis-gameplay",
  "genesis-kernel",
@@ -1055,6 +1057,8 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tracing",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]

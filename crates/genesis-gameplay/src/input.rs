@@ -377,7 +377,44 @@ impl Input {
     pub fn has_movement(&self) -> bool {
         self.movement.x != 0.0 || self.movement.y != 0.0
     }
+
+    /// Returns the movement direction as a tuple (-1 to 1 for x, y).
+    ///
+    /// This is the primary method for getting player movement input.
+    #[must_use]
+    pub fn move_direction(&self) -> (f32, f32) {
+        (self.movement.x, self.movement.y)
+    }
+
+    /// Check if jump was just pressed this frame.
+    #[must_use]
+    pub fn jump_pressed(&self) -> bool {
+        self.jump_just_pressed
+    }
+
+    /// Check if the primary action key is held.
+    #[must_use]
+    pub fn action_held(&self) -> bool {
+        self.primary_action
+    }
+
+    /// Check if the secondary action key is held.
+    #[must_use]
+    pub fn secondary_action_held(&self) -> bool {
+        self.secondary_action
+    }
+
+    /// Check if interact was just pressed.
+    #[must_use]
+    pub fn interact_pressed(&self) -> bool {
+        self.interact_just_pressed
+    }
 }
+
+/// Type alias for Input - used for API compatibility.
+///
+/// `InputState` is the name used by the engine integration layer.
+pub type InputState = Input;
 
 /// Key binding configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

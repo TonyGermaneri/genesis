@@ -13,15 +13,18 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use genesis_gameplay::GameState as GameplayState;
+use genesis_kernel::Camera;
+
 use crate::config::EngineConfig;
 use crate::input::InputHandler;
 use crate::renderer::Renderer;
 use crate::timing::{FpsCounter, FrameTiming};
 
-/// Game state for pause/menu.
+/// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)]
-pub enum GameState {
+pub enum AppMode {
     /// Normal gameplay
     #[default]
     Playing,
@@ -50,9 +53,13 @@ struct GenesisApp {
     /// Last update time
     last_update: Instant,
 
-    // === Game State ===
-    /// Current game state
-    game_state: GameState,
+    // === Gameplay State ===
+    /// Gameplay state (player, entities, etc.)
+    gameplay: GameplayState,
+    /// Camera for viewing the world
+    camera: Camera,
+    /// Application mode
+    app_mode: AppMode,
     /// Whether debug overlay is visible
     show_debug: bool,
     /// Currently selected hotbar slot
@@ -70,6 +77,17 @@ impl GenesisApp {
     fn new(config: EngineConfig) -> Self {
         let timing = FrameTiming::new(config.target_fps).with_vsync(config.vsync);
 
+        // Create gameplay state with a seed
+        let seed = 42; // TODO: Make configurable or random
+        // Spawn player at center of chunk (128, 128) for 256x256 chunk
+        let mut gameplay = GameplayState::with_player_position(seed, (128.0, 100.0));
+        // Set player as grounded for top-down movement
+        gameplay.player.set_grounded(true);
+
+        // Create camera with default viewport and higher zoom for visibility
+        let mut camera = Camera::new(config.window_width, config.window_height);
+        camera.set_zoom(4.0); // 4x zoom for bigger pixels
+
         Self {
             show_debug: config.show_debug_overlay,
             config,
@@ -81,7 +99,9 @@ impl GenesisApp {
             fps_counter: FpsCounter::new(),
             last_update: Instant::now(),
 
-            game_state: GameState::default(),
+            gameplay,
+            camera,
+            app_mode: AppMode::default(),
             hotbar_slot: 0,
 
             current_fps: 0.0,
@@ -113,16 +133,16 @@ impl GenesisApp {
 
         // Handle pause toggle (Escape)
         if self.input.pause_pressed() {
-            self.game_state = match self.game_state {
-                GameState::Playing => {
+            self.app_mode = match self.app_mode {
+                AppMode::Playing => {
                     info!("Game paused");
-                    GameState::Paused
+                    AppMode::Paused
                 },
-                GameState::Paused => {
+                AppMode::Paused => {
                     info!("Game resumed");
-                    GameState::Playing
+                    AppMode::Playing
                 },
-                GameState::Menu => GameState::Menu,
+                AppMode::Menu => AppMode::Menu,
             };
         }
 
@@ -133,7 +153,7 @@ impl GenesisApp {
         }
 
         // Update game logic (only when playing)
-        if self.game_state == GameState::Playing {
+        if self.app_mode == AppMode::Playing {
             self.update_gameplay(dt);
         }
 
@@ -149,32 +169,33 @@ impl GenesisApp {
 
     /// Update gameplay systems.
     fn update_gameplay(&mut self, dt: f32) {
-        // Get processed input
-        let _input = self.input.get_input();
+        // Get processed input from the engine's input handler
+        // This already returns the gameplay Input struct
+        let input = self.input.get_input();
 
-        // Fixed timestep updates for physics
-        let fixed_updates = self.timing.accumulate(dt);
-        for _ in 0..fixed_updates {
-            // TODO: Fixed timestep physics updates
-            // gameplay.fixed_update(timing.fixed_dt());
-        }
+        // Update gameplay state (player, entities, etc.)
+        self.gameplay.update(dt, &input);
 
-        // Variable timestep updates
-        // TODO: Update gameplay, camera, terrain
-        // gameplay.update(&input, dt);
-        // camera.update(gameplay.player_position());
-        // terrain.update_visible(&camera);
+        // Update camera to follow player
+        let player_pos = self.gameplay.player.position();
+        self.camera.center_on(player_pos.x, player_pos.y);
 
-        // Log debug info periodically
-        if self.show_debug && self.fps_counter.fps() > 0.0 {
-            // Debug info is logged via the HUD, not here
-        }
+        // Update frame timing
+        let _ = self.timing.accumulate(dt);
     }
 
     /// Render the frame.
     fn render(&mut self) {
         if let Some(renderer) = &mut self.renderer {
-            match renderer.render() {
+            // Pass camera and debug info to renderer
+            match renderer.render_with_state(
+                &self.camera,
+                &self.gameplay,
+                self.show_debug,
+                self.current_fps,
+                self.current_frame_time,
+                self.hotbar_slot,
+            ) {
                 Ok(()) => {},
                 Err(e) => {
                     warn!("Render error: {e}");
@@ -250,9 +271,10 @@ impl ApplicationHandler for GenesisApp {
                 if let Some(renderer) = &mut self.renderer {
                     renderer.resize(new_size);
                 }
-                // Update config
+                // Update config and camera viewport
                 self.config.window_width = new_size.width;
                 self.config.window_height = new_size.height;
+                self.camera.set_viewport(new_size.width, new_size.height);
             },
             WindowEvent::RedrawRequested => {
                 self.update_and_render();

@@ -127,6 +127,49 @@ impl PlayerState {
     }
 }
 
+/// Animation state for rendering.
+///
+/// This enum is used to communicate the current animation to the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum PlayerAnimationState {
+    /// Standing still
+    #[default]
+    Idle,
+    /// Walking at normal speed
+    Walking,
+    /// Running at faster speed
+    Running,
+    /// Jumping (going up)
+    Jumping,
+    /// Falling (going down)
+    Falling,
+    /// Digging/mining
+    Digging,
+    /// Swimming
+    Swimming,
+    /// Climbing
+    Climbing,
+}
+
+impl PlayerAnimationState {
+    /// Convert from PlayerState.
+    #[must_use]
+    pub fn from_player_state(state: PlayerState, is_digging: bool) -> Self {
+        if is_digging {
+            return Self::Digging;
+        }
+        match state {
+            PlayerState::Idle => Self::Idle,
+            PlayerState::Walking => Self::Walking,
+            PlayerState::Running => Self::Running,
+            PlayerState::Jumping => Self::Jumping,
+            PlayerState::Falling => Self::Falling,
+            PlayerState::Swimming => Self::Swimming,
+            PlayerState::Climbing => Self::Climbing,
+        }
+    }
+}
+
 /// Player movement configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerConfig {
@@ -412,17 +455,13 @@ impl Player {
             self.config.walk_speed
         };
 
-        // Direct control on ground
+        // Direct control on ground - top-down style (both X and Y from input)
         let target_velocity = input.movement.scale(speed);
         self.velocity.x = target_velocity.x;
-
-        // Reset vertical velocity when grounded
-        if self.grounded {
-            self.velocity.y = 0.0;
-        }
+        self.velocity.y = target_velocity.y; // Enable vertical movement
 
         // Apply movement
-        self.position += self.velocity.scale(dt);
+        self.position = self.position.plus(self.velocity.scale(dt));
     }
 
     /// Air movement update.
@@ -492,6 +531,102 @@ impl Player {
         if self.grounded {
             self.state = PlayerState::Idle;
         }
+    }
+
+    /// Process input and update player state.
+    ///
+    /// This is an alias for `update` that matches the engine integration API.
+    pub fn handle_input(&mut self, input: &Input, dt: f32) {
+        self.update(input, dt);
+    }
+
+    /// Apply physics (gravity, collision response) using a collision query.
+    ///
+    /// This method integrates with the physics system for world collision.
+    pub fn apply_physics<C: crate::physics::CollisionQuery>(&mut self, collision: &C, dt: f32) {
+        use crate::physics::AABB;
+
+        // Get player AABB at current position
+        let half_width = 6.0; // Half of player width in cells
+        let half_height = 12.0; // Half of player height in cells
+        let player_aabb = AABB::from_center(self.position, half_width, half_height);
+
+        // Check ground collision
+        let feet_aabb = AABB::new(
+            player_aabb.min_x + 0.1,
+            player_aabb.max_y,
+            player_aabb.max_x - 0.1,
+            player_aabb.max_y + 1.0,
+        );
+        let was_grounded = self.grounded;
+        self.grounded = collision.check_collision(feet_aabb);
+
+        // Apply gravity if not grounded
+        if !self.grounded {
+            self.velocity.y += self.config.gravity * dt;
+            if self.velocity.y > self.config.terminal_velocity {
+                self.velocity.y = self.config.terminal_velocity;
+            }
+        }
+
+        // Check water
+        let _center_aabb = AABB::from_center(self.position, half_width * 0.5, half_height * 0.5);
+        let center_x = (self.position.x / 1.0).floor() as i32;
+        let center_y = (self.position.y / 1.0).floor() as i32;
+        self.in_water = collision.is_liquid(center_x, center_y);
+
+        // Check climbable
+        self.on_climbable = collision.is_climbable(center_x, center_y);
+
+        // Start coyote time when leaving ground
+        if was_grounded && !self.grounded && !self.state.is_airborne() {
+            self.coyote_time = Self::COYOTE_TIME;
+        }
+
+        // Resolve collisions
+        let future_pos = self.position + self.velocity.scale(dt);
+        let future_aabb = AABB::from_center(future_pos, half_width, half_height);
+
+        if collision.check_collision(future_aabb) {
+            // Try horizontal only
+            let horiz_pos = Vec2::new(future_pos.x, self.position.y);
+            let horiz_aabb = AABB::from_center(horiz_pos, half_width, half_height);
+            if !collision.check_collision(horiz_aabb) {
+                self.position.x = future_pos.x;
+                self.velocity.y = 0.0;
+            }
+
+            // Try vertical only
+            let vert_pos = Vec2::new(self.position.x, future_pos.y);
+            let vert_aabb = AABB::from_center(vert_pos, half_width, half_height);
+            if collision.check_collision(vert_aabb) {
+                // Hit something vertically
+                if self.velocity.y > 0.0 {
+                    // Hit ground
+                    self.grounded = true;
+                }
+                self.velocity.y = 0.0;
+            } else {
+                self.position.y = future_pos.y;
+            }
+        } else {
+            self.position = future_pos;
+        }
+    }
+
+    /// Get current animation state for rendering.
+    ///
+    /// Returns the appropriate animation state based on current player state.
+    #[must_use]
+    pub fn animation_state(&self) -> PlayerAnimationState {
+        // For now, assume not digging - digging state would come from interaction system
+        PlayerAnimationState::from_player_state(self.state, false)
+    }
+
+    /// Get current animation state with digging flag.
+    #[must_use]
+    pub fn animation_state_with_digging(&self, is_digging: bool) -> PlayerAnimationState {
+        PlayerAnimationState::from_player_state(self.state, is_digging)
     }
 }
 
