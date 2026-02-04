@@ -19,6 +19,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::unwrap_used)]
 
+pub mod combat;
 pub mod crafting;
 pub mod crafting_ui;
 pub mod economy;
@@ -36,6 +37,7 @@ pub mod save;
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::combat::*;
     pub use crate::crafting::*;
     pub use crate::crafting_ui::*;
     pub use crate::economy::*;
