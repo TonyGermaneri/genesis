@@ -74,7 +74,7 @@ impl Default for RenderParams {
             screen_height: 720,
             camera_x: 0,
             camera_y: 0,
-            zoom: 2.0,
+            zoom: 4.0, // Larger zoom for better visibility on high-DPI screens
             _padding: [0; 2],
         }
     }
@@ -222,6 +222,31 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if temp_factor > 0.5 {
         // Hot - shift towards red
         color.r = min(color.r + (temp_factor - 0.5) * 0.3, 1.0);
+    }
+    
+    // Draw player marker at center of screen (camera follows player)
+    // Use screen pixel coordinates directly for the marker
+    let screen_center_x = f32(params.screen_width) / 2.0;
+    let screen_center_y = f32(params.screen_height) / 2.0;
+    let screen_px = in.uv.x * f32(params.screen_width);
+    let screen_py = in.uv.y * f32(params.screen_height);
+    let dist_from_center = sqrt((screen_px - screen_center_x) * (screen_px - screen_center_x) + (screen_py - screen_center_y) * (screen_py - screen_center_y));
+    
+    // Player is a larger marker for visibility - scales with zoom
+    let marker_scale = max(params.zoom, 2.0);
+    let inner_radius = 4.0 * marker_scale;
+    let mid_radius = 6.0 * marker_scale;
+    let outer_radius = 8.0 * marker_scale;
+    
+    if dist_from_center < inner_radius {
+        // Inner white core
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    } else if dist_from_center < mid_radius {
+        // Cyan outline
+        return vec4<f32>(0.0, 1.0, 1.0, 1.0);
+    } else if dist_from_center < outer_radius {
+        // Dark outline for contrast
+        return vec4<f32>(0.0, 0.3, 0.3, 1.0);
     }
     
     return vec4<f32>(color.r, color.g, color.b, color.a);

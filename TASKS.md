@@ -1,7 +1,7 @@
 # Project Genesis — Task Board
 
 > Last Updated: 2026-02-03
-> Sprint: Iteration 5 — Playable Integration
+> Sprint: Iteration 6 — Interactive World
 
 ## Legend
 
@@ -12,83 +12,71 @@
 
 ---
 
-## Completed — Iterations 1-4
+## Completed — Iterations 1-5
 
 ### Kernel Agent
 | ID | Task | Status |
 |----|------|--------|
-| K-1 to K-15 | Cell simulation, buffers, rendering, chunks, streaming, collision, biome | 🟢 |
-| K-16 | Procedural world generation | 🟢 |
-| K-17 | Dynamic lighting system | 🟢 |
-| K-18 | Particle system | 🟢 |
-| K-19 | Audio spatial integration | 🟢 |
+| K-1 to K-19 | Cell simulation, buffers, rendering, chunks, streaming, collision, biome, world gen, lighting, particles, audio | 🟢 |
+| K-20 to K-23 | Camera system, terrain rendering, world init | 🟢 |
 
 ### Gameplay Agent
 | ID | Task | Status |
 |----|------|--------|
-| G-1 to G-16 | Entity, inventory, crafting, economy, factions, player, physics, save/load | 🟢 |
-| G-17 | Combat system | 🟢 |
-| G-18 | NPC AI system | 🟢 |
-| G-19 | Vehicle system | 🟢 |
-| G-20 | Quest system | 🟢 |
+| G-1 to G-20 | Entity, inventory, crafting, economy, factions, player, physics, save/load, combat, NPC AI, vehicles, quests | 🟢 |
+| G-21 to G-24 | Game state manager, spawn system, movement controller | 🟢 |
 
 ### Tools Agent
 | ID | Task | Status |
 |----|------|--------|
-| T-1 to T-15 | Replay, inspectors, HUD, test harness, UI renderers, console | 🟢 |
-| T-16 | Audio engine integration | 🟢 |
-| T-17 | Quest UI | 🟢 |
-| T-18 | Dialogue system UI | 🟢 |
-| T-19 | Combat HUD | 🟢 |
+| T-1 to T-19 | Replay, inspectors, HUD, test harness, UI renderers, console, audio, quest UI, dialogue, combat HUD | 🟢 |
+| T-20 to T-23 | Egui integration, game HUD, hotbar, debug overlay | 🟢 |
 
 ### Infra Agent
 | ID | Task | Status |
 |----|------|--------|
-| I-1 to I-11 | CI/CD, releases, mod format, Docker, docs | 🟢 |
-| I-12 | Asset pipeline | 🟢 |
-| I-13 | Localization system | 🟢 |
-| I-14 | Crash reporting | 🟢 |
-| I-15 | Telemetry & analytics | 🟢 |
+| I-1 to I-15 | CI/CD, releases, mod format, Docker, docs, assets, localization, crash reports, analytics | 🟢 |
+| I-16 to I-19 | Input system, game loop, config, frame timing | 🟢 |
 
 ---
 
-## Iteration 5 — Playable Integration (Active)
+## Iteration 6 — Interactive World (Active)
 
 ### Kernel Agent (Branch: `kernel-agent`)
 
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| K-20 | Camera system | ⚪ | P0 |
-| K-21 | World terrain rendering | ⚪ | P0 |
-| K-22 | Cell rendering with camera | ⚪ | P0 |
-| K-23 | Initial world and biome display | ⚪ | P1 |
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| K-24 | Quadtree spatial partitioning | ⚪ | P0 | O(log n) spatial queries for simulation |
+| K-25 | Multi-chunk visible area rendering | ⚪ | P0 | Load/unload chunks based on camera |
+| K-26 | Player-terrain collision detection | ⚪ | P0 | Circle-vs-cells collision |
+| K-27 | Top-down physics model | ⚪ | P1 | Friction-based movement, no gravity |
 
 ### Gameplay Agent (Branch: `gameplay-agent`)
 
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| G-21 | Game state manager | ⚪ | P0 |
-| G-22 | Player spawn system | ⚪ | P0 |
-| G-23 | Player movement controller | ⚪ | P0 |
-| G-24 | Engine integration exports | ⚪ | P0 |
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| G-25 | Terrain manipulation system | ⚪ | P0 | Dig/place cells with brush |
+| G-26 | Top-down player controller | ⚪ | P0 | 8-direction movement with friction |
+| G-27 | Player-world collision response | ⚪ | P0 | Smooth wall sliding |
+| G-28 | Interaction system | ⚪ | P1 | Wire dig/place to input |
 
 ### Tools Agent (Branch: `tools-agent`)
 
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| T-20 | Egui integration layer | ⚪ | P0 |
-| T-21 | Game HUD renderer | ⚪ | P0 |
-| T-22 | Hotbar widget | ⚪ | P0 |
-| T-23 | Debug overlay | ⚪ | P1 |
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| T-24 | Egui renderer integration | ⚪ | P0 | Render egui on top of world |
+| T-25 | Main game HUD | ⚪ | P0 | Health, hotbar, minimap |
+| T-26 | Inventory UI panel | ⚪ | P0 | Drag-drop inventory grid |
+| T-27 | Crafting UI panel | ⚪ | P1 | Recipe list and crafting |
 
 ### Infra Agent (Branch: `infra-agent`)
 
-| ID | Task | Status | Priority |
-|----|------|--------|----------|
-| I-16 | Input system integration | ⚪ | P0 |
-| I-17 | Main game loop integration | ⚪ | P0 |
-| I-18 | Engine configuration | ⚪ | P0 |
-| I-19 | Frame timing | ⚪ | P1 |
+| ID | Task | Status | Priority | Description |
+|----|------|--------|----------|-------------|
+| I-20 | Egui in main render loop | ⚪ | P0 | Wire egui to renderer |
+| I-21 | Multi-chunk terrain integration | ⚪ | P0 | Use ChunkManager in renderer |
+| I-22 | Player z-index fix | ⚪ | P0 | Player renders above terrain |
+| I-23 | Performance profiling | ⚪ | P1 | Metrics in debug overlay |
 
 ---
 

@@ -455,17 +455,13 @@ impl Player {
             self.config.walk_speed
         };
 
-        // Direct control on ground
+        // Direct control on ground - top-down style (both X and Y from input)
         let target_velocity = input.movement.scale(speed);
         self.velocity.x = target_velocity.x;
-
-        // Reset vertical velocity when grounded
-        if self.grounded {
-            self.velocity.y = 0.0;
-        }
+        self.velocity.y = target_velocity.y; // Enable vertical movement
 
         // Apply movement
-        self.position += self.velocity.scale(dt);
+        self.position = self.position.plus(self.velocity.scale(dt));
     }
 
     /// Air movement update.
