@@ -97,6 +97,107 @@ const OCEAN_WATER: vec3<f32> = vec3<f32>(0.227, 0.486, 0.647);
 const PLAINS_GRASS: vec3<f32> = vec3<f32>(0.486, 0.702, 0.259);
 const MOUNTAIN_STONE: vec3<f32> = vec3<f32>(0.478, 0.478, 0.478);
 const CAVE_STONE: vec3<f32> = vec3<f32>(0.350, 0.340, 0.350);
+const SWAMP_MUD: vec3<f32> = vec3<f32>(0.369, 0.420, 0.286);
+const RIVER_WATER: vec3<f32> = vec3<f32>(0.310, 0.545, 0.702);
+const FARM_SOIL: vec3<f32> = vec3<f32>(0.545, 0.408, 0.286);
+
+// Simple hash function for procedural noise
+fn hash(p: vec2<i32>) -> f32 {
+    let n = u32(p.x * 374761393 + p.y * 668265263);
+    let m = (n ^ (n >> 13u)) * 1274126177u;
+    return f32(m & 0xFFFFu) / 65535.0;
+}
+
+// Smooth interpolation (smoothstep)
+fn smoothstep(t: f32) -> f32 {
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// Value noise with bilinear interpolation for smooth transitions
+fn value_noise(x: f32, y: f32) -> f32 {
+    // Integer coordinates of the cell
+    let ix = i32(floor(x));
+    let iy = i32(floor(y));
+    
+    // Fractional part within the cell
+    let fx = x - floor(x);
+    let fy = y - floor(y);
+    
+    // Hash values at 4 corners
+    let v00 = hash(vec2<i32>(ix, iy));
+    let v10 = hash(vec2<i32>(ix + 1, iy));
+    let v01 = hash(vec2<i32>(ix, iy + 1));
+    let v11 = hash(vec2<i32>(ix + 1, iy + 1));
+    
+    // Smooth interpolation factors
+    let sx = smoothstep(fx);
+    let sy = smoothstep(fy);
+    
+    // Bilinear interpolation
+    let top = mix(v00, v10, sx);
+    let bottom = mix(v01, v11, sx);
+    return mix(top, bottom, sy);
+}
+
+// Multi-octave smooth noise for terrain variation
+fn terrain_noise(world_x: i32, world_y: i32) -> f32 {
+    let x = f32(world_x);
+    let y = f32(world_y);
+    
+    var value = 0.0;
+    var amplitude = 0.5;
+    var frequency = 0.1; // Start with low frequency for large-scale variation
+    
+    // 3 octaves of noise for natural-looking variation
+    value += value_noise(x * frequency, y * frequency) * amplitude;
+    amplitude *= 0.5;
+    frequency *= 2.0;
+    
+    value += value_noise(x * frequency, y * frequency) * amplitude;
+    amplitude *= 0.5;
+    frequency *= 2.0;
+    
+    value += value_noise(x * frequency, y * frequency) * amplitude;
+    
+    return value;
+}
+
+// Get variation-adjusted color for a biome at world position
+fn get_biome_color_varied(biome_id: u32, world_x: i32, world_y: i32) -> vec3<f32> {
+    let base = get_biome_fallback_color(biome_id);
+    
+    // Generate noise for this position
+    let noise = terrain_noise(world_x, world_y);
+    
+    // Different variation strategies per biome
+    switch biome_id {
+        case 0u: { // Forest - green variation
+            let shade = 0.85 + noise * 0.3;
+            return base * shade;
+        }
+        case 1u: { // Desert - sand grain variation  
+            let shade = 0.9 + noise * 0.2;
+            return base * shade;
+        }
+        case 3u: { // Ocean - wave shimmer
+            let wave = sin(f32(world_x + world_y) * 0.1) * 0.05;
+            let shade = 0.95 + noise * 0.1 + wave;
+            return base * shade;
+        }
+        case 4u: { // Plains - grass texture
+            let shade = 0.88 + noise * 0.24;
+            return base * shade;
+        }
+        case 5u: { // Mountain - rocky variation
+            let shade = 0.8 + noise * 0.4;
+            return base * shade;
+        }
+        default: {
+            let shade = 0.9 + noise * 0.2;
+            return base * shade;
+        }
+    }
+}
 
 fn get_biome_fallback_color(biome_id: u32) -> vec3<f32> {
     switch biome_id {
@@ -106,6 +207,9 @@ fn get_biome_fallback_color(biome_id: u32) -> vec3<f32> {
         case 3u: { return OCEAN_WATER; }
         case 4u: { return PLAINS_GRASS; }
         case 5u: { return MOUNTAIN_STONE; }
+        case 6u: { return SWAMP_MUD; }
+        case 7u: { return RIVER_WATER; }
+        case 8u: { return FARM_SOIL; }
         default: { return FOREST_GRASS; }
     }
 }
@@ -326,14 +430,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Sample texture from autotile atlas
     let tex_color = sample_autotile(world_x, world_y, biome_id, local_x, local_y);
     
-    // If texture sampling failed (atlas not loaded or material 0), use fallback biome color
+    // If texture sampling failed (atlas not loaded or material 0), use varied fallback color
     if tex_color.a < 0.01 || material_id == 0u {
-        let fallback = get_biome_fallback_color(biome_id);
-        return vec4<f32>(fallback.r, fallback.g, fallback.b, 1.0);
+        let varied = get_biome_color_varied(biome_id, world_x, world_y);
+        return vec4<f32>(varied.r, varied.g, varied.b, 1.0);
     }
 
+    // Add variation to sampled texture as well
+    let noise_factor = terrain_noise(world_x, world_y);
+    let shade = 0.9 + noise_factor * 0.2;
+    let varied_tex = tex_color.rgb * shade;
+
     // Apply day/night lighting
-    let lit_color = apply_lighting(tex_color.rgb, params.time_of_day);
+    let lit_color = apply_lighting(varied_tex, params.time_of_day);
 
     return vec4<f32>(lit_color.r, lit_color.g, lit_color.b, tex_color.a);
 }
