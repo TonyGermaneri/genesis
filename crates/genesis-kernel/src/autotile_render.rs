@@ -123,21 +123,21 @@ fn value_noise(x: f32, y: f32) -> f32 {
     // Integer coordinates of the cell
     let ix = i32(floor(x));
     let iy = i32(floor(y));
-    
+
     // Fractional part within the cell
     let fx = x - floor(x);
     let fy = y - floor(y);
-    
+
     // Hash values at 4 corners
     let v00 = hash(vec2<i32>(ix, iy));
     let v10 = hash(vec2<i32>(ix + 1, iy));
     let v01 = hash(vec2<i32>(ix, iy + 1));
     let v11 = hash(vec2<i32>(ix + 1, iy + 1));
-    
+
     // Smooth interpolation factors
     let sx = smoothstep(fx);
     let sy = smoothstep(fy);
-    
+
     // Bilinear interpolation
     let top = mix(v00, v10, sx);
     let bottom = mix(v01, v11, sx);
@@ -148,33 +148,33 @@ fn value_noise(x: f32, y: f32) -> f32 {
 fn terrain_noise(world_x: i32, world_y: i32) -> f32 {
     let x = f32(world_x);
     let y = f32(world_y);
-    
+
     var value = 0.0;
-    
+
     // 4 octaves of noise for natural-looking variation at multiple scales
     // Higher base frequency (0.15) for more visible texture
     value += value_noise(x * 0.15, y * 0.15) * 0.4;   // Large-scale variation
     value += value_noise(x * 0.3, y * 0.3) * 0.25;    // Medium variation
     value += value_noise(x * 0.6, y * 0.6) * 0.2;     // Fine detail
     value += value_noise(x * 1.2, y * 1.2) * 0.15;    // Very fine grain
-    
+
     return value;
 }
 
 // Get variation-adjusted color for a biome at world position
 fn get_biome_color_varied(biome_id: u32, world_x: i32, world_y: i32) -> vec3<f32> {
     let base = get_biome_fallback_color(biome_id);
-    
+
     // Generate noise for this position
     let noise = terrain_noise(world_x, world_y);
-    
+
     // Different variation strategies per biome
     switch biome_id {
         case 0u: { // Forest - green variation
             let shade = 0.85 + noise * 0.3;
             return base * shade;
         }
-        case 1u: { // Desert - sand grain variation  
+        case 1u: { // Desert - sand grain variation
             let shade = 0.9 + noise * 0.2;
             return base * shade;
         }
@@ -299,14 +299,15 @@ fn sample_autotile(world_x: i32, world_y: i32, biome_id: u32, local_x: i32, loca
     let chunk_size = i32(params.chunk_size);
 
     // Check each neighbor and set bit if same biome
-    let nw_biome = get_neighbor_biome(local_x - 1, local_y - 1, chunk_size);
-    let n_biome = get_neighbor_biome(local_x, local_y - 1, chunk_size);
-    let ne_biome = get_neighbor_biome(local_x + 1, local_y - 1, chunk_size);
-    let w_biome = get_neighbor_biome(local_x - 1, local_y, chunk_size);
-    let e_biome = get_neighbor_biome(local_x + 1, local_y, chunk_size);
-    let sw_biome = get_neighbor_biome(local_x - 1, local_y + 1, chunk_size);
-    let s_biome = get_neighbor_biome(local_x, local_y + 1, chunk_size);
-    let se_biome = get_neighbor_biome(local_x + 1, local_y + 1, chunk_size);
+    // Pass biome_id as fallback for out-of-bounds (assumes continuity across chunk boundaries)
+    let nw_biome = get_neighbor_biome(local_x - 1, local_y - 1, chunk_size, biome_id);
+    let n_biome = get_neighbor_biome(local_x, local_y - 1, chunk_size, biome_id);
+    let ne_biome = get_neighbor_biome(local_x + 1, local_y - 1, chunk_size, biome_id);
+    let w_biome = get_neighbor_biome(local_x - 1, local_y, chunk_size, biome_id);
+    let e_biome = get_neighbor_biome(local_x + 1, local_y, chunk_size, biome_id);
+    let sw_biome = get_neighbor_biome(local_x - 1, local_y + 1, chunk_size, biome_id);
+    let s_biome = get_neighbor_biome(local_x, local_y + 1, chunk_size, biome_id);
+    let se_biome = get_neighbor_biome(local_x + 1, local_y + 1, chunk_size, biome_id);
 
     // Set cardinal direction bits
     let n_match = (n_biome == biome_id);
@@ -354,11 +355,11 @@ fn sample_autotile(world_x: i32, world_y: i32, biome_id: u32, local_x: i32, loca
     return textureSample(autotile_atlas, autotile_sampler, uv);
 }
 
-// Get biome of a neighboring cell (returns 255 if out of bounds)
-fn get_neighbor_biome(local_x: i32, local_y: i32, chunk_size: i32) -> u32 {
-    // If out of bounds, treat as same biome to avoid edges at chunk boundaries
+// Get biome of a neighboring cell (returns center_biome if out of bounds to avoid false edges at chunk boundaries)
+fn get_neighbor_biome(local_x: i32, local_y: i32, chunk_size: i32, center_biome: u32) -> u32 {
+    // If out of bounds, assume same biome to avoid edges at chunk boundaries
     if local_x < 0 || local_y < 0 || local_x >= chunk_size || local_y >= chunk_size {
-        return 255u; // Will never match, creating edge at boundary
+        return center_biome; // Assume continuity across chunk boundaries
     }
 
     let idx = u32(local_y) * u32(chunk_size) + u32(local_x);
@@ -435,10 +436,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     // DEBUG: Show biome edges as cyan lines
     if (params.debug_flags & DEBUG_BIOME_EDGES) != 0u {
-        let n_biome = get_neighbor_biome(local_x, local_y - 1, i32(params.chunk_size));
-        let s_biome = get_neighbor_biome(local_x, local_y + 1, i32(params.chunk_size));
-        let e_biome = get_neighbor_biome(local_x + 1, local_y, i32(params.chunk_size));
-        let w_biome = get_neighbor_biome(local_x - 1, local_y, i32(params.chunk_size));
+        let n_biome = get_neighbor_biome(local_x, local_y - 1, i32(params.chunk_size), biome_id);
+        let s_biome = get_neighbor_biome(local_x, local_y + 1, i32(params.chunk_size), biome_id);
+        let e_biome = get_neighbor_biome(local_x + 1, local_y, i32(params.chunk_size), biome_id);
+        let w_biome = get_neighbor_biome(local_x - 1, local_y, i32(params.chunk_size), biome_id);
         if n_biome != biome_id || s_biome != biome_id || e_biome != biome_id || w_biome != biome_id {
             return vec4<f32>(0.0, 1.0, 1.0, 1.0); // Cyan biome boundaries
         }
@@ -453,7 +454,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     // Sample texture from autotile atlas
     let tex_color = sample_autotile(world_x, world_y, biome_id, local_x, local_y);
-    
+
     // If texture sampling failed (atlas not loaded or material 0), use varied fallback color
     if tex_color.a < 0.01 || material_id == 0u {
         let varied = get_biome_color_varied(biome_id, world_x, world_y);

@@ -2,7 +2,7 @@
 //!
 //! This module provides a macro system for automating game interactions:
 //! - Character movement
-//! - Menu navigation  
+//! - Menu navigation
 //! - UI interactions
 //! - Screenshot capture
 //! - Parameter changes
@@ -290,10 +290,10 @@ impl AutomationSystem {
     pub fn load_macro_file(&mut self, path: &std::path::Path) -> Result<String, String> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read macro file: {}", e))?;
-        
+
         let macro_def: AutomationMacro = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macro JSON: {}", e))?;
-        
+
         let name = macro_def.name.clone();
         info!("Loaded macro '{}' with {} actions", name, macro_def.actions.len());
         self.macros.insert(name.clone(), macro_def);
@@ -303,7 +303,7 @@ impl AutomationSystem {
     /// Loads all macros from the macro directory.
     pub fn load_macros_from_dir(&mut self) -> Vec<String> {
         let mut loaded = Vec::new();
-        
+
         if !self.macro_dir.exists() {
             debug!("Macro directory does not exist: {:?}", self.macro_dir);
             return loaded;
@@ -335,13 +335,13 @@ impl AutomationSystem {
         let macro_def = self.macros.get(name)
             .ok_or_else(|| format!("Macro '{}' not found", name))?
             .clone();
-        
+
         info!("Running macro '{}': {:?}", name, macro_def.description);
-        
+
         for action in macro_def.actions {
             self.action_queue.push_back(action);
         }
-        
+
         Ok(())
     }
 
@@ -398,7 +398,7 @@ impl AutomationSystem {
     /// Starts executing an action.
     fn start_action(&mut self, action: AutomationAction) {
         debug!("Starting action: {:?}", action);
-        
+
         let now = Instant::now();
         let ends_at = match &action {
             AutomationAction::Wait { duration_ms } => {
@@ -562,7 +562,7 @@ impl AutomationSystem {
                 AutomationAction::Wait { duration_ms: 2000 },
                 AutomationAction::SetZoom { zoom: 2.0 },
                 AutomationAction::Wait { duration_ms: 500 },
-                AutomationAction::Screenshot { 
+                AutomationAction::Screenshot {
                     filename: Some("biome_test_start.png".to_string()),
                     prompt: Some("Describe the initial terrain biomes visible.".to_string()),
                 },
@@ -636,17 +636,17 @@ impl AutomationSystem {
 /// Format: --macro "action1;action2;action3"
 pub fn parse_cli_macro(args: &str) -> Result<Vec<AutomationAction>, String> {
     let mut actions = Vec::new();
-    
+
     for part in args.split(';') {
         let part = part.trim();
         if part.is_empty() {
             continue;
         }
-        
+
         let action = parse_action_string(part)?;
         actions.push(action);
     }
-    
+
     Ok(actions)
 }
 
@@ -656,7 +656,7 @@ fn parse_action_string(s: &str) -> Result<AutomationAction, String> {
     if parts.is_empty() {
         return Err("Empty action string".to_string());
     }
-    
+
     match parts[0].to_lowercase().as_str() {
         "wait" => {
             let ms = parts.get(1)
@@ -749,10 +749,10 @@ mod tests {
     fn test_automation_system() {
         let mut system = AutomationSystem::new();
         system.enable();
-        
+
         system.queue_action(AutomationAction::Log { message: "test".to_string() });
         assert_eq!(system.pending_action_count(), 1);
-        
+
         let requests = system.update(0.016);
         assert!(system.is_idle());
     }

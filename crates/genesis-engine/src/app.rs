@@ -243,7 +243,7 @@ impl GenesisApp {
 
         // Create camera with default viewport and higher zoom for visibility
         let mut camera = Camera::new(config.window_width, config.window_height);
-        camera.set_zoom(4.0); // 4x zoom for bigger pixels
+        camera.set_zoom(config.camera_zoom); // Use config zoom level
 
         // Calculate initial player chunk
         let player_pos = gameplay.player_position();
@@ -308,6 +308,16 @@ impl GenesisApp {
 
             current_fps: 0.0,
             current_frame_time: 0.0,
+        }
+    }
+
+    /// Enable debug atlas mode (use reference autotile atlas for testing)
+    pub fn set_use_debug_atlas(&mut self, use_debug: bool) {
+        if use_debug {
+            self.asset_manager = AssetManager::with_config(
+                crate::asset_manager::AssetConfig::with_debug_atlas()
+            );
+            info!("Debug atlas mode enabled - using reference autotile atlas");
         }
     }
 
@@ -769,7 +779,7 @@ impl GenesisApp {
     /// Captures a screenshot with an optional custom filename.
     fn capture_screenshot_with_name(&mut self, custom_name: Option<String>) -> Option<std::path::PathBuf> {
         let screenshots_dir = std::path::PathBuf::from("screenshots");
-        
+
         let filename = custom_name.unwrap_or_else(|| {
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -777,7 +787,7 @@ impl GenesisApp {
                 .unwrap_or(0);
             format!("genesis_{}.png", timestamp)
         });
-        
+
         let path = screenshots_dir.join(&filename);
 
         // Capture screenshot using renderer
@@ -855,7 +865,7 @@ impl GenesisApp {
                 }
             }
         }
-        
+
         // Handle movement override from automation
         if let Some((dx, dy)) = self.automation.movement_override() {
             if self.app_mode == AppMode::Playing {
@@ -866,19 +876,19 @@ impl GenesisApp {
                 self.gameplay.player.set_velocity(genesis_gameplay::input::Vec2::new(vx, vy));
             }
         }
-        
+
         // Handle position teleport from automation
         if let Some((x, y)) = self.automation.take_position_teleport() {
             info!("[AUTOMATION] Teleporting player to ({}, {})", x, y);
             self.gameplay.player.set_position(genesis_gameplay::input::Vec2::new(x, y));
         }
-        
+
         // Handle zoom request from automation
         if let Some(zoom) = self.automation.take_zoom_request() {
             info!("[AUTOMATION] Setting zoom to {}", zoom);
             self.camera.set_zoom(zoom);
         }
-        
+
         // Handle camera position request from automation
         if let Some((x, y)) = self.automation.take_camera_position_request() {
             info!("[AUTOMATION] Moving camera to ({}, {})", x, y);
@@ -891,12 +901,12 @@ impl GenesisApp {
         info!("Starting new game");
         self.main_menu.hide();
         self.app_mode = AppMode::Playing;
-        
+
         // Reset gameplay state with new seed
         let seed = self.terrain_service.seed();
         self.gameplay = genesis_gameplay::GameState::with_player_position(seed, (128.0, 100.0));
         self.gameplay.player.set_grounded(true);
-        
+
         // Reset camera
         let player_pos = self.gameplay.player_position();
         self.camera.center_on(player_pos.0, player_pos.1);
@@ -2084,6 +2094,7 @@ pub fn run() -> Result<()> {
     let mut macro_file: Option<String> = None;
     let mut macro_commands: Option<String> = None;
     let mut auto_start = false;
+    let mut use_debug_atlas = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -2103,12 +2114,16 @@ pub fn run() -> Result<()> {
             "--auto-start" | "-a" => {
                 auto_start = true;
             }
+            "--debug-atlas" | "-d" => {
+                use_debug_atlas = true;
+            }
             "--help" | "-h" => {
                 println!("Genesis Engine - Automation Options");
                 println!("");
                 println!("  --macro-file, -f <path>   Load and run a macro from JSON file");
                 println!("  --macro, -m <commands>    Run inline macro commands");
                 println!("  --auto-start, -a          Auto-start game (skip main menu)");
+                println!("  --debug-atlas, -d         Use debug autotile atlas for testing");
                 println!("");
                 println!("Macro command format: \"action1; action2; action3\"");
                 println!("Available actions:");
@@ -2145,6 +2160,11 @@ pub fn run() -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = GenesisApp::new(config);
+
+    // Enable debug atlas if requested
+    if use_debug_atlas {
+        app.set_use_debug_atlas(true);
+    }
 
     // Set up automation if requested
     if macro_file.is_some() || macro_commands.is_some() || auto_start {

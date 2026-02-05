@@ -1,14 +1,14 @@
 #!/usr/bin/env npx ts-node
 /**
  * Generate a debug autotile atlas with distinct colors for each tile position.
- * 
+ *
  * Layout matches the Modern Exteriors autotile atlas:
  * - 576x4992 pixels total
  * - 48x48 pixel tiles
  * - 12 tiles per row (strip)
  * - 4 rows per terrain type (48 tiles per terrain)
  * - 26 terrain types stacked vertically
- * 
+ *
  * Each tile will have:
  * - A distinct base color based on terrain type (row)
  * - A visible tile index number
@@ -134,7 +134,7 @@ function generateDebugAtlas(outputPath: string): void {
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
+
       // Draw text with black outline for readability
       const label = `${tileIndex}`;
       ctx.strokeStyle = 'black';

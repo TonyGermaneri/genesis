@@ -719,7 +719,7 @@ impl Renderer {
             // Priority: autotile renderer > textured renderer > chunk render manager > single-chunk mode
             if let Some(autotile_mgr) = &self.autotile_renderer {
                 let is_bound = autotile_mgr.is_atlas_bound();
-                
+
                 if is_bound && !visible_chunks.is_empty() {
                     autotile_mgr.render(&mut render_pass, &visible_chunks);
                 } else if let Some(render_mgr) = &self.chunk_render_manager {
@@ -1097,7 +1097,7 @@ impl Renderer {
             let row_start = (row * padded_bytes_per_row) as usize;
             let row_end = row_start + (width * bytes_per_pixel) as usize;
             let row_data = &data[row_start..row_end];
-            
+
             if is_bgra {
                 // Convert BGRA to RGBA
                 for pixel in row_data.chunks(4) {

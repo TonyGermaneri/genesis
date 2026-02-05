@@ -22,6 +22,9 @@ pub const DEFAULT_TERRAIN_ASSETS_PATH: &str =
 pub const DEFAULT_AUTOTILE_PATH: &str =
     "/Users/tonygermaneri/gh/game_assets/modernexteriors-win/Modern_Exteriors_48x48/Autotiles_48x48/Godot_Autotiles_48x48.png";
 
+/// Path for reference/debug autotile atlas
+pub const DEBUG_AUTOTILE_PATH: &str = "assets/reference_autotile_atlas.png";
+
 /// Asset loading configuration
 #[derive(Debug, Clone)]
 pub struct AssetConfig {
@@ -35,6 +38,8 @@ pub struct AssetConfig {
     pub max_terrain_tiles: usize,
     /// Use autotile atlas instead of singles
     pub use_autotiles: bool,
+    /// Use debug/reference atlas for testing
+    pub use_debug_atlas: bool,
 }
 
 impl Default for AssetConfig {
@@ -45,6 +50,21 @@ impl Default for AssetConfig {
             load_on_startup: true,
             max_terrain_tiles: 1024,
             use_autotiles: true, // Prefer autotiles by default
+            use_debug_atlas: false, // Use real atlas by default
+        }
+    }
+}
+
+impl AssetConfig {
+    /// Create config that uses the debug/reference atlas
+    pub fn with_debug_atlas() -> Self {
+        Self {
+            terrain_path: PathBuf::from(DEFAULT_TERRAIN_ASSETS_PATH),
+            autotile_path: PathBuf::from(DEBUG_AUTOTILE_PATH),
+            load_on_startup: true,
+            max_terrain_tiles: 1024,
+            use_autotiles: true,
+            use_debug_atlas: true,
         }
     }
 }

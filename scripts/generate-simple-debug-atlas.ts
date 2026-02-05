@@ -1,16 +1,16 @@
 #!/usr/bin/env npx ts-node
 /**
  * Generate a simple debug autotile atlas with exact known colors.
- * 
+ *
  * Each terrain row (192px tall) will be a single solid color:
  * - Row 0: Pure Red (#FF0000)
- * - Row 1: Pure Green (#00FF00)  
+ * - Row 1: Pure Green (#00FF00)
  * - Row 2: Pure Blue (#0000FF)
  * - Row 3: Pure Yellow (#FFFF00)
  * - Row 4: Pure Cyan (#00FFFF)
  * - Row 5: Pure Magenta (#FF00FF)
  * - Rows 6-25: Grayscale gradient
- * 
+ *
  * This makes it trivial to identify which terrain row is being sampled.
  */
 

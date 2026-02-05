@@ -92,7 +92,7 @@ async function analyzeColors(imagePath: string): Promise<void> {
   console.log('\n' + '━'.repeat(60));
   console.log('🎨 DEBUG ATLAS COLOR CHECK:');
   console.log('━'.repeat(60));
-  
+
   const debugColors: Record<string, string> = {
     '#00C800': 'Row 0 - Bright Green (GrassLight)',
     '#8B5A2B': 'Row 1 - Brown (Dirt)',
@@ -115,7 +115,7 @@ async function analyzeColors(imagePath: string): Promise<void> {
       const r = parseInt(colorHex.slice(1, 3), 16);
       const g = parseInt(colorHex.slice(3, 5), 16);
       const b = parseInt(colorHex.slice(5, 7), 16);
-      
+
       // Check if within tolerance of 32
       if (Math.abs(r - targetR) <= 32 && Math.abs(g - targetG) <= 32 && Math.abs(b - targetB) <= 32) {
         found += count;

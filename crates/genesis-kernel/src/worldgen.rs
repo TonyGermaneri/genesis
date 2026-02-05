@@ -183,7 +183,7 @@ impl WorldGenerator {
     }
 
     /// Generates a chunk in top-down mode (overworld).
-    /// 
+    ///
     /// In top-down mode, X and Y are both horizontal coordinates on a map.
     /// Every cell represents ground terrain at that location.
     #[must_use]
@@ -215,7 +215,7 @@ impl WorldGenerator {
     }
 
     /// Generates a single cell for top-down mode.
-    /// 
+    ///
     /// Every cell is a ground tile - there's no "air" because we're looking down
     /// at the world map, not a cross-section.
     #[allow(clippy::cast_precision_loss)]
@@ -252,7 +252,7 @@ impl WorldGenerator {
         // Get biome at this location (needed for all cells)
         let coord = genesis_common::WorldCoord::new(world_x as i64, world_y as i64);
         let biome_id = self.biome_manager.get_biome_at(coord);
-        
+
         // Calculate elevation for shader (0-255 based on height above sea level)
         let elevation = ((world_y - params.sea_level).max(0).min(255)) as u8;
 

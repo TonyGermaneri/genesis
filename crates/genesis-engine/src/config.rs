@@ -39,6 +39,8 @@ pub struct EngineConfig {
     // === Graphics Settings ===
     /// Cell render scale (pixels per cell)
     pub cell_scale: f32,
+    /// Camera zoom level (1.0-20.0)
+    pub camera_zoom: f32,
     /// Enable particle effects
     pub enable_particles: bool,
     /// Enable dynamic lighting
@@ -98,6 +100,7 @@ impl Default for EngineConfig {
 
             // Graphics
             cell_scale: 4.0,
+            camera_zoom: 10.0,
             enable_particles: true,
             enable_lighting: true,
             enable_ao: true,

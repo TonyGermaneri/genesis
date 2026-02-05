@@ -27,7 +27,7 @@ START_TIME=$(date +%s)
 while kill -0 $GAME_PID 2>/dev/null; do
     CURRENT_TIME=$(date +%s)
     ELAPSED=$((CURRENT_TIME - START_TIME))
-    
+
     if [ $ELAPSED -ge $TIMEOUT_SECONDS ]; then
         echo ""
         echo "⏰ Watchdog: Timeout reached (${ELAPSED}s >= ${TIMEOUT_SECONDS}s)"
@@ -37,12 +37,12 @@ while kill -0 $GAME_PID 2>/dev/null; do
         echo "💀 Process killed"
         exit 124  # Same exit code as GNU timeout
     fi
-    
+
     # Show progress every 5 seconds
     if [ $((ELAPSED % 5)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
         printf "\r🐕 Watchdog: %ds / %ds elapsed..." $ELAPSED $TIMEOUT_SECONDS
     fi
-    
+
     sleep 0.5
 done
 

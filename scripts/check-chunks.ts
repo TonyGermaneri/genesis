@@ -7,19 +7,19 @@ import sharp from 'sharp';
 
 async function checkChunkBoundaries(imagePath: string) {
   console.log(`\n🔍 Checking chunk boundaries in: ${imagePath}\n`);
-  
+
   const image = sharp(imagePath);
   const meta = await image.metadata();
   const gray = await image.grayscale().raw().toBuffer();
-  
+
   const width = meta.width!;
   const height = meta.height!;
-  
+
   // Check for vertical lines at chunk boundaries (every 256 pixels)
   const chunkSize = 256;
   let boundaryEdges = 0;
   let normalEdges = 0;
-  
+
   for (let y = 100; y < height - 100; y++) {
     for (let x = 1; x < width - 1; x++) {
       const idx = y * width + x;
@@ -33,7 +33,7 @@ async function checkChunkBoundaries(imagePath: string) {
       }
     }
   }
-  
+
   console.log('Edges at chunk boundaries (±3px of 256n):', boundaryEdges);
   console.log('Edges elsewhere:', normalEdges);
   console.log('Boundary edge ratio:', (boundaryEdges / normalEdges * 100).toFixed(2) + '%');
