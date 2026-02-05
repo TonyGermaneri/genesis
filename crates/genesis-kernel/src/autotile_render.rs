@@ -145,19 +145,13 @@ fn terrain_noise(world_x: i32, world_y: i32) -> f32 {
     let y = f32(world_y);
     
     var value = 0.0;
-    var amplitude = 0.5;
-    var frequency = 0.1; // Start with low frequency for large-scale variation
     
-    // 3 octaves of noise for natural-looking variation
-    value += value_noise(x * frequency, y * frequency) * amplitude;
-    amplitude *= 0.5;
-    frequency *= 2.0;
-    
-    value += value_noise(x * frequency, y * frequency) * amplitude;
-    amplitude *= 0.5;
-    frequency *= 2.0;
-    
-    value += value_noise(x * frequency, y * frequency) * amplitude;
+    // 4 octaves of noise for natural-looking variation at multiple scales
+    // Higher base frequency (0.15) for more visible texture
+    value += value_noise(x * 0.15, y * 0.15) * 0.4;   // Large-scale variation
+    value += value_noise(x * 0.3, y * 0.3) * 0.25;    // Medium variation
+    value += value_noise(x * 0.6, y * 0.6) * 0.2;     // Fine detail
+    value += value_noise(x * 1.2, y * 1.2) * 0.15;    // Very fine grain
     
     return value;
 }
@@ -426,6 +420,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // In top-down mode, there's no "air" - every cell is ground terrain.
     // If material is 0 (uninitialized/default), use biome fallback color.
     // This handles edge cases where cells haven't been properly generated.
+
+    // DEBUG MODE: Skip atlas entirely, use pure biome colors + noise
+    // Set to true to isolate whether grid patterns come from noise or atlas sampling
+    let DEBUG_PURE_NOISE = false;
+    
+    if DEBUG_PURE_NOISE {
+        // Pure noise-based coloring - no atlas, no texture sampling
+        let varied = get_biome_color_varied(biome_id, world_x, world_y);
+        let lit = apply_lighting(varied, params.time_of_day);
+        return vec4<f32>(lit.r, lit.g, lit.b, 1.0);
+    }
 
     // Sample texture from autotile atlas
     let tex_color = sample_autotile(world_x, world_y, biome_id, local_x, local_y);
