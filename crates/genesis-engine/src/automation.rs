@@ -129,6 +129,9 @@ pub enum AutomationAction {
         /// Timeout in milliseconds
         timeout_ms: u64,
     },
+
+    /// Quit the application
+    Quit,
 }
 
 /// A named macro containing a sequence of actions.
@@ -224,6 +227,8 @@ pub enum AutomationRequest {
         name: String,
         value: String,
     },
+    /// Quit the application
+    Quit,
 }
 
 impl Default for AutomationSystem {
@@ -354,7 +359,7 @@ impl AutomationSystem {
 
     /// Updates the automation system. Call this each frame.
     /// Returns any pending requests that need to be handled by the app.
-    pub fn update(&mut self, dt: f32) -> Vec<AutomationRequest> {
+    pub fn update(&mut self, _dt: f32) -> Vec<AutomationRequest> {
         if !self.enabled {
             return Vec::new();
         }
@@ -363,7 +368,6 @@ impl AutomationSystem {
         self.movement_override = None;
         self.position_teleport = None;
         self.key_presses.clear();
-        let requests = std::mem::take(&mut self.pending_requests);
 
         // Check if current action is complete
         if let Some(ref active) = self.current_action {
@@ -374,7 +378,8 @@ impl AutomationSystem {
                 } else {
                     // Action still in progress - apply effects
                     self.apply_active_action_effects(&active.action.clone());
-                    return requests;
+                    // Return any pending requests accumulated so far
+                    return std::mem::take(&mut self.pending_requests);
                 }
             }
         }
@@ -386,7 +391,8 @@ impl AutomationSystem {
             }
         }
 
-        requests
+        // Return requests AFTER starting action (so immediate actions get processed same frame)
+        std::mem::take(&mut self.pending_requests)
     }
 
     /// Starts executing an action.
@@ -474,6 +480,9 @@ impl AutomationSystem {
             AutomationAction::WaitForCondition { .. } => {
                 // TODO: Implement condition checking
                 warn!("WaitForCondition not yet implemented");
+            }
+            AutomationAction::Quit => {
+                self.pending_requests.push(AutomationRequest::Quit);
             }
         }
 
@@ -709,6 +718,7 @@ fn parse_action_string(s: &str) -> Result<AutomationAction, String> {
             let msg = parts[1..].join(" ");
             Ok(AutomationAction::Log { message: msg })
         }
+        "quit" | "exit" => Ok(AutomationAction::Quit),
         _ => Err(format!("Unknown action: {}", parts[0])),
     }
 }

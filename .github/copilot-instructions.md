@@ -33,6 +33,7 @@ The game supports automation macros via CLI arguments:
 | `seed` | `seed <value>` | Set world generation seed |
 | `regen` | `regen` | Regenerate world terrain |
 | `log` | `log <message>` | Log a message |
+| `quit` | `quit` | Exit the game |
 
 ### 3. Screenshot Analysis
 Use the AI image analysis script to evaluate visual output:
@@ -42,14 +43,55 @@ cd scripts
 npx ts-node analyze-image.ts -i ../screenshots/test.png -p "Describe the terrain biomes"
 ```
 
-### 4. Full E2E Test Flow
+### 4. Sprite Sheet Analysis (Bounding Boxes)
+Use the sprite sheet analyzer to extract frame bounding boxes from character/animation sprite sheets:
+
+```bash
+cd scripts
+npx ts-node analyze-spritesheet.ts -i ../assets/player.png
+npx ts-node analyze-spritesheet.ts -i ../assets/player.png --split -o frames.json
+```
+
+**Features:**
+- **Always returns structured JSON** with bounding boxes
+- **Automatic splitting** for large images (>1500px) at transparent edges
+- **Grid detection** for uniform sprite sheets
+- **Animation detection** by row/direction
+
+**Output JSON Schema:**
+```json
+{
+  "imageWidth": 2781,
+  "imageHeight": 1968,
+  "frameWidth": 48,
+  "frameHeight": 48,
+  "gridCols": 58,
+  "gridRows": 41,
+  "animations": [
+    {
+      "name": "idle",
+      "direction": "down",
+      "row": 0,
+      "frameCount": 4,
+      "frames": [
+        { "x": 0, "y": 0, "width": 48, "height": 48, "label": "idle_down_0" }
+      ]
+    }
+  ],
+  "rawBoundingBoxes": [
+    { "x": 0, "y": 0, "width": 48, "height": 48, "label": "sprite frame" }
+  ]
+}
+```
+
+### 5. Full E2E Test Flow
 Run automated tests with AI analysis:
 
 ```bash
 npx ts-node scripts/run-e2e-test.ts --macro biome_exploration
 ```
 
-### 5. Example Macro Files
+### 6. Example Macro Files
 - `macros/biome_exploration.json` - Explores world and captures screenshots
 - `macros/seed_comparison.json` - Compares terrain across different seeds
 
@@ -58,10 +100,13 @@ npx ts-node scripts/run-e2e-test.ts --macro biome_exploration
 | Path | Purpose |
 |------|---------|
 | `crates/genesis-engine/src/automation.rs` | Automation system implementation |
+| `crates/genesis-kernel/src/player_sprite.rs` | Player sprite rendering system |
 | `scripts/analyze-image.ts` | AI screenshot analysis (AWS Bedrock) |
+| `scripts/analyze-spritesheet-cv.ts` | CV + LLM sprite sheet analyzer |
 | `scripts/run-e2e-test.ts` | E2E test runner with AI feedback |
 | `macros/*.json` | Macro definition files |
 | `screenshots/` | Captured screenshots output |
+| `assets/sprites/player/` | Player character sprite sheets |
 
 ## Development Workflow
 

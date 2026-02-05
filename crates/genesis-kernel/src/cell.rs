@@ -106,6 +106,30 @@ impl Cell {
         self.velocity_y = vy;
         self
     }
+
+    /// Returns the cell with biome ID set (stored in low byte of data field).
+    /// The shader reads this from `(velocity_data >> 16) & 0xFF`.
+    #[must_use]
+    pub const fn with_biome(mut self, biome_id: u8) -> Self {
+        // biome_id goes in the low byte of data, elevation in high byte
+        self.data = (self.data & 0xFF00) | (biome_id as u16);
+        self
+    }
+
+    /// Returns the cell with elevation set (stored in high byte of data field).
+    /// The shader reads this from `(velocity_data >> 24) & 0xFF`.
+    #[must_use]
+    pub const fn with_elevation(mut self, elevation: u8) -> Self {
+        self.data = (self.data & 0x00FF) | ((elevation as u16) << 8);
+        self
+    }
+
+    /// Returns the cell with both biome and elevation set.
+    #[must_use]
+    pub const fn with_biome_elevation(mut self, biome_id: u8, elevation: u8) -> Self {
+        self.data = (biome_id as u16) | ((elevation as u16) << 8);
+        self
+    }
 }
 
 /// Cell flag bits.

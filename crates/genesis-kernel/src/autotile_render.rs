@@ -290,69 +290,52 @@ fn apply_burn_effect(color: vec3<f32>) -> vec3<f32> {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Calculate world position from screen position
+    // Note: camera position is CENTER of view, so we need to offset by half screen size
     let screen_x = i32(input.position.x);
     let screen_y = i32(input.position.y);
+    let half_width = f32(params.screen_width) / 2.0;
+    let half_height = f32(params.screen_height) / 2.0;
 
-    // Apply camera offset and zoom
-    let world_x = params.camera_x + i32(f32(screen_x) / params.zoom);
-    let world_y = params.camera_y + i32(f32(screen_y) / params.zoom);
+    // Apply camera offset (centered) and zoom
+    let world_x = params.camera_x + i32((f32(screen_x) - half_width) / params.zoom);
+    let world_y = params.camera_y + i32((f32(screen_y) - half_height) / params.zoom);
 
     // Apply chunk offset
     let local_x = world_x - chunk_params.world_offset_x;
     let local_y = world_y - chunk_params.world_offset_y;
 
-    // Bounds check
+    // Bounds check - return transparent for out-of-bounds
     if local_x < 0 || local_y < 0 || local_x >= i32(params.chunk_size) || local_y >= i32(params.chunk_size) {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
-    // Get cell
+    // Get cell at this position
     let idx = u32(local_y) * params.chunk_size + u32(local_x);
     let cell = cells[idx];
 
-    // Extract cell data
+    // Extract material ID (lower 16 bits of material field)
     let material_id = cell.material & 0xFFFFu;
-    let flags = (cell.material >> 16u) & 0xFFu;
-    let growth = (cell.material >> 24u) & 0xFFu;
+
+    // Extract biome ID from velocity_data (byte 2 of the upper 16 bits)
     let biome_id = (cell.velocity_data >> 16u) & 0xFFu;
-    let elevation = (cell.velocity_data >> 24u) & 0xFFu;
 
-    // Skip air
-    if material_id == MAT_AIR {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    }
+    // In top-down mode, there's no "air" - every cell is ground terrain.
+    // If material is 0 (uninitialized/default), use biome fallback color.
+    // This handles edge cases where cells haven't been properly generated.
 
-    // Sample from autotile atlas with edge detection
-    var color: vec3<f32>;
-    let tex_sample = sample_autotile(world_x, world_y, biome_id, local_x, local_y);
-
-    if tex_sample.a > 0.1 {
-        // Use texture color
-        color = tex_sample.rgb;
-    } else {
-        // Fallback to procedural biome color
-        color = get_biome_fallback_color(biome_id);
-
-        // Apply material variation
-        let mat_color = colors[material_id % 16u];
-        color = mix(color, vec3<f32>(mat_color.r, mat_color.g, mat_color.b), 0.3);
-    }
-
-    // Apply elevation shading for mountains
-    if biome_id == 5u && elevation > 128u {
-        let snow_factor = f32(elevation - 128u) / 127.0;
-        color = mix(color, vec3<f32>(0.95, 0.95, 0.95), snow_factor);
-    }
-
-    // Apply burning effect
-    if (flags & FLAG_BURNING) != 0u {
-        color = apply_burn_effect(color);
+    // Sample texture from autotile atlas
+    let tex_color = sample_autotile(world_x, world_y, biome_id, local_x, local_y);
+    
+    // If texture sampling failed (atlas not loaded or material 0), use fallback biome color
+    if tex_color.a < 0.01 || material_id == 0u {
+        let fallback = get_biome_fallback_color(biome_id);
+        return vec4<f32>(fallback.r, fallback.g, fallback.b, 1.0);
     }
 
     // Apply day/night lighting
-    color = apply_lighting(color, params.time_of_day);
+    let lit_color = apply_lighting(tex_color.rgb, params.time_of_day);
 
-    return vec4<f32>(color, 1.0);
+    return vec4<f32>(lit_color.r, lit_color.g, lit_color.b, tex_color.a);
 }
 "#;
 
@@ -577,6 +560,11 @@ impl AutotileChunkRenderer {
     /// Check if atlas is bound
     pub fn is_atlas_bound(&self) -> bool {
         self.atlas_bound
+    }
+
+    /// Get the number of chunks in buffer
+    pub fn chunk_buffer_count(&self) -> usize {
+        self.chunk_buffers.len()
     }
 
     /// Update render parameters

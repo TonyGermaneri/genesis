@@ -695,9 +695,9 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.15,
-                            b: 0.2,
+                            r: 0.5,
+                            g: 0.7,
+                            b: 0.9,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -710,7 +710,9 @@ impl Renderer {
 
             // Priority: autotile renderer > textured renderer > chunk render manager > single-chunk mode
             if let Some(autotile_mgr) = &self.autotile_renderer {
-                if autotile_mgr.is_atlas_bound() && !visible_chunks.is_empty() {
+                let is_bound = autotile_mgr.is_atlas_bound();
+                
+                if is_bound && !visible_chunks.is_empty() {
                     autotile_mgr.render(&mut render_pass, &visible_chunks);
                 } else if let Some(render_mgr) = &self.chunk_render_manager {
                     render_mgr.render(&mut render_pass);
@@ -998,9 +1000,9 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.15,
-                            b: 0.2,
+                            r: 0.5,
+                            g: 0.7,
+                            b: 0.9,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,

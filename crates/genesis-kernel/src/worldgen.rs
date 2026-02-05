@@ -29,7 +29,11 @@ pub mod ore_ids {
 /// Parameters controlling world generation.
 #[derive(Debug, Clone)]
 pub struct GenerationParams {
-    /// Sea level in world Y coordinates.
+    /// Whether to generate in top-down mode (overworld) vs side-scroller mode (interiors).
+    /// Top-down: X/Y are both horizontal, every cell is ground terrain.
+    /// Side-scroller: X is horizontal, Y is vertical, terrain has height.
+    pub top_down: bool,
+    /// Sea level in world Y coordinates (side-scroller mode only).
     pub sea_level: i32,
     /// Scale factor for terrain features (larger = smoother).
     pub terrain_scale: f32,
@@ -39,15 +43,16 @@ pub struct GenerationParams {
     pub ore_frequency: f32,
     /// Whether to generate vegetation.
     pub vegetation: bool,
-    /// Maximum terrain height above sea level.
+    /// Maximum terrain height above sea level (side-scroller mode only).
     pub terrain_height: i32,
-    /// Minimum terrain depth below sea level.
+    /// Minimum terrain depth below sea level (side-scroller mode only).
     pub terrain_depth: i32,
 }
 
 impl Default for GenerationParams {
     fn default() -> Self {
         Self {
+            top_down: true, // Default to overworld/top-down mode
             sea_level: DEFAULT_SEA_LEVEL,
             terrain_scale: 0.02,
             cave_threshold: 0.55,
@@ -139,6 +144,12 @@ impl WorldGenerator {
         chunk_y: i32,
         params: &GenerationParams,
     ) -> Vec<Cell> {
+        // Use top-down generation for overworld mode
+        if params.top_down {
+            return self.generate_chunk_topdown(chunk_x, chunk_y, params);
+        }
+
+        // Side-scroller generation (original logic for interiors)
         let size = self.chunk_size as usize;
         let mut cells = vec![Cell::default(); size * size];
 
@@ -153,7 +164,7 @@ impl WorldGenerator {
                 let world_y = world_base_y + local_y as i32;
 
                 let idx = (local_y * self.chunk_size + local_x) as usize;
-                cells[idx] = self.generate_cell(world_x, world_y, params);
+                cells[idx] = self.generate_cell_sidescroller(world_x, world_y, params);
             }
         }
 
@@ -171,28 +182,98 @@ impl WorldGenerator {
         cells
     }
 
-    /// Generates a single cell at world coordinates.
+    /// Generates a chunk in top-down mode (overworld).
+    /// 
+    /// In top-down mode, X and Y are both horizontal coordinates on a map.
+    /// Every cell represents ground terrain at that location.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+    pub fn generate_chunk_topdown(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+        _params: &GenerationParams,
+    ) -> Vec<Cell> {
+        let size = self.chunk_size as usize;
+        let mut cells = vec![Cell::default(); size * size];
+
+        // Calculate world coordinates for this chunk
+        let world_base_x = chunk_x * self.chunk_size as i32;
+        let world_base_y = chunk_y * self.chunk_size as i32;
+
+        for local_y in 0..self.chunk_size {
+            for local_x in 0..self.chunk_size {
+                let world_x = world_base_x + local_x as i32;
+                let world_y = world_base_y + local_y as i32;
+
+                let idx = (local_y * self.chunk_size + local_x) as usize;
+                cells[idx] = self.generate_cell_topdown(world_x, world_y);
+            }
+        }
+
+        cells
+    }
+
+    /// Generates a single cell for top-down mode.
+    /// 
+    /// Every cell is a ground tile - there's no "air" because we're looking down
+    /// at the world map, not a cross-section.
     #[allow(clippy::cast_precision_loss)]
-    fn generate_cell(&self, world_x: i32, world_y: i32, params: &GenerationParams) -> Cell {
+    fn generate_cell_topdown(&self, world_x: i32, world_y: i32) -> Cell {
+        let coord = genesis_common::WorldCoord::new(world_x as i64, world_y as i64);
+        let biome_id = self.biome_manager.get_biome_at(coord);
+
+        // Use noise to create elevation variation (affects texture, not visibility)
+        let elevation_noise = self.terrain_noise.fbm(world_x as f64, world_y as f64, 3, 0.5);
+        let elevation = ((elevation_noise + 1.0) * 127.5) as u8; // Map -1..1 to 0..255
+
+        // Get the surface material for this biome
+        let material = self.biome_manager
+            .get_biome(biome_id)
+            .map_or(material_ids::GRASS, |biome| biome.surface_material);
+
+        // Create cell with appropriate flags
+        let flags = if material == material_ids::WATER {
+            CellFlags::LIQUID
+        } else {
+            CellFlags::SOLID
+        };
+
+        Cell::new(material)
+            .with_flag(flags)
+            .with_biome_elevation(biome_id, elevation)
+    }
+
+    /// Generates a single cell at world coordinates (side-scroller mode).
+    #[allow(clippy::cast_precision_loss)]
+    fn generate_cell_sidescroller(&self, world_x: i32, world_y: i32, params: &GenerationParams) -> Cell {
         let terrain_height = self.generate_terrain_height(world_x, params);
+
+        // Get biome at this location (needed for all cells)
+        let coord = genesis_common::WorldCoord::new(world_x as i64, world_y as i64);
+        let biome_id = self.biome_manager.get_biome_at(coord);
+        
+        // Calculate elevation for shader (0-255 based on height above sea level)
+        let elevation = ((world_y - params.sea_level).max(0).min(255)) as u8;
 
         // Above surface = air
         if world_y > terrain_height {
             // Check if underwater
             if world_y <= params.sea_level {
-                return Cell::new(material_ids::WATER).with_flag(CellFlags::LIQUID);
+                return Cell::new(material_ids::WATER)
+                    .with_flag(CellFlags::LIQUID)
+                    .with_biome_elevation(biome_id, elevation);
             }
-            return Cell::air();
+            return Cell::air().with_biome_elevation(biome_id, elevation);
         }
 
         // Get depth below surface
         let depth = (terrain_height - world_y).max(0) as u32;
 
-        // Get biome and material at this location
-        let coord = genesis_common::WorldCoord::new(world_x as i64, world_y as i64);
+        // Get material at this location
         let material = self.biome_manager.get_material_at(coord, depth);
 
-        let mut cell = Cell::new(material);
+        let mut cell = Cell::new(material).with_biome_elevation(biome_id, elevation);
 
         // Set solid flag for non-liquid materials
         if material != material_ids::WATER && material != material_ids::AIR {
@@ -308,7 +389,10 @@ impl WorldGenerator {
 
                 // Calculate ore type based on depth and noise
                 if let Some(ore) = self.get_ore_at(world_x, world_y, params) {
+                    // Preserve biome/elevation data from original cell
+                    let biome_elevation = cell.data;
                     cells[idx] = Cell::new(ore).with_flag(CellFlags::SOLID);
+                    cells[idx].data = biome_elevation;
                 }
             }
         }

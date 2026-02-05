@@ -1,13 +1,13 @@
 #!/usr/bin/env npx ts-node
 /**
  * Automated E2E Testing Script for Genesis
- * 
+ *
  * This script:
  * 1. Runs the game with an automation macro
  * 2. Waits for screenshots to be captured
  * 3. Analyzes each screenshot with AI
  * 4. Generates a report
- * 
+ *
  * Usage:
  *   npx ts-node scripts/run-e2e-test.ts --macro biome_exploration
  *   npx ts-node scripts/run-e2e-test.ts --macro-file macros/seed_comparison.json
@@ -101,7 +101,7 @@ function loadMacro(macroPath: string): MacroDefinition {
 
 function extractScreenshotInfo(macro: MacroDefinition): Array<{ filename: string; prompt: string }> {
   const screenshots: Array<{ filename: string; prompt: string }> = [];
-  
+
   for (const action of macro.actions) {
     if (action.type === 'screenshot' && action.filename) {
       screenshots.push({
@@ -110,15 +110,15 @@ function extractScreenshotInfo(macro: MacroDefinition): Array<{ filename: string
       });
     }
   }
-  
+
   return screenshots;
 }
 
 async function runGame(macroFile: string): Promise<ChildProcess> {
   const gameDir = path.join(__dirname, '..');
-  
+
   console.log(`Starting game with macro: ${macroFile}`);
-  
+
   const proc = spawn('cargo', ['run', '--release', '--', '--macro-file', macroFile], {
     cwd: gameDir,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -229,11 +229,11 @@ async function main() {
   for (const expected of expectedScreenshots) {
     const screenshotPath = path.join(SCREENSHOT_DIR, expected.filename);
     console.log(`  Waiting for: ${expected.filename}`);
-    
+
     const found = await waitForFile(screenshotPath, 60000);
     if (found) {
       console.log(`  ✓ Found: ${expected.filename}`);
-      
+
       // Analyze the screenshot
       console.log(`    Analyzing...`);
       try {
@@ -267,7 +267,7 @@ async function main() {
   // Generate report
   console.log('\nGenerating report...');
   const report = generateReport(results, macro.name);
-  
+
   const reportPath = path.join(__dirname, '..', 'screenshots', `report_${macro.name}_${Date.now()}.md`);
   fs.writeFileSync(reportPath, report);
   console.log(`Report saved: ${reportPath}`);
@@ -275,7 +275,7 @@ async function main() {
   // Print summary
   console.log('\n=== Test Complete ===');
   console.log(`Screenshots captured: ${results.length}/${expectedScreenshots.length}`);
-  
+
   if (results.length > 0) {
     console.log('\n=== Analysis Summary ===\n');
     for (const result of results) {

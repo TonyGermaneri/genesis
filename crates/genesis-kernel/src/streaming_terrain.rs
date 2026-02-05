@@ -51,7 +51,8 @@ pub const DEFAULT_LOAD_RADIUS: i32 = 4;
 pub const DEFAULT_UNLOAD_RADIUS: i32 = 6;
 
 /// Maximum chunks to generate per frame to avoid hitching.
-pub const MAX_CHUNKS_PER_FRAME: usize = 2;
+/// Increased from 2 to 8 for faster initial loading.
+pub const MAX_CHUNKS_PER_FRAME: usize = 8;
 
 /// Configuration for the streaming terrain system.
 #[derive(Debug, Clone)]

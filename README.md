@@ -30,7 +30,48 @@ Project Genesis is a GPU-accelerated action RPG featuring real-time pixel-cell s
 
 ---
 
-## 🚀 Quick Start
+## � The Genesis Prompt
+
+This project was bootstrapped from the following specification — the original "Genesis Prompt" that defined the core game vision:
+
+### Core Game Design
+
+> **An action-RPG written in Rust using wgpu** featuring GPU compute-based pixel-cell simulation where every pixel is a simulated cell with physical properties.
+
+**Combat & Gameplay Style:**
+- Combat similar to **SNES era Legend of Zelda** — melee and ranged with abilities
+- **Pixel graphics aesthetic** with modern GPU-accelerated rendering
+- **Cyberpunk/Blade Runner tone** — dark, neon-lit, atmospheric
+
+**Dual Gameplay Modes:**
+| Mode | Style | Description |
+|------|-------|-------------|
+| **Overworld** | Top-down (NES Jackal) | X and Y are both horizontal. Bird's eye view exploration |
+| **Interiors** | Platform (River City Ransom) | X is horizontal, Y is vertical. Side-scrolling combat and exploration |
+
+### Simulation Features
+
+- **GPU Pixel-Cell Simulation** — Every pixel has material, temperature, moisture, velocity
+- **Infinite Procedural World** — Chunked and streamed with multiple biomes
+- **Vehicles** — Driveable vehicles for overworld traversal
+- **Base Building** — Construct and upgrade player bases
+- **Crafting & Economy** — Resource gathering, crafting recipes, trading
+- **NPCs & Dialogue** — AI-driven characters with behaviors and quests
+
+### Development Philosophy
+
+This project embraces **multi-agent autonomous development** with AI-driven workflows:
+
+1. **E2E Macro Testing** — Automated game testing via CLI macros
+2. **Screenshot Analysis** — AI vision feedback for visual validation
+3. **Watchdog Development** — Timeout-based process management for iteration
+4. **Parallel Agent Branches** — Multiple AI agents working on different features
+
+See [.github/copilot-instructions.md](.github/copilot-instructions.md) for the full AI development workflow.
+
+---
+
+## �🚀 Quick Start
 
 ### Prerequisites
 

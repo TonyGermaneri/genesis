@@ -172,6 +172,8 @@ struct GenesisApp {
     // === Automation ===
     /// Automation system for E2E testing
     automation: AutomationSystem,
+    /// Whether quit was requested via automation
+    quit_requested: bool,
 
     // === Debug Info ===
     /// Current FPS
@@ -302,6 +304,7 @@ impl GenesisApp {
             show_controls_help: false,
 
             automation: AutomationSystem::new(),
+            quit_requested: false,
 
             current_fps: 0.0,
             current_frame_time: 0.0,
@@ -845,6 +848,10 @@ impl GenesisApp {
                     info!("[AUTOMATION] Setting world param: {}.{} = {}", category, name, value);
                     // TODO: Implement world parameter setting via world_tools
                     warn!("SetWorldParam not yet fully implemented");
+                }
+                AutomationRequest::Quit => {
+                    info!("[AUTOMATION] Quit requested");
+                    self.quit_requested = true;
                 }
             }
         }
@@ -2011,6 +2018,16 @@ impl ApplicationHandler for GenesisApp {
 
         // Let input handler process the event (for game controls)
         let handled = self.input.handle_event(&event);
+
+        // Check for quit request from automation
+        if self.quit_requested {
+            info!("[AUTOMATION] Exiting application");
+            if let Err(e) = self.config.save() {
+                warn!("Failed to save config: {e}");
+            }
+            event_loop.exit();
+            return;
+        }
 
         match event {
             WindowEvent::CloseRequested => {

@@ -66,6 +66,9 @@ zstd = "0.13"
 # File system
 notify = "6.1"
 
+# Image loading
+image = "0.24"
+
 # UI (external library - per UI RULE)
 egui = "0.30"
 egui-wgpu = "0.30"
