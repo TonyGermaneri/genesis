@@ -18,6 +18,8 @@ pub enum PauseMenuButton {
     LoadGame,
     /// Open options menu
     Options,
+    /// Open world tools panel
+    WorldTools,
     /// Quit to main menu
     QuitToMenu,
     /// Quit to desktop
@@ -32,6 +34,7 @@ impl PauseMenuButton {
             Self::SaveGame,
             Self::LoadGame,
             Self::Options,
+            Self::WorldTools,
             Self::QuitToMenu,
             Self::QuitToDesktop,
         ]
@@ -44,6 +47,7 @@ impl PauseMenuButton {
             Self::SaveGame => "Save Game",
             Self::LoadGame => "Load Game",
             Self::Options => "Options",
+            Self::WorldTools => "World Tools",
             Self::QuitToMenu => "Quit to Menu",
             Self::QuitToDesktop => "Quit to Desktop",
         }
@@ -56,6 +60,7 @@ impl PauseMenuButton {
             Self::SaveGame => "💾",
             Self::LoadGame => "📂",
             Self::Options => "⚙",
+            Self::WorldTools => "🌍",
             Self::QuitToMenu => "🏠",
             Self::QuitToDesktop => "🚪",
         }
@@ -78,6 +83,8 @@ pub enum PauseMenuAction {
     OpenLoadMenu,
     /// Open options menu
     OpenOptions,
+    /// Open world tools panel
+    OpenWorldTools,
     /// Quit to main menu
     QuitToMenu,
     /// Quit to desktop
@@ -523,6 +530,7 @@ impl PauseMenu {
             PauseMenuButton::SaveGame => PauseMenuAction::OpenSaveMenu,
             PauseMenuButton::LoadGame => PauseMenuAction::OpenLoadMenu,
             PauseMenuButton::Options => PauseMenuAction::OpenOptions,
+            PauseMenuButton::WorldTools => PauseMenuAction::OpenWorldTools,
             PauseMenuButton::QuitToMenu => PauseMenuAction::QuitToMenu,
             PauseMenuButton::QuitToDesktop => PauseMenuAction::QuitToDesktop,
         };
@@ -783,9 +791,9 @@ mod tests {
     #[test]
     fn test_pause_menu_button_all() {
         let buttons = PauseMenuButton::all();
-        assert_eq!(buttons.len(), 6);
+        assert_eq!(buttons.len(), 7);
         assert_eq!(buttons[0], PauseMenuButton::Resume);
-        assert_eq!(buttons[5], PauseMenuButton::QuitToDesktop);
+        assert_eq!(buttons[6], PauseMenuButton::QuitToDesktop);
     }
 
     #[test]

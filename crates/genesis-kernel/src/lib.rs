@@ -44,6 +44,8 @@ pub mod audio_backend;
 pub mod audio_legacy;
 pub mod audio_resource;
 pub mod audio_spatial;
+pub mod autotile_atlas;
+pub mod autotile_render;
 pub mod benchmark;
 pub mod biome;
 pub mod buffer;
@@ -72,7 +74,12 @@ pub mod readback;
 pub mod render;
 pub mod streaming;
 pub mod streaming_terrain;
+pub mod terrain_assets;
+pub mod terrain_atlas;
 pub mod terrain_render;
+pub mod texture_loader;
+pub mod textured_render;
+pub mod textured_terrain;
 pub mod topdown_physics;
 pub mod validation;
 pub mod workbench;
@@ -146,7 +153,24 @@ pub mod prelude {
         StreamingChunk, StreamingConfig, StreamingStats, StreamingTerrain,
         DEFAULT_LOAD_RADIUS, DEFAULT_SIMULATION_RADIUS, DEFAULT_UNLOAD_RADIUS,
     };
+    pub use crate::terrain_assets::{
+        BiomeTerrainMapping, PixelRGBA, TerrainAssetManifest, TerrainCategory, TerrainTile,
+        TilePosition, PIXELS_PER_TILE, TILE_SIZE,
+    };
+    pub use crate::terrain_atlas::{
+        NeighborMask, PixelEffectState, TerrainAtlasParams, TerrainTextureAtlas, TileMetadata,
+        ATLAS_SIZE, ATLAS_TILES_PER_ROW, MAX_ATLAS_TILES,
+    };
     pub use crate::terrain_render::*;
+    pub use crate::texture_loader::{
+        create_texture_atlas, get_tile_dominant_color, load_manifest_textures, load_texture_rgba,
+        TextureLoadError, TextureLoaderConfig,
+    };
+    pub use crate::textured_render::TexturedChunkRenderer;
+    pub use crate::textured_terrain::{
+        CellTextureRef, ChunkTextureBuffer, ChunkTextureLayer, TextureColorLookup,
+        TextureRenderConfig,
+    };
     pub use crate::topdown_physics::*;
     pub use crate::validation::*;
     pub use crate::workbench::{

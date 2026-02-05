@@ -11,7 +11,8 @@ use anyhow::{Context, Result};
 use genesis_gameplay::GameState;
 use genesis_kernel::{
     Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager,
-    ChunkRenderManager, StreamingConfig, StreamingTerrain,
+    ChunkRenderManager, StreamingConfig, StreamingTerrain, TexturedChunkRenderer,
+    autotile_atlas::AutotileAtlas, autotile_render::AutotileChunkRenderer,
 };
 use genesis_tools::EguiIntegration;
 use tracing::info;
@@ -44,6 +45,10 @@ pub struct Renderer {
     streaming_terrain: Option<StreamingTerrain>,
     /// Chunk render manager for multi-chunk rendering
     chunk_render_manager: Option<ChunkRenderManager>,
+    /// Textured chunk renderer (uses terrain atlas textures - singles)
+    textured_renderer: Option<TexturedChunkRenderer>,
+    /// Autotile chunk renderer (uses autotile atlas)
+    autotile_renderer: Option<AutotileChunkRenderer>,
     /// Render bind group for current buffer
     render_bind_group: wgpu::BindGroup,
     /// Egui integration for UI overlay
@@ -156,6 +161,8 @@ impl Renderer {
             chunk_manager: None, // Single-chunk mode by default
             streaming_terrain: None, // Streaming terrain disabled by default
             chunk_render_manager: None, // Created when streaming terrain is enabled
+            textured_renderer: None, // Created when terrain textures are loaded (singles)
+            autotile_renderer: None, // Created when autotile atlas is loaded
             render_bind_group,
             egui,
             simulation_running: false, // Disable simulation (no cell gravity)
@@ -204,6 +211,42 @@ impl Renderer {
         }
     }
 
+    /// Regenerates the terrain with a new seed.
+    ///
+    /// This clears all loaded chunks and recreates the streaming terrain
+    /// with the new seed, forcing full regeneration.
+    pub fn regenerate_terrain(&mut self, new_seed: u64) {
+        info!("Regenerating terrain with new seed: {}", new_seed);
+        
+        // Get the current config if streaming is enabled
+        let config = self.streaming_terrain
+            .as_ref()
+            .map(|t| t.config().clone())
+            .unwrap_or_default();
+        
+        let chunk_size = config.chunk_size;
+        
+        // Clear autotile renderer if present
+        if let Some(autotile) = &mut self.autotile_renderer {
+            autotile.clear();
+        }
+        
+        // Clear chunk render manager by recreating it
+        if self.chunk_render_manager.is_some() {
+            self.chunk_render_manager = Some(ChunkRenderManager::new(
+                &self.device,
+                self.config.format,
+                chunk_size,
+            ));
+        }
+        
+        // Recreate streaming terrain with new seed
+        if self.streaming_terrain.is_some() {
+            self.streaming_terrain = Some(StreamingTerrain::new(new_seed, config));
+            info!("Streaming terrain recreated with seed {}", new_seed);
+        }
+    }
+
     /// Returns whether streaming terrain is enabled.
     #[must_use]
     pub const fn is_streaming_terrain_enabled(&self) -> bool {
@@ -228,9 +271,17 @@ impl Renderer {
         use genesis_kernel::VisibleChunk;
 
         let Some(terrain) = &self.streaming_terrain else { return };
-        let Some(render_mgr) = &mut self.chunk_render_manager else { return };
 
-        // Upload loaded chunks to GPU render manager
+        // Check if we have any renderers to update
+        let has_chunk_mgr = self.chunk_render_manager.is_some();
+        let has_textured = self.textured_renderer.is_some();
+        let has_autotile = self.autotile_renderer.is_some();
+
+        if !has_chunk_mgr && !has_textured && !has_autotile {
+            return;
+        }
+
+        // Upload loaded chunks to GPU render managers
         for chunk in terrain.loaded_chunks() {
             // Create a VisibleChunk for the render manager
             let visible_chunk = VisibleChunk {
@@ -238,7 +289,27 @@ impl Renderer {
                 cells: chunk.cells.clone(),
                 dirty: true, // Always mark dirty to ensure upload
             };
-            render_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
+
+            // Upload to autotile renderer if available (preferred)
+            if let Some(autotile_mgr) = &mut self.autotile_renderer {
+                autotile_mgr.update_chunk(
+                    &self.device,
+                    &self.queue,
+                    chunk.id.x,
+                    chunk.id.y,
+                    bytemuck::cast_slice(&visible_chunk.cells),
+                );
+            }
+
+            // Upload to textured renderer if available
+            if let Some(textured_mgr) = &mut self.textured_renderer {
+                textured_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
+            }
+
+            // Also upload to standard chunk render manager
+            if let Some(render_mgr) = &mut self.chunk_render_manager {
+                render_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
+            }
         }
     }
 
@@ -259,6 +330,75 @@ impl Renderer {
     #[must_use]
     pub fn streaming_stats(&self) -> Option<genesis_kernel::StreamingStats> {
         self.streaming_terrain.as_ref().map(|t| t.stats().clone())
+    }
+
+    /// Enables textured terrain rendering with the given atlas.
+    ///
+    /// When enabled, terrain will be rendered using textures from the atlas
+    /// instead of procedural colors.
+    pub fn enable_textured_terrain(
+        &mut self,
+        atlas: std::sync::Arc<parking_lot::RwLock<genesis_kernel::TerrainTextureAtlas>>,
+    ) {
+        info!("Enabling textured terrain rendering (singles)");
+
+        // Create textured renderer if not exists
+        if self.textured_renderer.is_none() {
+            self.textured_renderer = Some(TexturedChunkRenderer::new(
+                &self.device,
+                self.config.format,
+                DEFAULT_CHUNK_SIZE,
+            ));
+        }
+
+        // Bind the atlas to the renderer
+        if let Some(renderer) = &mut self.textured_renderer {
+            renderer.set_terrain_atlas(&self.queue, atlas);
+        }
+    }
+
+    /// Enables autotile-based terrain rendering with the given atlas.
+    ///
+    /// When enabled, terrain will be rendered using the autotile atlas
+    /// with proper biome-to-terrain mapping.
+    pub fn enable_autotile_terrain(
+        &mut self,
+        atlas: std::sync::Arc<parking_lot::RwLock<AutotileAtlas>>,
+    ) {
+        info!("Enabling autotile terrain rendering");
+
+        // Create autotile renderer if not exists
+        if self.autotile_renderer.is_none() {
+            self.autotile_renderer = Some(AutotileChunkRenderer::new(
+                &self.device,
+                DEFAULT_CHUNK_SIZE,
+            ));
+        }
+
+        // Bind the atlas to the renderer
+        if let Some(renderer) = &mut self.autotile_renderer {
+            renderer.bind_atlas(atlas, &self.queue);
+        }
+    }
+
+    /// Disables textured terrain rendering.
+    pub fn disable_textured_terrain(&mut self) {
+        info!("Disabling textured terrain rendering");
+        self.textured_renderer = None;
+        self.autotile_renderer = None;
+    }
+
+    /// Returns whether textured terrain rendering is enabled.
+    #[must_use]
+    pub fn is_textured_terrain_enabled(&self) -> bool {
+        self.textured_renderer.as_ref().map_or(false, |r| r.has_terrain_atlas())
+            || self.autotile_renderer.as_ref().map_or(false, |r| r.is_atlas_bound())
+    }
+
+    /// Returns whether autotile terrain rendering is enabled.
+    #[must_use]
+    pub fn is_autotile_terrain_enabled(&self) -> bool {
+        self.autotile_renderer.as_ref().map_or(false, |r| r.is_atlas_bound())
     }
 
     /// Enables multi-chunk rendering mode.
@@ -491,6 +631,16 @@ impl Renderer {
             render_mgr.update_camera(&self.queue, camera);
         }
 
+        // Update textured renderer camera if enabled
+        if let Some(textured_mgr) = &mut self.textured_renderer {
+            textured_mgr.update_camera(&self.queue, camera);
+        }
+
+        // Update autotile renderer camera if enabled
+        if let Some(autotile_mgr) = &mut self.autotile_renderer {
+            autotile_mgr.update_params(&self.queue, camera, 0.5); // TODO: pass actual time of day
+        }
+
         // Begin egui frame
         self.egui.begin_frame(window);
 
@@ -531,6 +681,13 @@ impl Renderer {
 
         // Render world (cells/terrain)
         {
+            // Collect visible chunks for autotile renderer
+            let visible_chunks: Vec<(i32, i32)> = if let Some(terrain) = &self.streaming_terrain {
+                terrain.loaded_chunks().map(|c| (c.id.x, c.id.y)).collect()
+            } else {
+                vec![]
+            };
+
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Cell Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -551,8 +708,26 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            // Use chunk render manager for streaming terrain, otherwise single-chunk mode
-            if let Some(render_mgr) = &self.chunk_render_manager {
+            // Priority: autotile renderer > textured renderer > chunk render manager > single-chunk mode
+            if let Some(autotile_mgr) = &self.autotile_renderer {
+                if autotile_mgr.is_atlas_bound() && !visible_chunks.is_empty() {
+                    autotile_mgr.render(&mut render_pass, &visible_chunks);
+                } else if let Some(render_mgr) = &self.chunk_render_manager {
+                    render_mgr.render(&mut render_pass);
+                } else {
+                    self.render_pipeline
+                        .render(&mut render_pass, &self.render_bind_group);
+                }
+            } else if let Some(textured_mgr) = &self.textured_renderer {
+                if textured_mgr.has_terrain_atlas() {
+                    textured_mgr.render(&mut render_pass);
+                } else if let Some(render_mgr) = &self.chunk_render_manager {
+                    render_mgr.render(&mut render_pass);
+                } else {
+                    self.render_pipeline
+                        .render(&mut render_pass, &self.render_bind_group);
+                }
+            } else if let Some(render_mgr) = &self.chunk_render_manager {
                 render_mgr.render(&mut render_pass);
             } else {
                 self.render_pipeline

@@ -15,6 +15,7 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 parking_lot = { workspace = true }
 rodio = { version = "0.19", features = ["mp3"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 proptest = { workspace = true }

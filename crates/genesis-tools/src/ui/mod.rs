@@ -11,6 +11,7 @@
 //! - Combat UI (health bars, combat HUD, equipment stats, combat debug)
 //! - Save/Load UI (save menu, save preview, autosave indicator, save management)
 //! - Menu UI (main menu, pause menu, options menu, new game wizard)
+//! - World Tools (biome, noise, weather, faction, material configuration)
 
 pub mod audio_debug;
 pub mod audio_settings;
@@ -36,6 +37,7 @@ pub mod save_preview;
 pub mod sound_test;
 pub mod stats;
 pub mod workbench_ui;
+pub mod world_tools;
 
 pub use audio_debug::*;
 pub use audio_settings::*;
@@ -61,3 +63,4 @@ pub use save_preview::*;
 pub use sound_test::*;
 pub use stats::*;
 pub use workbench_ui::*;
+pub use world_tools::*;

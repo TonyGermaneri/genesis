@@ -48,6 +48,10 @@ pub mod recipe_loader;
 /// Weapon data loading
 pub mod weapon_loader;
 
+// === Asset System ===
+/// Asset management (terrain textures, etc.)
+pub mod asset_manager;
+
 // === Save System ===
 /// Auto-save system
 pub mod autosave;

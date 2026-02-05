@@ -20,8 +20,10 @@ use genesis_tools::ui::{
     MainMenu, MainMenuAction,
     OptionsMenu, OptionsMenuAction,
     PauseMenu, PauseMenuAction,
+    WorldTools, WorldToolsAction,
 };
 
+use crate::asset_manager::{AssetConfig, AssetManager, AssetLoadStatus};
 use crate::audio_assets::AudioCategory;
 use crate::audio_integration::{AudioIntegration, SoundEvent};
 use crate::autosave::{AutoSaveConfig, AutoSaveManager};
@@ -90,6 +92,10 @@ struct GenesisApp {
     /// Terrain generation service with biome management
     terrain_service: TerrainGenerationService,
 
+    // === Asset Management ===
+    /// Asset manager for terrain textures, etc.
+    asset_manager: AssetManager,
+
     // === NPC Spawning ===
     /// NPC chunk spawner for loading/unloading NPCs with chunks
     npc_spawner: genesis_gameplay::NPCChunkSpawner,
@@ -157,6 +163,8 @@ struct GenesisApp {
     pause_menu: PauseMenu,
     /// Options menu UI
     options_menu: OptionsMenu,
+    /// World tools panel UI
+    world_tools: WorldTools,
     /// Whether showing controls help overlay
     show_controls_help: bool,
 
@@ -254,6 +262,7 @@ impl GenesisApp {
             chunk_metrics: ChunkMetrics::new(),
             npc_metrics: NpcMetrics::new(),
             terrain_service,
+            asset_manager: AssetManager::new(),
             npc_spawner,
             last_player_chunk: initial_chunk,
             audio,
@@ -284,6 +293,7 @@ impl GenesisApp {
             main_menu: MainMenu::with_defaults(),
             pause_menu: PauseMenu::with_defaults(),
             options_menu: OptionsMenu::with_defaults(),
+            world_tools: WorldTools::new(),
             show_controls_help: false,
 
             current_fps: 0.0,
@@ -1107,11 +1117,18 @@ impl GenesisApp {
         let main_menu = &mut self.main_menu;
         let pause_menu = &mut self.pause_menu;
         let options_menu = &mut self.options_menu;
+        let world_tools = &mut self.world_tools;
         let show_controls_help = self.show_controls_help;
 
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             // Use render_with_ui to draw world + egui overlay
             let result = renderer.render_with_ui(window, &self.camera, |ctx| {
+                // Render world tools on top if visible (works from any mode)
+                if world_tools.is_visible() {
+                    world_tools.render(ctx);
+                    return; // Don't render underlying menu when world tools is open
+                }
+
                 // Render options menu on top if visible (works from any mode)
                 if options_menu.is_visible() {
                     egui::CentralPanel::default()
@@ -1246,6 +1263,11 @@ impl GenesisApp {
                     info!("Opening options menu...");
                     self.options_menu.show();
                 }
+                PauseMenuAction::OpenWorldTools => {
+                    info!("Opening world tools...");
+                    self.world_tools.show();
+                    self.pause_menu.hide();
+                }
                 PauseMenuAction::QuitToMenu => {
                     info!("Quitting to main menu...");
                     self.app_mode = AppMode::Menu;
@@ -1276,6 +1298,49 @@ impl GenesisApp {
                     info!("Resetting options to defaults...");
                 }
                 _ => {}
+            }
+        }
+
+        // Process world tools actions
+        for action in self.world_tools.drain_actions() {
+            match action {
+                WorldToolsAction::Close => {
+                    info!("Closing world tools...");
+                    self.world_tools.hide();
+                    self.pause_menu.show();
+                }
+                WorldToolsAction::ApplyChanges => {
+                    info!("Applying world generation changes...");
+                    // TODO: Apply biome/noise changes to the simulation
+                }
+                WorldToolsAction::RegenerateWorld => {
+                    let new_seed = self.world_tools.config().seed;
+                    info!("Regenerating world with seed: {}", new_seed);
+                    
+                    // Update the terrain service seed
+                    self.terrain_service.set_seed(new_seed);
+                    
+                    // Regenerate terrain in the renderer
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.regenerate_terrain(new_seed);
+                    }
+                    
+                    info!("World regeneration complete");
+                }
+                WorldToolsAction::ResetDefaults => {
+                    info!("Resetting world generation to defaults...");
+                }
+                WorldToolsAction::RandomizeSeed => {
+                    info!("World seed randomized: {}", self.world_tools.config().seed);
+                }
+                WorldToolsAction::ExportConfig => {
+                    info!("Exporting world configuration...");
+                    // TODO: Save config to file
+                }
+                WorldToolsAction::ImportConfig => {
+                    info!("Importing world configuration...");
+                    // TODO: Load config from file
+                }
             }
         }
     }
@@ -1477,7 +1542,7 @@ fn render_crafting(ctx: &egui::Context) {
                     ui.set_min_width(250.0);
                     ui.heading("Recipes");
                     ui.separator();
-                    
+
                     egui::ScrollArea::vertical()
                         .max_height(300.0)
                         .show(ui, |ui| {
@@ -1694,6 +1759,41 @@ impl ApplicationHandler for GenesisApp {
                         renderer.set_scale_factor(scale_factor);
                         // Enable streaming terrain with world seed
                         renderer.enable_streaming_terrain(self.terrain_service.seed());
+
+                        // Load terrain assets (autotiles preferred)
+                        if let Err(e) = self.asset_manager.load_autotile_atlas() {
+                            warn!("Failed to load autotile atlas: {}", e);
+                            // Fallback to singles
+                            if let Err(e2) = self.asset_manager.load_terrain_assets() {
+                                warn!("Failed to load terrain assets: {}", e2);
+                            }
+                        }
+
+                        // Upload to GPU
+                        self.asset_manager.upload_terrain_to_gpu(renderer.device(), renderer.queue());
+                        let stats = self.asset_manager.stats();
+                        info!(
+                            "Terrain assets ready: {} tiles, atlas {}x{}, GPU: {}, autotiles: {}",
+                            stats.terrain_tiles_loaded,
+                            stats.atlas_width,
+                            stats.atlas_height,
+                            stats.gpu_uploaded,
+                            stats.using_autotiles
+                        );
+
+                        // Enable terrain rendering if atlas was loaded
+                        if stats.gpu_uploaded {
+                            if stats.using_autotiles {
+                                if let Some(atlas) = self.asset_manager.autotile_atlas() {
+                                    renderer.enable_autotile_terrain(atlas);
+                                    info!("Autotile terrain rendering enabled");
+                                }
+                            } else if let Some(atlas) = self.asset_manager.terrain_atlas() {
+                                renderer.enable_textured_terrain(atlas);
+                                info!("Textured terrain rendering enabled (singles)");
+                            }
+                        }
+
                         self.renderer = Some(renderer);
                     },
                     Err(e) => {
