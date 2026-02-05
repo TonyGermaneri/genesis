@@ -13,6 +13,7 @@
 #![deny(clippy::unwrap_used)]
 
 mod app;
+mod automation;
 mod config;
 mod environment;
 mod input;

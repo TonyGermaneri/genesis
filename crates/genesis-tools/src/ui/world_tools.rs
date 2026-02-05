@@ -849,6 +849,17 @@ impl WorldTools {
         !self.actions.is_empty()
     }
 
+    /// Set the world seed directly.
+    pub fn set_seed(&mut self, seed: u64) {
+        self.config.seed = seed;
+        self.modified = true;
+    }
+
+    /// Get the current seed.
+    pub fn seed(&self) -> u64 {
+        self.config.seed
+    }
+
     /// Render the world tools panel.
     pub fn render(&mut self, ctx: &Context) {
         if !self.visible {

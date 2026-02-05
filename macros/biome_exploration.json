@@ -1,0 +1,78 @@
+{
+  "name": "biome_exploration",
+  "description": "Explores the world, capturing screenshots at various locations to analyze biome diversity",
+  "actions": [
+    {
+      "type": "log",
+      "message": "Starting biome exploration macro"
+    },
+    {
+      "type": "start_new_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2000
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 3.0
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "exploration_start.png",
+      "prompt": "Describe the terrain and biomes visible at the starting position. What types of terrain, colors, and features do you see?"
+    },
+    {
+      "type": "move",
+      "dx": 1.0,
+      "dy": 0.0,
+      "duration_ms": 4000
+    },
+    {
+      "type": "screenshot",
+      "filename": "exploration_east.png",
+      "prompt": "Describe the terrain after moving east. Are there different biomes or terrain types visible now?"
+    },
+    {
+      "type": "move",
+      "dx": 0.0,
+      "dy": 1.0,
+      "duration_ms": 4000
+    },
+    {
+      "type": "screenshot",
+      "filename": "exploration_southeast.png",
+      "prompt": "Describe the terrain in the southeast area. What biome transitions or features are visible?"
+    },
+    {
+      "type": "move",
+      "dx": -1.0,
+      "dy": 0.0,
+      "duration_ms": 4000
+    },
+    {
+      "type": "screenshot",
+      "filename": "exploration_south.png",
+      "prompt": "Describe the terrain directly south of the starting position."
+    },
+    {
+      "type": "move",
+      "dx": 0.0,
+      "dy": -1.0,
+      "duration_ms": 4000
+    },
+    {
+      "type": "screenshot",
+      "filename": "exploration_return.png",
+      "prompt": "Compare this final view to the starting position. Has the terrain changed or is it the same?"
+    },
+    {
+      "type": "log",
+      "message": "Biome exploration complete - 5 screenshots captured"
+    }
+  ]
+}

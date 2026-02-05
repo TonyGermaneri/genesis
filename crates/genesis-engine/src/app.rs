@@ -23,10 +23,11 @@ use genesis_tools::ui::{
     WorldTools, WorldToolsAction,
 };
 
-use crate::asset_manager::{AssetConfig, AssetManager, AssetLoadStatus};
+use crate::asset_manager::AssetManager;
 use crate::audio_assets::AudioCategory;
 use crate::audio_integration::{AudioIntegration, SoundEvent};
 use crate::autosave::{AutoSaveConfig, AutoSaveManager};
+use crate::automation::{AutomationRequest, AutomationSystem};
 use crate::combat_events::CombatEventHandler;
 use crate::combat_profile::CombatProfiler;
 use crate::combat_save::CombatPersistence;
@@ -168,6 +169,10 @@ struct GenesisApp {
     /// Whether showing controls help overlay
     show_controls_help: bool,
 
+    // === Automation ===
+    /// Automation system for E2E testing
+    automation: AutomationSystem,
+
     // === Debug Info ===
     /// Current FPS
     current_fps: f32,
@@ -295,6 +300,8 @@ impl GenesisApp {
             options_menu: OptionsMenu::with_defaults(),
             world_tools: WorldTools::new(),
             show_controls_help: false,
+
+            automation: AutomationSystem::new(),
 
             current_fps: 0.0,
             current_frame_time: 0.0,
@@ -424,6 +431,10 @@ impl GenesisApp {
 
         // Update environment (time and weather)
         self.environment.update(dt);
+
+        // Update automation system
+        let automation_requests = self.automation.update(dt);
+        self.process_automation_requests(automation_requests);
 
         // Update game logic (only when playing)
         if self.app_mode == AppMode::Playing {
@@ -749,14 +760,21 @@ impl GenesisApp {
 
     /// Captures a screenshot of the current game view.
     fn capture_screenshot(&mut self) {
-        // Generate filename with timestamp
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        self.capture_screenshot_with_name(None);
+    }
 
+    /// Captures a screenshot with an optional custom filename.
+    fn capture_screenshot_with_name(&mut self, custom_name: Option<String>) -> Option<std::path::PathBuf> {
         let screenshots_dir = std::path::PathBuf::from("screenshots");
-        let filename = format!("genesis_{}.png", timestamp);
+        
+        let filename = custom_name.unwrap_or_else(|| {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("genesis_{}.png", timestamp)
+        });
+        
         let path = screenshots_dir.join(&filename);
 
         // Capture screenshot using renderer
@@ -764,6 +782,7 @@ impl GenesisApp {
             match renderer.capture_screenshot(&path, &self.camera, window) {
                 Ok(saved_path) => {
                     info!("Screenshot saved: {:?}", saved_path);
+                    return Some(saved_path);
                 }
                 Err(e) => {
                     error!("Failed to capture screenshot: {}", e);
@@ -772,6 +791,124 @@ impl GenesisApp {
         } else {
             error!("Cannot capture screenshot: renderer or window not available");
         }
+        None
+    }
+
+    /// Processes automation requests from the automation system.
+    fn process_automation_requests(&mut self, requests: Vec<AutomationRequest>) {
+        for request in requests {
+            match request {
+                AutomationRequest::StartNewGame => {
+                    info!("[AUTOMATION] Starting new game");
+                    self.start_new_game();
+                }
+                AutomationRequest::OpenPauseMenu => {
+                    info!("[AUTOMATION] Opening pause menu");
+                    if self.app_mode == AppMode::Playing {
+                        self.app_mode = AppMode::Paused;
+                        self.pause_menu.show();
+                    }
+                }
+                AutomationRequest::ResumeGame => {
+                    info!("[AUTOMATION] Resuming game");
+                    self.pause_menu.hide();
+                    self.options_menu.hide();
+                    self.world_tools.hide();
+                    self.app_mode = AppMode::Playing;
+                }
+                AutomationRequest::OpenWorldTools => {
+                    info!("[AUTOMATION] Opening world tools");
+                    if self.app_mode == AppMode::Paused {
+                        self.world_tools.show();
+                    }
+                }
+                AutomationRequest::SetSeed(seed) => {
+                    info!("[AUTOMATION] Setting seed to {}", seed);
+                    self.world_tools.set_seed(seed);
+                }
+                AutomationRequest::RegenerateWorld => {
+                    info!("[AUTOMATION] Regenerating world");
+                    self.regenerate_terrain();
+                }
+                AutomationRequest::CaptureScreenshot { filename, prompt } => {
+                    info!("[AUTOMATION] Capturing screenshot");
+                    if let Some(path) = self.capture_screenshot_with_name(filename) {
+                        self.automation.record_screenshot(path.clone());
+                        if let Some(prompt) = prompt {
+                            info!("[AUTOMATION] Screenshot prompt: {}", prompt);
+                            // The prompt is logged for external analysis tools
+                            // (AI analysis would be run separately via scripts/analyze-image.ts)
+                        }
+                    }
+                }
+                AutomationRequest::SetWorldParam { category, name, value } => {
+                    info!("[AUTOMATION] Setting world param: {}.{} = {}", category, name, value);
+                    // TODO: Implement world parameter setting via world_tools
+                    warn!("SetWorldParam not yet fully implemented");
+                }
+            }
+        }
+        
+        // Handle movement override from automation
+        if let Some((dx, dy)) = self.automation.movement_override() {
+            if self.app_mode == AppMode::Playing {
+                // Apply movement directly to player
+                let speed = 100.0; // Base movement speed
+                let vx = dx * speed;
+                let vy = dy * speed;
+                self.gameplay.player.set_velocity(genesis_gameplay::input::Vec2::new(vx, vy));
+            }
+        }
+        
+        // Handle position teleport from automation
+        if let Some((x, y)) = self.automation.take_position_teleport() {
+            info!("[AUTOMATION] Teleporting player to ({}, {})", x, y);
+            self.gameplay.player.set_position(genesis_gameplay::input::Vec2::new(x, y));
+        }
+        
+        // Handle zoom request from automation
+        if let Some(zoom) = self.automation.take_zoom_request() {
+            info!("[AUTOMATION] Setting zoom to {}", zoom);
+            self.camera.set_zoom(zoom);
+        }
+        
+        // Handle camera position request from automation
+        if let Some((x, y)) = self.automation.take_camera_position_request() {
+            info!("[AUTOMATION] Moving camera to ({}, {})", x, y);
+            self.camera.center_on(x, y);
+        }
+    }
+
+    /// Starts a new game from the main menu.
+    fn start_new_game(&mut self) {
+        info!("Starting new game");
+        self.main_menu.hide();
+        self.app_mode = AppMode::Playing;
+        
+        // Reset gameplay state with new seed
+        let seed = self.terrain_service.seed();
+        self.gameplay = genesis_gameplay::GameState::with_player_position(seed, (128.0, 100.0));
+        self.gameplay.player.set_grounded(true);
+        
+        // Reset camera
+        let player_pos = self.gameplay.player_position();
+        self.camera.center_on(player_pos.0, player_pos.1);
+    }
+
+    /// Regenerates the terrain with the current world tools configuration.
+    fn regenerate_terrain(&mut self) {
+        let new_seed = self.world_tools.config().seed;
+        info!("Regenerating world with seed: {}", new_seed);
+
+        // Update the terrain service seed
+        self.terrain_service.set_seed(new_seed);
+
+        // Regenerate terrain in the renderer
+        if let Some(renderer) = &mut self.renderer {
+            renderer.regenerate_terrain(new_seed);
+        }
+
+        info!("World regeneration complete");
     }
 
     /// Updates crafting system for the frame.
@@ -1919,6 +2056,58 @@ impl ApplicationHandler for GenesisApp {
 
 /// Runs the main application loop.
 pub fn run() -> Result<()> {
+    // Parse command-line arguments for automation
+    let args: Vec<String> = std::env::args().collect();
+    let mut macro_file: Option<String> = None;
+    let mut macro_commands: Option<String> = None;
+    let mut auto_start = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--macro-file" | "-f" => {
+                if i + 1 < args.len() {
+                    macro_file = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--macro" | "-m" => {
+                if i + 1 < args.len() {
+                    macro_commands = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--auto-start" | "-a" => {
+                auto_start = true;
+            }
+            "--help" | "-h" => {
+                println!("Genesis Engine - Automation Options");
+                println!("");
+                println!("  --macro-file, -f <path>   Load and run a macro from JSON file");
+                println!("  --macro, -m <commands>    Run inline macro commands");
+                println!("  --auto-start, -a          Auto-start game (skip main menu)");
+                println!("");
+                println!("Macro command format: \"action1; action2; action3\"");
+                println!("Available actions:");
+                println!("  wait <ms>                 Wait for milliseconds");
+                println!("  move <dx> <dy> <ms>       Move in direction for duration");
+                println!("  setpos <x> <y>            Teleport to position");
+                println!("  zoom <level>              Set camera zoom");
+                println!("  screenshot [filename]     Capture screenshot");
+                println!("  newgame                   Start new game");
+                println!("  pause                     Open pause menu");
+                println!("  resume                    Resume game");
+                println!("  worldtools                Open world tools");
+                println!("  seed <value>              Set world seed");
+                println!("  regen                     Regenerate world");
+                println!("  log <message>             Log a message");
+                return Ok(());
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
     // Load configuration
     let mut config = EngineConfig::load();
     config.validate();
@@ -1933,6 +2122,55 @@ pub fn run() -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = GenesisApp::new(config);
+
+    // Set up automation if requested
+    if macro_file.is_some() || macro_commands.is_some() || auto_start {
+        app.automation.enable();
+        info!("Automation system enabled");
+
+        // Load built-in test macros
+        app.automation.register_macro(crate::automation::AutomationSystem::create_biome_test_macro());
+        app.automation.register_macro(crate::automation::AutomationSystem::create_regen_test_macro());
+
+        // Load macros from directory
+        let loaded = app.automation.load_macros_from_dir();
+        if !loaded.is_empty() {
+            info!("Loaded macros from directory: {:?}", loaded);
+        }
+
+        // Load macro file if specified
+        if let Some(path) = macro_file {
+            match app.automation.load_macro_file(std::path::Path::new(&path)) {
+                Ok(name) => {
+                    info!("Running macro '{}' from file", name);
+                    if let Err(e) = app.automation.run_macro(&name) {
+                        error!("Failed to run macro: {}", e);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to load macro file: {}", e);
+                }
+            }
+        }
+
+        // Parse inline macro commands if specified
+        if let Some(commands) = macro_commands {
+            match crate::automation::parse_cli_macro(&commands) {
+                Ok(actions) => {
+                    info!("Queuing {} inline macro actions", actions.len());
+                    app.automation.queue_actions(actions);
+                }
+                Err(e) => {
+                    error!("Failed to parse macro commands: {}", e);
+                }
+            }
+        }
+
+        // Auto-start game if requested
+        if auto_start {
+            app.automation.queue_action(crate::automation::AutomationAction::StartNewGame);
+        }
+    }
 
     info!("Starting event loop...");
     event_loop.run_app(&mut app)?;

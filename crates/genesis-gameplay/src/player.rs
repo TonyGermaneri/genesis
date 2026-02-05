@@ -387,6 +387,11 @@ impl Player {
         self.velocity
     }
 
+    /// Set the player's velocity directly.
+    pub fn set_velocity(&mut self, velocity: Vec2) {
+        self.velocity = velocity;
+    }
+
     /// Get the direction the player is facing.
     #[must_use]
     pub fn facing(&self) -> Direction {

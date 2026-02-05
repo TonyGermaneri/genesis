@@ -1,0 +1,141 @@
+{
+  "name": "seed_comparison",
+  "description": "Compares terrain generation across multiple seeds to evaluate diversity",
+  "actions": [
+    {
+      "type": "log",
+      "message": "Starting seed comparison test"
+    },
+    {
+      "type": "start_new_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2000
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 2.5
+    },
+    {
+      "type": "screenshot",
+      "filename": "seed_default.png",
+      "prompt": "Describe the terrain with the default seed. Note the biomes, colors, and terrain features."
+    },
+    {
+      "type": "open_pause_menu"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "open_world_tools"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "set_seed",
+      "seed": 12345
+    },
+    {
+      "type": "regenerate_world"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "resume_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "seed_12345.png",
+      "prompt": "Describe the terrain with seed 12345. How does it differ from the default seed?"
+    },
+    {
+      "type": "open_pause_menu"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "open_world_tools"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "set_seed",
+      "seed": 99999
+    },
+    {
+      "type": "regenerate_world"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "resume_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "seed_99999.png",
+      "prompt": "Describe the terrain with seed 99999. Compare the diversity and features to the previous seeds."
+    },
+    {
+      "type": "open_pause_menu"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "open_world_tools"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "set_seed",
+      "seed": 777777
+    },
+    {
+      "type": "regenerate_world"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "resume_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "seed_777777.png",
+      "prompt": "Describe the terrain with seed 777777. Provide an overall assessment of terrain diversity across all tested seeds."
+    },
+    {
+      "type": "log",
+      "message": "Seed comparison complete - 4 seeds tested"
+    }
+  ]
+}
