@@ -46,8 +46,13 @@ struct RenderParams {
     camera_y: i32,
     zoom: f32,
     time_of_day: f32,
-    _padding: u32,
+    debug_flags: u32,  // Bit flags: 1=pure_noise, 2=biome_edges, 4=chunk_edges
 }
+
+// Debug flag constants
+const DEBUG_PURE_NOISE: u32 = 1u;
+const DEBUG_BIOME_EDGES: u32 = 2u;
+const DEBUG_CHUNK_EDGES: u32 = 4u;
 
 // Chunk offset parameters
 struct ChunkParams {
@@ -421,12 +426,26 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // If material is 0 (uninitialized/default), use biome fallback color.
     // This handles edge cases where cells haven't been properly generated.
 
-    // DEBUG MODE: Skip atlas entirely, use pure biome colors + noise
-    // Set to true to isolate whether grid patterns come from noise or atlas sampling
-    let DEBUG_PURE_NOISE = false;
-    
-    if DEBUG_PURE_NOISE {
-        // Pure noise-based coloring - no atlas, no texture sampling
+    // DEBUG: Show chunk edges as red lines
+    if (params.debug_flags & DEBUG_CHUNK_EDGES) != 0u {
+        if local_x == 0 || local_y == 0 || local_x == i32(params.chunk_size) - 1 || local_y == i32(params.chunk_size) - 1 {
+            return vec4<f32>(1.0, 0.0, 0.0, 1.0); // Red chunk boundaries
+        }
+    }
+
+    // DEBUG: Show biome edges as cyan lines
+    if (params.debug_flags & DEBUG_BIOME_EDGES) != 0u {
+        let n_biome = get_neighbor_biome(local_x, local_y - 1, i32(params.chunk_size));
+        let s_biome = get_neighbor_biome(local_x, local_y + 1, i32(params.chunk_size));
+        let e_biome = get_neighbor_biome(local_x + 1, local_y, i32(params.chunk_size));
+        let w_biome = get_neighbor_biome(local_x - 1, local_y, i32(params.chunk_size));
+        if n_biome != biome_id || s_biome != biome_id || e_biome != biome_id || w_biome != biome_id {
+            return vec4<f32>(0.0, 1.0, 1.0, 1.0); // Cyan biome boundaries
+        }
+    }
+
+    // DEBUG: Pure noise mode (skip atlas entirely)
+    if (params.debug_flags & DEBUG_PURE_NOISE) != 0u {
         let varied = get_biome_color_varied(biome_id, world_x, world_y);
         let lit = apply_lighting(varied, params.time_of_day);
         return vec4<f32>(lit.r, lit.g, lit.b, 1.0);
@@ -485,6 +504,8 @@ pub struct AutotileChunkRenderer {
     chunk_size: u32,
     /// Whether atlas is bound
     atlas_bound: bool,
+    /// Debug visualization flags
+    debug_flags: u32,
 }
 
 impl AutotileChunkRenderer {
@@ -648,6 +669,7 @@ impl AutotileChunkRenderer {
             atlas_bind_group_entries: None,
             chunk_size,
             atlas_bound: false,
+            debug_flags: 0,
         }
     }
 
@@ -691,7 +713,18 @@ impl AutotileChunkRenderer {
         params.set_camera(camera.position.0 as i32, camera.position.1 as i32);
         params.set_zoom(camera.zoom);
         params.set_time_of_day(time_of_day);
+        params.debug_flags = self.debug_flags;
         queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&params));
+    }
+
+    /// Set debug visualization flags
+    pub fn set_debug_flags(&mut self, flags: u32) {
+        self.debug_flags = flags;
+    }
+
+    /// Get current debug flags
+    pub fn debug_flags(&self) -> u32 {
+        self.debug_flags
     }
 
     /// Update or create chunk buffer

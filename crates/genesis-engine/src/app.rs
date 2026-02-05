@@ -1517,6 +1517,12 @@ impl GenesisApp {
                     info!("Importing world configuration...");
                     // TODO: Load config from file
                 }
+                WorldToolsAction::SetDebugFlags(flags) => {
+                    info!("Setting debug flags: 0x{:08X}", flags);
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.set_debug_flags(flags);
+                    }
+                }
             }
         }
     }

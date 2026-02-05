@@ -52,6 +52,16 @@ impl MaterialColor {
     }
 }
 
+/// Debug flag bits for RenderParams.debug_flags
+pub mod debug_flags {
+    /// Use pure noise colors instead of atlas textures
+    pub const PURE_NOISE: u32 = 1;
+    /// Show biome boundaries as lines
+    pub const SHOW_BIOME_EDGES: u32 = 2;
+    /// Show chunk boundaries as lines
+    pub const SHOW_CHUNK_EDGES: u32 = 4;
+}
+
 /// Render parameters for the cell render shader.
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
@@ -70,8 +80,8 @@ pub struct RenderParams {
     pub zoom: f32,
     /// Time of day (0.0-1.0, 0=midnight, 0.5=noon)
     pub time_of_day: f32,
-    /// Padding for alignment
-    _padding: u32,
+    /// Debug flags (bit flags for debug rendering modes)
+    pub debug_flags: u32,
 }
 
 impl Default for RenderParams {
@@ -84,7 +94,7 @@ impl Default for RenderParams {
             camera_y: 0,
             zoom: 4.0,        // Larger zoom for better visibility on high-DPI screens
             time_of_day: 0.5, // Default to noon
-            _padding: 0,
+            debug_flags: 0,   // No debug flags by default
         }
     }
 }
@@ -101,8 +111,23 @@ impl RenderParams {
             camera_y: 0,
             zoom: 2.0,
             time_of_day: 0.5,
-            _padding: 0,
+            debug_flags: 0,
         }
+    }
+
+    /// Sets debug flags.
+    pub fn set_debug_flags(&mut self, flags: u32) {
+        self.debug_flags = flags;
+    }
+
+    /// Toggles a debug flag.
+    pub fn toggle_debug_flag(&mut self, flag: u32) {
+        self.debug_flags ^= flag;
+    }
+
+    /// Checks if a debug flag is set.
+    pub fn has_debug_flag(&self, flag: u32) -> bool {
+        (self.debug_flags & flag) != 0
     }
 
     /// Sets the camera position.

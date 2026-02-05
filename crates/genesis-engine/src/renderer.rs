@@ -247,6 +247,14 @@ impl Renderer {
         }
     }
 
+    /// Set debug visualization flags for the terrain shader.
+    pub fn set_debug_flags(&mut self, flags: u32) {
+        if let Some(autotile) = &mut self.autotile_renderer {
+            autotile.set_debug_flags(flags);
+            info!("Debug flags set to 0x{:08X}", flags);
+        }
+    }
+
     /// Returns whether streaming terrain is enabled.
     #[must_use]
     pub const fn is_streaming_terrain_enabled(&self) -> bool {

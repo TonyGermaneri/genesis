@@ -688,6 +688,8 @@ pub enum WorldToolsTab {
     Materials,
     /// World generation settings tab.
     WorldGen,
+    /// Debug rendering tab.
+    Debug,
 }
 
 impl WorldToolsTab {
@@ -700,6 +702,7 @@ impl WorldToolsTab {
             Self::Factions,
             Self::Materials,
             Self::WorldGen,
+            Self::Debug,
         ]
     }
 
@@ -712,6 +715,7 @@ impl WorldToolsTab {
             Self::Factions => "Factions",
             Self::Materials => "Materials",
             Self::WorldGen => "World Gen",
+            Self::Debug => "Debug",
         }
     }
 
@@ -724,6 +728,7 @@ impl WorldToolsTab {
             Self::Factions => "⚔",
             Self::Materials => "🧱",
             Self::WorldGen => "🌍",
+            Self::Debug => "🐛",
         }
     }
 }
@@ -747,6 +752,8 @@ pub struct WorldTools {
     selected_material: usize,
     /// Whether config has been modified.
     modified: bool,
+    /// Debug flags for shader visualization.
+    debug_flags: u32,
     /// Pending actions.
     actions: Vec<WorldToolsAction>,
 }
@@ -768,6 +775,8 @@ pub enum WorldToolsAction {
     ImportConfig,
     /// Randomize seed.
     RandomizeSeed,
+    /// Set debug flags for shader visualization.
+    SetDebugFlags(u32),
 }
 
 impl Default for WorldTools {
@@ -788,6 +797,7 @@ impl WorldTools {
             selected_faction: 0,
             selected_material: 0,
             modified: false,
+            debug_flags: 0,
             actions: Vec::new(),
         }
     }
@@ -837,6 +847,16 @@ impl WorldTools {
     /// Clear modified flag.
     pub fn clear_modified(&mut self) {
         self.modified = false;
+    }
+
+    /// Get current debug flags.
+    pub fn debug_flags(&self) -> u32 {
+        self.debug_flags
+    }
+
+    /// Set debug flags.
+    pub fn set_debug_flags(&mut self, flags: u32) {
+        self.debug_flags = flags;
     }
 
     /// Drain pending actions.
@@ -916,6 +936,7 @@ impl WorldTools {
                         WorldToolsTab::Factions => self.render_factions_tab(ui),
                         WorldToolsTab::Materials => self.render_materials_tab(ui),
                         WorldToolsTab::WorldGen => self.render_worldgen_tab(ui),
+                        WorldToolsTab::Debug => self.render_debug_tab(ui),
                     }
                 });
 
@@ -1624,6 +1645,92 @@ impl WorldTools {
                 self.actions.push(WorldToolsAction::ImportConfig);
             }
         });
+    }
+
+    fn render_debug_tab(&mut self, ui: &mut Ui) {
+        ui.heading("Debug Visualization");
+        ui.label("Toggle shader debug modes to diagnose rendering issues.");
+        ui.add_space(8.0);
+
+        // Debug flag constants (must match genesis_kernel::render::debug_flags)
+        const DEBUG_PURE_NOISE: u32 = 1;
+        const DEBUG_BIOME_EDGES: u32 = 2;
+        const DEBUG_CHUNK_EDGES: u32 = 4;
+
+        ui.label(RichText::new("Shader Debug Modes").strong());
+        ui.add_space(4.0);
+
+        let mut pure_noise = (self.debug_flags & DEBUG_PURE_NOISE) != 0;
+        let mut biome_edges = (self.debug_flags & DEBUG_BIOME_EDGES) != 0;
+        let mut chunk_edges = (self.debug_flags & DEBUG_CHUNK_EDGES) != 0;
+
+        let mut changed = false;
+
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut pure_noise, "Pure Noise Mode").changed() {
+                changed = true;
+            }
+        });
+        ui.label("  → Skip texture atlas, show raw noise colors (diagnoses atlas vs noise issues)");
+
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut biome_edges, "Show Biome Edges").changed() {
+                changed = true;
+            }
+        });
+        ui.label("  → Highlight biome boundaries with cyan lines");
+
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut chunk_edges, "Show Chunk Edges").changed() {
+                changed = true;
+            }
+        });
+        ui.label("  → Highlight chunk boundaries with red lines");
+
+        if changed {
+            self.debug_flags = 0;
+            if pure_noise {
+                self.debug_flags |= DEBUG_PURE_NOISE;
+            }
+            if biome_edges {
+                self.debug_flags |= DEBUG_BIOME_EDGES;
+            }
+            if chunk_edges {
+                self.debug_flags |= DEBUG_CHUNK_EDGES;
+            }
+            self.actions.push(WorldToolsAction::SetDebugFlags(self.debug_flags));
+        }
+
+        ui.add_space(16.0);
+        ui.separator();
+
+        ui.label(RichText::new("Current State").strong());
+        ui.label(format!("Debug flags: 0x{:08X}", self.debug_flags));
+        ui.label(format!(
+            "Active modes: {}",
+            if self.debug_flags == 0 {
+                "None (normal rendering)".to_string()
+            } else {
+                let mut modes = Vec::new();
+                if pure_noise { modes.push("PureNoise"); }
+                if biome_edges { modes.push("BiomeEdges"); }
+                if chunk_edges { modes.push("ChunkEdges"); }
+                modes.join(", ")
+            }
+        ));
+
+        ui.add_space(16.0);
+        ui.separator();
+
+        ui.label(RichText::new("Diagnostic Tips").strong());
+        ui.label("• If grid patterns disappear in Pure Noise mode → issue is in texture atlas assignment");
+        ui.label("• If grid patterns remain in Pure Noise mode → issue is in noise generation");
+        ui.label("• Chunk edges help identify chunk boundary artifacts");
+        ui.label("• Biome edges help identify biome transition issues");
     }
 }
 
