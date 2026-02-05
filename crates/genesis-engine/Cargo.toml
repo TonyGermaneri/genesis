@@ -39,6 +39,9 @@ egui-winit = { workspace = true }
 # Audio playback
 rodio = "0.19"
 
+# Image encoding for screenshots
+png = "0.17"
+
 # Platform directories
 dirs = "5.0"
 

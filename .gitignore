@@ -71,3 +71,10 @@ assets/processed/
 .env
 .env.local
 .env.*.local
+
+# Scripts
+scripts/node_modules/
+scripts/dist/
+
+# Screenshots (development only)
+screenshots/

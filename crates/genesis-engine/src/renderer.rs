@@ -217,20 +217,20 @@ impl Renderer {
     /// with the new seed, forcing full regeneration.
     pub fn regenerate_terrain(&mut self, new_seed: u64) {
         info!("Regenerating terrain with new seed: {}", new_seed);
-        
+
         // Get the current config if streaming is enabled
         let config = self.streaming_terrain
             .as_ref()
             .map(|t| t.config().clone())
             .unwrap_or_default();
-        
+
         let chunk_size = config.chunk_size;
-        
+
         // Clear autotile renderer if present
         if let Some(autotile) = &mut self.autotile_renderer {
             autotile.clear();
         }
-        
+
         // Clear chunk render manager by recreating it
         if self.chunk_render_manager.is_some() {
             self.chunk_render_manager = Some(ChunkRenderManager::new(
@@ -239,7 +239,7 @@ impl Renderer {
                 chunk_size,
             ));
         }
-        
+
         // Recreate streaming terrain with new seed
         if self.streaming_terrain.is_some() {
             self.streaming_terrain = Some(StreamingTerrain::new(new_seed, config));
@@ -899,6 +899,232 @@ impl Renderer {
         if let Some(cm) = &mut self.chunk_manager {
             cm.step_simulation(&self.device, &self.queue, &self.compute_pipeline);
         }
+    }
+
+    /// Captures a screenshot and saves it to the specified path.
+    ///
+    /// This captures the current framebuffer content as a PNG image.
+    /// The capture is done by rendering to a separate texture and copying it back to CPU.
+    ///
+    /// # Arguments
+    /// * `path` - The file path to save the screenshot to (should end in .png)
+    /// * `camera` - The current camera for rendering
+    /// * `window` - The window for egui context
+    ///
+    /// # Returns
+    /// The path to the saved screenshot file, or an error.
+    pub fn capture_screenshot<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+        camera: &Camera,
+        _window: &Window,
+    ) -> Result<std::path::PathBuf> {
+        use std::io::Write;
+
+        info!("Capturing screenshot to {:?}", path.as_ref());
+
+        let width = self.size.width;
+        let height = self.size.height;
+
+        // Create a texture to render to (instead of the surface)
+        // Use the same format as the surface for compatibility with render pipelines
+        let capture_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Screenshot Capture Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.config.format, // Use surface format for compatibility
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        let capture_view = capture_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Calculate buffer size with proper alignment
+        let bytes_per_pixel = 4u32;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
+        let buffer_size = (padded_bytes_per_row * height) as u64;
+
+        // Create buffer for reading back
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Screenshot Output Buffer"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        // Update camera for render
+        self.render_pipeline.set_camera(
+            &self.queue,
+            camera.position.0 as i32,
+            camera.position.1 as i32,
+        );
+        self.render_pipeline.set_zoom(&self.queue, camera.zoom);
+
+        // Update renderers with camera
+        if let Some(render_mgr) = &mut self.chunk_render_manager {
+            render_mgr.update_camera(&self.queue, camera);
+        }
+        if let Some(textured_mgr) = &mut self.textured_renderer {
+            textured_mgr.update_camera(&self.queue, camera);
+        }
+        if let Some(autotile_mgr) = &mut self.autotile_renderer {
+            autotile_mgr.update_params(&self.queue, camera, 0.5);
+        }
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Screenshot Encoder"),
+        });
+
+        // Render world to capture texture
+        {
+            let visible_chunks: Vec<(i32, i32)> = if let Some(terrain) = &self.streaming_terrain {
+                terrain.loaded_chunks().map(|c| (c.id.x, c.id.y)).collect()
+            } else {
+                vec![]
+            };
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Screenshot Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &capture_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.15,
+                            b: 0.2,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Render using appropriate renderer
+            if let Some(autotile_mgr) = &self.autotile_renderer {
+                if autotile_mgr.is_atlas_bound() && !visible_chunks.is_empty() {
+                    autotile_mgr.render(&mut render_pass, &visible_chunks);
+                } else if let Some(render_mgr) = &self.chunk_render_manager {
+                    render_mgr.render(&mut render_pass);
+                } else {
+                    self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
+                }
+            } else if let Some(textured_mgr) = &self.textured_renderer {
+                if textured_mgr.has_terrain_atlas() {
+                    textured_mgr.render(&mut render_pass);
+                } else if let Some(render_mgr) = &self.chunk_render_manager {
+                    render_mgr.render(&mut render_pass);
+                } else {
+                    self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
+                }
+            } else if let Some(render_mgr) = &self.chunk_render_manager {
+                render_mgr.render(&mut render_pass);
+            } else {
+                self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
+            }
+        }
+
+        // Copy texture to buffer
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &capture_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &output_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Map buffer and read data
+        let buffer_slice = output_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).unwrap();
+        });
+
+        self.device.poll(wgpu::Maintain::Wait);
+
+        rx.recv()
+            .context("Failed to receive map result")?
+            .context("Failed to map buffer")?;
+
+        let data = buffer_slice.get_mapped_range();
+
+        // Remove padding and collect actual image data
+        // Also convert BGRA to RGBA if needed (most surfaces use BGRA)
+        let is_bgra = matches!(
+            self.config.format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+
+        let mut image_data = Vec::with_capacity((width * height * 4) as usize);
+        for row in 0..height {
+            let row_start = (row * padded_bytes_per_row) as usize;
+            let row_end = row_start + (width * bytes_per_pixel) as usize;
+            let row_data = &data[row_start..row_end];
+            
+            if is_bgra {
+                // Convert BGRA to RGBA
+                for pixel in row_data.chunks(4) {
+                    image_data.push(pixel[2]); // R (was B)
+                    image_data.push(pixel[1]); // G
+                    image_data.push(pixel[0]); // B (was R)
+                    image_data.push(pixel[3]); // A
+                }
+            } else {
+                image_data.extend_from_slice(row_data);
+            }
+        }
+
+        drop(data);
+        output_buffer.unmap();
+
+        // Encode as PNG
+        let mut png_data = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png_data, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().context("Failed to write PNG header")?;
+            writer.write_image_data(&image_data).context("Failed to write PNG data")?;
+        }
+
+        // Save to file
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).context("Failed to create screenshot directory")?;
+        }
+        let mut file = std::fs::File::create(path).context("Failed to create screenshot file")?;
+        file.write_all(&png_data).context("Failed to write screenshot data")?;
+
+        info!("Screenshot saved: {:?} ({}x{})", path, width, height);
+
+        Ok(path.to_path_buf())
     }
 }
 

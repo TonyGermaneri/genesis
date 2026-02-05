@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use std::time::Instant;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -375,6 +375,11 @@ impl GenesisApp {
             );
         }
 
+        // Handle screenshot capture (F12 key)
+        if self.input.is_key_just_pressed(KeyCode::F12) {
+            self.capture_screenshot();
+        }
+
         // Handle pause/menu toggle (Escape)
         if self.input.pause_pressed() {
             match self.app_mode {
@@ -740,6 +745,33 @@ impl GenesisApp {
     pub fn play_ui_sound(&mut self, name: &str) {
         let event = SoundEvent::new(AudioCategory::Ui, name);
         self.audio.queue_sound(event);
+    }
+
+    /// Captures a screenshot of the current game view.
+    fn capture_screenshot(&mut self) {
+        // Generate filename with timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let screenshots_dir = std::path::PathBuf::from("screenshots");
+        let filename = format!("genesis_{}.png", timestamp);
+        let path = screenshots_dir.join(&filename);
+
+        // Capture screenshot using renderer
+        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+            match renderer.capture_screenshot(&path, &self.camera, window) {
+                Ok(saved_path) => {
+                    info!("Screenshot saved: {:?}", saved_path);
+                }
+                Err(e) => {
+                    error!("Failed to capture screenshot: {}", e);
+                }
+            }
+        } else {
+            error!("Cannot capture screenshot: renderer or window not available");
+        }
     }
 
     /// Updates crafting system for the frame.
@@ -1316,15 +1348,15 @@ impl GenesisApp {
                 WorldToolsAction::RegenerateWorld => {
                     let new_seed = self.world_tools.config().seed;
                     info!("Regenerating world with seed: {}", new_seed);
-                    
+
                     // Update the terrain service seed
                     self.terrain_service.set_seed(new_seed);
-                    
+
                     // Regenerate terrain in the renderer
                     if let Some(renderer) = &mut self.renderer {
                         renderer.regenerate_terrain(new_seed);
                     }
-                    
+
                     info!("World regeneration complete");
                 }
                 WorldToolsAction::ResetDefaults => {
