@@ -409,10 +409,22 @@ impl GenesisApp {
                     self.pause_menu.show();
                 },
                 AppMode::Paused => {
-                    // Toggle pause menu or close to resume
-                    self.pause_menu.toggle();
-                    if !self.pause_menu.is_visible() {
-                        info!("Game resumed");
+                    // Check which dialog is open and close it appropriately
+                    if self.world_tools.is_visible() {
+                        // Close world tools, go back to pause menu
+                        info!("Closing world tools via ESC");
+                        self.world_tools.hide();
+                        self.pause_menu.show();
+                    } else if self.options_menu.is_visible() {
+                        // Cancel options menu (revert changes), go back to pause menu
+                        info!("Cancelling options via ESC");
+                        self.options_menu.cancel();
+                        self.options_menu.hide();
+                        self.pause_menu.show();
+                    } else if self.pause_menu.is_visible() {
+                        // Close pause menu and resume game
+                        info!("Game resumed via ESC");
+                        self.pause_menu.hide();
                         self.app_mode = AppMode::Playing;
                     }
                 },
@@ -1473,7 +1485,10 @@ impl GenesisApp {
             match action {
                 OptionsMenuAction::Apply => {
                     info!("Applying options...");
-                    // TODO: Apply settings to engine config
+                    // Apply camera zoom from graphics settings
+                    let camera_zoom = self.options_menu.settings().graphics.camera_zoom;
+                    self.camera.set_zoom(camera_zoom);
+                    info!("Camera zoom set to: {}", camera_zoom);
                     self.options_menu.hide();
                 }
                 OptionsMenuAction::Cancel => {
@@ -1482,6 +1497,10 @@ impl GenesisApp {
                 }
                 OptionsMenuAction::ResetToDefaults => {
                     info!("Resetting options to defaults...");
+                }
+                OptionsMenuAction::CameraZoomChanged(zoom) => {
+                    // Apply zoom immediately for live preview
+                    self.camera.set_zoom(zoom);
                 }
                 _ => {}
             }
@@ -1495,11 +1514,7 @@ impl GenesisApp {
                     self.world_tools.hide();
                     self.pause_menu.show();
                 }
-                WorldToolsAction::ApplyChanges => {
-                    info!("Applying world generation changes...");
-                    // TODO: Apply biome/noise changes to the simulation
-                }
-                WorldToolsAction::RegenerateWorld => {
+                WorldToolsAction::ApplyChanges | WorldToolsAction::RegenerateWorld => {
                     let new_seed = self.world_tools.config().seed;
                     info!("Regenerating world with seed: {}", new_seed);
 

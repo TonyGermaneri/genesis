@@ -1,16 +1,16 @@
 #!/usr/bin/env npx ts-node
 /**
  * Generate a reference autotile atlas that visually shows the 47-tile blob pattern.
- * 
+ *
  * Each tile shows its neighbor configuration:
  * - Filled areas indicate where same-terrain neighbors exist
  * - This helps verify the engine is selecting correct tiles
- * 
+ *
  * The 47-tile blob format uses an 8-bit bitmask:
  *   NW(1)  N(2)  NE(4)
  *    W(8)   *   E(16)
  *   SW(32) S(64) SE(128)
- * 
+ *
  * Corner bits only count if both adjacent cardinals are present.
  */
 
@@ -125,23 +125,24 @@ const TERRAIN_COLORS: [number, number, number][] = [
  */
 function drawAutotileBitmask(
   ctx: CanvasRenderingContext2D,
-  x: number, 
-  y: number, 
+  x: number,
+  y: number,
   mask: number,
   baseColor: [number, number, number],
-  tileIndex: number
+  tileIndex: number,
+  showNumbers: boolean = true
 ): void {
   const [r, g, b] = baseColor;
   const cellSize = TILE_SIZE / 3;
-  
+
   // Background (no neighbor = darker/empty look)
   ctx.fillStyle = `rgb(${Math.floor(r * 0.3)}, ${Math.floor(g * 0.3)}, ${Math.floor(b * 0.3)})`;
   ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-  
+
   // Fill center always (this is the cell itself)
   ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
   ctx.fillRect(x + cellSize, y + cellSize, cellSize, cellSize);
-  
+
   // Check each neighbor and fill if present
   // North
   if (mask & N) {
@@ -175,42 +176,45 @@ function drawAutotileBitmask(
   if ((mask & SE) && (mask & S) && (mask & E)) {
     ctx.fillRect(x + 2 * cellSize, y + 2 * cellSize, cellSize, cellSize);
   }
-  
-  // Draw grid lines to show the 3x3 structure
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 3; i++) {
-    // Vertical lines
-    ctx.beginPath();
-    ctx.moveTo(x + i * cellSize, y);
-    ctx.lineTo(x + i * cellSize, y + TILE_SIZE);
-    ctx.stroke();
-    // Horizontal lines
-    ctx.beginPath();
-    ctx.moveTo(x, y + i * cellSize);
-    ctx.lineTo(x + TILE_SIZE, y + i * cellSize);
-    ctx.stroke();
+
+  // Draw tile index in center (only if showNumbers is true)
+  if (showNumbers) {
+    // Draw grid lines to show the 3x3 structure (debug only)
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) {
+      // Vertical lines
+      ctx.beginPath();
+      ctx.moveTo(x + i * cellSize, y);
+      ctx.lineTo(x + i * cellSize, y + TILE_SIZE);
+      ctx.stroke();
+      // Horizontal lines
+      ctx.beginPath();
+      ctx.moveTo(x, y + i * cellSize);
+      ctx.lineTo(x + TILE_SIZE, y + i * cellSize);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    const label = tileIndex.toString();
+    ctx.strokeText(label, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+    ctx.fillText(label, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+
+    // Draw tile border (only when showing numbers for debug purposes)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
   }
-  
-  // Draw tile index in center
-  ctx.fillStyle = 'white';
-  ctx.font = 'bold 12px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.strokeStyle = 'black';
-  ctx.lineWidth = 2;
-  const label = tileIndex.toString();
-  ctx.strokeText(label, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
-  ctx.fillText(label, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
-  
-  // Draw tile border
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
 }
 
-function generateReferenceAtlas(outputPath: string): void {
-  console.log('🎨 Generating Reference Autotile Atlas');
+function generateReferenceAtlas(outputPath: string, showNumbers: boolean = true): void {
+  const mode = showNumbers ? 'with labels' : 'clean (no labels)';
+  console.log(`🎨 Generating Reference Autotile Atlas (${mode})`);
   console.log(`   Size: ${ATLAS_WIDTH}x${ATLAS_HEIGHT} pixels`);
   console.log(`   Terrain types: ${TERRAIN_COUNT}`);
   console.log(`   Tiles per terrain: ${TILES_PER_TERRAIN}`);
@@ -238,22 +242,24 @@ function generateReferenceAtlas(outputPath: string): void {
 
       // Get the bitmask for this tile index (0-46), or use 255 for tile 47
       const mask = tileIndex < TILE_TO_MASK.length ? TILE_TO_MASK[tileIndex] : 255;
-      
-      drawAutotileBitmask(ctx, tileX, tileY, mask, baseColor, tileIndex);
+
+      drawAutotileBitmask(ctx, tileX, tileY, mask, baseColor, tileIndex, showNumbers);
     }
 
-    // Draw terrain label on first tile
-    const firstTileX = 0;
-    const firstTileY = terrainBaseY;
-    ctx.fillStyle = 'yellow';
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
-    const terrainLabel = `T${terrain}`;
-    ctx.strokeText(terrainLabel, firstTileX + 2, firstTileY + TILE_SIZE - 2);
-    ctx.fillText(terrainLabel, firstTileX + 2, firstTileY + TILE_SIZE - 2);
+    // Draw terrain label on first tile (only if showing numbers)
+    if (showNumbers) {
+      const firstTileX = 0;
+      const firstTileY = terrainBaseY;
+      ctx.fillStyle = 'yellow';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 2;
+      const terrainLabel = `T${terrain}`;
+      ctx.strokeText(terrainLabel, firstTileX + 2, firstTileY + TILE_SIZE - 2);
+      ctx.fillText(terrainLabel, firstTileX + 2, firstTileY + TILE_SIZE - 2);
+    }
   }
 
   // Save the image
@@ -275,5 +281,8 @@ function generateReferenceAtlas(outputPath: string): void {
 }
 
 // Main
-const outputPath = process.argv[2] || path.join(__dirname, '..', 'assets', 'reference_autotile_atlas.png');
-generateReferenceAtlas(outputPath);
+const args = process.argv.slice(2);
+const cleanMode = args.includes('--clean');
+const outputArg = args.find(a => !a.startsWith('--'));
+const outputPath = outputArg || path.join(__dirname, '..', 'assets', cleanMode ? 'reference_autotile_atlas_clean.png' : 'reference_autotile_atlas.png');
+generateReferenceAtlas(outputPath, !cleanMode);

@@ -175,6 +175,8 @@ pub struct GraphicsSettings {
     pub motion_blur: bool,
     /// Gamma correction (0.5 - 2.5)
     pub gamma: f32,
+    /// Camera zoom level (0.25 - 20.0)
+    pub camera_zoom: f32,
 }
 
 impl Default for GraphicsSettings {
@@ -193,6 +195,7 @@ impl Default for GraphicsSettings {
             ambient_occlusion: true,
             motion_blur: false,
             gamma: 1.0,
+            camera_zoom: 10.0,
         }
     }
 }
@@ -209,6 +212,7 @@ impl GraphicsSettings {
         };
         self.texture_quality = self.texture_quality.min(100);
         self.gamma = self.gamma.clamp(0.5, 2.5);
+        self.camera_zoom = self.camera_zoom.clamp(0.25, 20.0);
     }
 }
 
@@ -596,6 +600,8 @@ pub enum OptionsMenuAction {
     SettingsChanged,
     /// Start key rebinding
     StartRebind(KeyAction),
+    /// Camera zoom changed (for live preview)
+    CameraZoomChanged(f32),
 }
 
 /// Configuration for options menu appearance
@@ -1064,6 +1070,22 @@ impl OptionsMenu {
         {
             self.has_changes = true;
         }
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            ui.label("Camera Zoom:");
+            if ui
+                .add(egui::Slider::new(&mut graphics.camera_zoom, 0.25..=20.0).logarithmic(true))
+                .changed()
+            {
+                self.has_changes = true;
+                // Send immediate zoom update for live preview
+                self.actions.push(OptionsMenuAction::CameraZoomChanged(graphics.camera_zoom));
+            }
+        });
     }
 
     fn render_audio_tab(&mut self, ui: &mut Ui) {

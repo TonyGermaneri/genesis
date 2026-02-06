@@ -18,11 +18,10 @@ use wgpu::{Device, Queue};
 pub const DEFAULT_TERRAIN_ASSETS_PATH: &str =
     "/Users/tonygermaneri/gh/game_assets/modernexteriors-win/Modern_Exteriors_48x48/Modern_Exteriors_Complete_Singles_48x48";
 
-/// Default path for Modern Exteriors 48x48 autotiles
-pub const DEFAULT_AUTOTILE_PATH: &str =
-    "/Users/tonygermaneri/gh/game_assets/modernexteriors-win/Modern_Exteriors_48x48/Autotiles_48x48/Godot_Autotiles_48x48.png";
+/// Default path for autotile atlas (now using clean reference atlas)
+pub const DEFAULT_AUTOTILE_PATH: &str = "assets/reference_autotile_atlas_clean.png";
 
-/// Path for reference/debug autotile atlas
+/// Path for reference/debug autotile atlas (with labels for debugging)
 pub const DEBUG_AUTOTILE_PATH: &str = "assets/reference_autotile_atlas.png";
 
 /// Asset loading configuration
