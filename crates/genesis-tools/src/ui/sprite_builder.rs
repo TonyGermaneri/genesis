@@ -1185,7 +1185,7 @@ impl SpriteBuilder {
         // Fixed column widths
         let char_list_width = 160.0;
         let frame_editor_width = 280.0;
-        let preview_width = 300.0;
+        let preview_width = 700.0;
 
         // Scale down if needed to fit
         let total_needed = char_list_width + frame_editor_width + preview_width + 24.0;
@@ -1233,7 +1233,7 @@ impl SpriteBuilder {
     /// Render the sprite sheet preview with interactive selection boxes.
     fn render_sprite_sheet_preview(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         ui.label(RichText::new("Sprite Sheet Preview").strong());
-
+        ui.set_max_width(1200.0);
         // Zoom controls
         ui.horizontal(|ui| {
             ui.label("Zoom:");
@@ -1283,7 +1283,7 @@ impl SpriteBuilder {
         let zoom = self.sheet_zoom;
 
         // Draw sprite sheet in scroll area - use fixed max heights to prevent overflow
-        let scroll_width = ui.available_width().min(700.0);
+        let scroll_width = 1200.0;
         let scroll_height = 300.0; // Fixed height for sprite sheet preview
 
         let mut new_selected_frame: Option<usize> = None;
