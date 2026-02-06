@@ -68,6 +68,7 @@ pub mod lighting;
 pub mod npc_collision;
 pub mod npc_render;
 pub mod particles;
+pub mod player_sprite;
 pub mod projectile;
 pub mod quadtree;
 pub mod readback;
@@ -141,6 +142,10 @@ pub mod prelude {
     pub use crate::npc_collision::*;
     pub use crate::npc_render::*;
     pub use crate::particles::*;
+    pub use crate::player_sprite::{
+        PlayerAnimState, PlayerDirection, PlayerSpriteConfig, PlayerSpriteInstance,
+        PlayerSpriteRenderer, PlayerSpriteState,
+    };
     pub use crate::projectile::{
         Projectile, ProjectileCollision, ProjectileInstance, ProjectileManager, ProjectileState,
         ProjectileType, TrajectoryPredictor,

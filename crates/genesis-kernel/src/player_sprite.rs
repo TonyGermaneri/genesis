@@ -171,12 +171,22 @@ impl PlayerSpriteState {
 
     /// Returns the current sprite sheet row for the animation.
     #[must_use]
-    pub fn current_row(&self, _config: &PlayerSpriteConfig) -> u32 {
-        // For horizontal direction layouts, all directions are in the same row
-        // The row is determined by animation type only
-        match self.anim_state {
-            PlayerAnimState::Idle => 1, // Use walk row for idle (skeleton only has walk)
-            PlayerAnimState::Walking => 1,
+    pub fn current_row(&self, config: &PlayerSpriteConfig) -> u32 {
+        if config.horizontal_directions {
+            // For horizontal direction layouts, all directions are in the same row
+            // The row is determined by animation type only
+            match self.anim_state {
+                PlayerAnimState::Idle => config.idle_row,
+                PlayerAnimState::Walking => config.walk_row,
+            }
+        } else {
+            // Vertical layout: each direction has its own pair of rows (idle/walk)
+            // Scout layout: Down(0,1), Left(2,3), Right(4,5), Up(6,7)
+            let dir_base = self.direction.sprite_row() * 2; // Each direction uses 2 rows
+            match self.anim_state {
+                PlayerAnimState::Idle => dir_base,      // Even rows: 0, 2, 4, 6
+                PlayerAnimState::Walking => dir_base + 1, // Odd rows: 1, 3, 5, 7
+            }
         }
     }
 
@@ -567,13 +577,21 @@ impl PlayerSpriteRenderer {
         state: &PlayerSpriteState,
     ) {
         let col = state.current_column(&self.config);
+        let row = state.current_row(&self.config);
 
         // Calculate UV coordinates
         let frame_u = self.config.frame_width as f32 / self.sheet_size.0 as f32;
         let frame_v = self.config.frame_height as f32 / self.sheet_size.1 as f32;
 
-        // Use row_y_offset for pixel-accurate Y positioning
-        let uv_y = self.config.row_y_offset as f32 / self.sheet_size.1 as f32;
+        // Calculate UV Y position based on layout type
+        let uv_y = if self.config.horizontal_directions {
+            // Use row_y_offset for pixel-accurate Y positioning (skeleton layout)
+            self.config.row_y_offset as f32 / self.sheet_size.1 as f32
+        } else {
+            // Vertical layout: row * frame_height, plus any offset
+            (self.config.row_y_offset as f32 + row as f32 * self.config.frame_height as f32)
+                / self.sheet_size.1 as f32
+        };
 
         let instance = PlayerSpriteInstance {
             position: [state.position.0, state.position.1],

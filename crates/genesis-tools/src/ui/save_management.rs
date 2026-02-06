@@ -3,6 +3,7 @@
 //! Dialogs and tools for managing save files including delete confirmation,
 //! copy to new slot, export to file, and import from file.
 
+use super::{ConstrainedWindow, ScreenConstraints};
 use egui::{Color32, Ui};
 use serde::{Deserialize, Serialize};
 
@@ -768,10 +769,14 @@ impl SaveManagement {
             self.config.dialog_border[3],
         );
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ui.ctx());
+
         egui::Window::new(self.dialog_type.title())
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .with_screen_constraints(&constraints)
             .frame(
                 egui::Frame::none()
                     .fill(bg)

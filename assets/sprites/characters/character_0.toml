@@ -1,0 +1,611 @@
+id = "character_0"
+name = "Character 0"
+sprite_sheet_path = "assets/sprites/player/player_scout.png"
+default_frame_width = 48
+default_frame_height = 48
+scale = 2.0
+
+[[animations]]
+action = "IdleDown"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations.frames]]
+x = 865
+y = 121
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 913
+y = 121
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 961
+y = 121
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 1009
+y = 121
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 1057
+y = 121
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 1105
+y = 121
+width = 48
+height = 71
+
+[[animations]]
+action = "IdleUp"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "PingPong"
+
+[[animations.frames]]
+x = 288
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 336
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 384
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 432
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 480
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 528
+y = 120
+width = 48
+height = 71
+
+[[animations]]
+action = "IdleLeft"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "PingPong"
+
+[[animations.frames]]
+x = 576
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 624
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 672
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 720
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 768
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 816
+y = 120
+width = 48
+height = 71
+
+[[animations]]
+action = "IdleRight"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "PingPong"
+
+[[animations.frames]]
+x = 0
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 48
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 96
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 144
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 192
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 240
+y = 120
+width = 48
+height = 71
+
+[[animations]]
+action = "WalkDown"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations.frames]]
+x = 0
+y = 216
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 48
+y = 216
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 96
+y = 216
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 144
+y = 216
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 192
+y = 216
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 240
+y = 216
+width = 48
+height = 71
+
+[[animations]]
+action = "WalkUp"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations.frames]]
+x = 288
+y = 213
+width = 48
+height = 74
+
+[[animations.frames]]
+x = 336
+y = 213
+width = 48
+height = 74
+
+[[animations.frames]]
+x = 384
+y = 213
+width = 48
+height = 74
+
+[[animations.frames]]
+x = 432
+y = 213
+width = 48
+height = 74
+
+[[animations.frames]]
+x = 480
+y = 213
+width = 48
+height = 74
+
+[[animations.frames]]
+x = 528
+y = 213
+width = 48
+height = 74
+
+[[animations]]
+action = "WalkLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "WalkRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "RunDown"
+enabled = true
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations.frames]]
+x = 0
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 48
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 96
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 144
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 192
+y = 120
+width = 48
+height = 71
+
+[[animations.frames]]
+x = 240
+y = 120
+width = 48
+height = 71
+
+[[animations]]
+action = "RunUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "RunLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "RunRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "AttackDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "AttackUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "AttackLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "AttackRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "UseDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "UseUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "UseLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "UseRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "JumpDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "JumpUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "JumpLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "JumpRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "SitDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "SitUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "SitLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "SitRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "CraftDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "CraftUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "CraftLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "CraftRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ThrowDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ThrowUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ThrowLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ThrowRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ShootDown"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ShootUp"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ShootLeft"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"
+
+[[animations]]
+action = "ShootRight"
+enabled = false
+frames = []
+fps = 8.0
+speed = 1.0
+looping = true
+playback_mode = "Normal"

@@ -1,0 +1,112 @@
+{
+  "name": "test_scout_sprite",
+  "description": "Test the new scout sprite is rendering correctly",
+  "actions": [
+    {
+      "type": "start_new_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2000
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 6.0
+    },
+    {
+      "type": "log",
+      "message": "Starting scout sprite test - idle facing down"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_idle_down.png"
+    },
+    {
+      "type": "log",
+      "message": "Moving right - capturing mid-walk"
+    },
+    {
+      "type": "move",
+      "dx": 1,
+      "dy": 0,
+      "duration_ms": 800
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_walk_right.png"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "log",
+      "message": "Moving left - capturing mid-walk"
+    },
+    {
+      "type": "move",
+      "dx": -1,
+      "dy": 0,
+      "duration_ms": 800
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_walk_left.png"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "log",
+      "message": "Moving down - capturing mid-walk"
+    },
+    {
+      "type": "move",
+      "dx": 0,
+      "dy": 1,
+      "duration_ms": 800
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_walk_down.png"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 300
+    },
+    {
+      "type": "log",
+      "message": "Moving up - capturing mid-walk"
+    },
+    {
+      "type": "move",
+      "dx": 0,
+      "dy": -1,
+      "duration_ms": 800
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_walk_up.png"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "screenshot",
+      "filename": "scout_idle_final.png"
+    },
+    {
+      "type": "log",
+      "message": "Scout sprite test complete"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

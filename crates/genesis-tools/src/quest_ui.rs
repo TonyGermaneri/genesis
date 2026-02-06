@@ -6,6 +6,7 @@
 //! - Objective display and progress tracking
 //! - Quest markers and waypoints
 
+use crate::ui::{ConstrainedWindow, ScreenConstraints};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -947,8 +948,11 @@ impl QuestUI {
 
         let config = model.log_config().clone();
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         egui::Window::new("Quest Log")
-            .default_size(egui::vec2(config.width, config.height))
+            .with_constrained_defaults(&constraints, config.width, config.height)
             .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {

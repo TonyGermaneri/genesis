@@ -5,6 +5,7 @@
 //! - NPC spawn editor (T-38) - spawn/remove NPCs for debugging
 //! - NPC list panel (T-39) - list and manage NPCs in loaded chunks
 
+use crate::ui::{ConstrainedWindow, ScreenConstraints};
 use egui::{Color32, Context, Id, Key, Pos2, Rect, RichText, Rounding, Stroke, Ui, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -879,10 +880,14 @@ impl NpcSpawnEditor {
             return;
         }
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         egui::Window::new("NPC Spawn Editor")
             .id(Id::new("npc_spawn_editor"))
             .default_pos(Pos2::new(self.config.position.0, self.config.position.1))
-            .default_width(self.config.panel_width)
+            .default_width(constraints.constrained_width(self.config.panel_width))
+            .with_screen_constraints(&constraints)
             .resizable(true)
             .collapsible(true)
             .show(ctx, |ui| {
@@ -1202,10 +1207,12 @@ impl NpcListPanel {
             return;
         }
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         egui::Window::new("NPC List")
             .id(Id::new("npc_list_panel"))
-            .default_width(self.config.panel_width)
-            .default_height(self.config.panel_height)
+            .with_constrained_defaults(&constraints, self.config.panel_width, self.config.panel_height)
             .resizable(true)
             .collapsible(true)
             .show(ctx, |ui| {

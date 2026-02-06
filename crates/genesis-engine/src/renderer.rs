@@ -13,6 +13,7 @@ use genesis_kernel::{
     Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager,
     ChunkRenderManager, StreamingConfig, StreamingTerrain, TexturedChunkRenderer,
     autotile_atlas::AutotileAtlas, autotile_render::AutotileChunkRenderer,
+    player_sprite::{PlayerSpriteConfig, PlayerSpriteRenderer, PlayerSpriteState},
 };
 use genesis_tools::EguiIntegration;
 use tracing::info;
@@ -49,6 +50,10 @@ pub struct Renderer {
     textured_renderer: Option<TexturedChunkRenderer>,
     /// Autotile chunk renderer (uses autotile atlas)
     autotile_renderer: Option<AutotileChunkRenderer>,
+    /// Player sprite renderer
+    player_sprite_renderer: PlayerSpriteRenderer,
+    /// Player sprite animation state
+    player_sprite_state: PlayerSpriteState,
     /// Render bind group for current buffer
     render_bind_group: wgpu::BindGroup,
     /// Egui integration for UI overlay
@@ -147,6 +152,11 @@ impl Renderer {
         info!("Initializing egui integration...");
         let egui = EguiIntegration::new(&device, surface_format, window, 1);
 
+        // Initialize player sprite renderer
+        info!("Initializing player sprite renderer...");
+        let player_sprite_renderer = PlayerSpriteRenderer::new(&device, surface_format);
+        let player_sprite_state = PlayerSpriteState::default();
+
         info!("Renderer initialized successfully");
 
         Ok(Self {
@@ -163,6 +173,8 @@ impl Renderer {
             chunk_render_manager: None, // Created when streaming terrain is enabled
             textured_renderer: None, // Created when terrain textures are loaded (singles)
             autotile_renderer: None, // Created when autotile atlas is loaded
+            player_sprite_renderer,
+            player_sprite_state,
             render_bind_group,
             egui,
             simulation_running: false, // Disable simulation (no cell gravity)
@@ -407,6 +419,40 @@ impl Renderer {
     #[must_use]
     pub fn is_autotile_terrain_enabled(&self) -> bool {
         self.autotile_renderer.as_ref().map_or(false, |r| r.is_atlas_bound())
+    }
+
+    /// Loads the player sprite sheet from image data.
+    ///
+    /// The image should be in RGBA format.
+    pub fn load_player_sprite(&mut self, image_data: &[u8], width: u32, height: u32) {
+        self.player_sprite_renderer.load_sprite_sheet(
+            &self.device,
+            &self.queue,
+            image_data,
+            width,
+            height,
+        );
+        info!("Loaded player sprite sheet: {}x{}", width, height);
+    }
+
+    /// Sets the player sprite configuration.
+    pub fn set_player_sprite_config(&mut self, config: PlayerSpriteConfig) {
+        self.player_sprite_renderer.set_config(config);
+    }
+
+    /// Updates the player sprite state from position and velocity.
+    ///
+    /// Call this each frame with the player's current state.
+    pub fn set_player(&mut self, position: (f32, f32), velocity: (f32, f32)) {
+        let config = *self.player_sprite_renderer.config();
+        // Use a fixed dt of 1/60 for animation - actual dt should be passed in
+        self.player_sprite_state.update(1.0 / 60.0, velocity, position, &config);
+    }
+
+    /// Updates the player sprite state with explicit delta time.
+    pub fn update_player_sprite(&mut self, dt: f32, position: (f32, f32), velocity: (f32, f32)) {
+        let config = *self.player_sprite_renderer.config();
+        self.player_sprite_state.update(dt, velocity, position, &config);
     }
 
     /// Enables multi-chunk rendering mode.
@@ -743,6 +789,38 @@ impl Renderer {
                 self.render_pipeline
                     .render(&mut render_pass, &self.render_bind_group);
             }
+        }
+
+        // Render player sprite (between terrain and UI)
+        if self.player_sprite_renderer.is_loaded() {
+            // Update camera and player state for the sprite renderer
+            self.player_sprite_renderer.update_camera(
+                &self.queue,
+                camera.position,
+                (self.size.width, self.size.height),
+                camera.zoom,
+            );
+            self.player_sprite_renderer.update_player(
+                &self.queue,
+                &self.player_sprite_state,
+            );
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Player Sprite Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // Preserve terrain rendering
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            self.player_sprite_renderer.render(&mut render_pass);
         }
 
         // Render egui UI overlay (on top of world)

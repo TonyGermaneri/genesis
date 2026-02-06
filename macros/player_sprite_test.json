@@ -1,0 +1,76 @@
+{
+  "name": "player_sprite_test",
+  "description": "Test player sprite rendering by taking screenshots with player at different positions",
+  "actions": [
+    {
+      "type": "log",
+      "message": "Starting player sprite test"
+    },
+    {
+      "type": "start_new_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 2000
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 4.0
+    },
+    {
+      "type": "screenshot",
+      "filename": "player_sprite_idle.png"
+    },
+    {
+      "type": "log",
+      "message": "Captured idle screenshot"
+    },
+    {
+      "type": "move",
+      "dx": 1,
+      "dy": 0,
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "player_sprite_right.png"
+    },
+    {
+      "type": "move",
+      "dx": 0,
+      "dy": 1,
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "player_sprite_down.png"
+    },
+    {
+      "type": "move",
+      "dx": -1,
+      "dy": 0,
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "player_sprite_left.png"
+    },
+    {
+      "type": "move",
+      "dx": 0,
+      "dy": -1,
+      "duration_ms": 500
+    },
+    {
+      "type": "screenshot",
+      "filename": "player_sprite_up.png"
+    },
+    {
+      "type": "log",
+      "message": "Player sprite test complete"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

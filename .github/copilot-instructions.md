@@ -30,6 +30,10 @@ The game supports automation macros via CLI arguments:
 | `pause` | `pause` | Open pause menu |
 | `resume` | `resume` | Resume game |
 | `worldtools` | `worldtools` | Open world tools panel |
+| `tab` | `tab <name>` | Select World Tools tab (biomes, noise, sprites, debug, etc.) |
+| `click` | `click <label>` | Click a button by label |
+| `clickid` | `clickid <id>` | Click element by ID |
+| `settext` | `settext <field> <value>` | Set text input value |
 | `seed` | `seed <value>` | Set world generation seed |
 | `regen` | `regen` | Regenerate world terrain |
 | `log` | `log <message>` | Log a message |

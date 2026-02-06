@@ -75,6 +75,32 @@ pub enum AutomationAction {
     /// Open world tools panel
     OpenWorldTools,
 
+    /// Select a specific tab in World Tools
+    SelectWorldToolsTab {
+        /// Tab name (e.g., "biomes", "noise", "sprites", "debug")
+        tab: String,
+    },
+
+    /// Click a UI button by label
+    ClickButton {
+        /// Button label text to search for
+        label: String,
+    },
+
+    /// Click a UI element by ID
+    ClickElement {
+        /// Element ID to click
+        id: String,
+    },
+
+    /// Set a text input field value
+    SetTextInput {
+        /// Field ID or label
+        field: String,
+        /// Value to set
+        value: String,
+    },
+
     /// Set world generation seed
     SetSeed {
         /// New world seed
@@ -212,6 +238,14 @@ pub enum AutomationRequest {
     ResumeGame,
     /// Open world tools
     OpenWorldTools,
+    /// Select a World Tools tab
+    SelectWorldToolsTab(String),
+    /// Click a button by label
+    ClickButton(String),
+    /// Click an element by ID
+    ClickElement(String),
+    /// Set a text input value
+    SetTextInput { field: String, value: String },
     /// Set seed value
     SetSeed(u64),
     /// Regenerate world
@@ -435,6 +469,21 @@ impl AutomationSystem {
             }
             AutomationAction::OpenWorldTools => {
                 self.pending_requests.push(AutomationRequest::OpenWorldTools);
+            }
+            AutomationAction::SelectWorldToolsTab { tab } => {
+                self.pending_requests.push(AutomationRequest::SelectWorldToolsTab(tab.clone()));
+            }
+            AutomationAction::ClickButton { label } => {
+                self.pending_requests.push(AutomationRequest::ClickButton(label.clone()));
+            }
+            AutomationAction::ClickElement { id } => {
+                self.pending_requests.push(AutomationRequest::ClickElement(id.clone()));
+            }
+            AutomationAction::SetTextInput { field, value } => {
+                self.pending_requests.push(AutomationRequest::SetTextInput {
+                    field: field.clone(),
+                    value: value.clone(),
+                });
             }
             AutomationAction::SetSeed { seed } => {
                 self.pending_requests.push(AutomationRequest::SetSeed(*seed));
@@ -706,6 +755,32 @@ fn parse_action_string(s: &str) -> Result<AutomationAction, String> {
         "pause" => Ok(AutomationAction::OpenPauseMenu),
         "resume" => Ok(AutomationAction::ResumeGame),
         "worldtools" => Ok(AutomationAction::OpenWorldTools),
+        "tab" | "selecttab" => {
+            let tab_name = parts.get(1)
+                .ok_or("tab requires name (e.g., 'tab sprites')")?
+                .to_string();
+            Ok(AutomationAction::SelectWorldToolsTab { tab: tab_name })
+        }
+        "click" => {
+            let label = parts[1..].join(" ");
+            if label.is_empty() {
+                return Err("click requires button label".to_string());
+            }
+            Ok(AutomationAction::ClickButton { label })
+        }
+        "clickid" => {
+            let id = parts.get(1)
+                .ok_or("clickid requires element ID")?
+                .to_string();
+            Ok(AutomationAction::ClickElement { id })
+        }
+        "settext" | "input" => {
+            let field = parts.get(1)
+                .ok_or("settext requires field name")?
+                .to_string();
+            let value = parts[2..].join(" ");
+            Ok(AutomationAction::SetTextInput { field, value })
+        }
         "seed" => {
             let seed = parts.get(1)
                 .ok_or("seed requires value")?

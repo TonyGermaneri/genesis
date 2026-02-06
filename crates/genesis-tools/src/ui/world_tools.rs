@@ -13,6 +13,9 @@
 use egui::{Color32, Context, Id, RichText, Ui};
 use serde::{Deserialize, Serialize};
 
+use super::sprite_builder::SpriteBuilder;
+use super::{ConstrainedWindow, ScreenConstraints};
+
 // ============================================================================
 // Noise Layer Configuration
 // ============================================================================
@@ -688,6 +691,8 @@ pub enum WorldToolsTab {
     Materials,
     /// World generation settings tab.
     WorldGen,
+    /// Character sprite builder tab.
+    Sprites,
     /// Debug rendering tab.
     Debug,
 }
@@ -702,6 +707,7 @@ impl WorldToolsTab {
             Self::Factions,
             Self::Materials,
             Self::WorldGen,
+            Self::Sprites,
             Self::Debug,
         ]
     }
@@ -715,6 +721,7 @@ impl WorldToolsTab {
             Self::Factions => "Factions",
             Self::Materials => "Materials",
             Self::WorldGen => "World Gen",
+            Self::Sprites => "Sprites",
             Self::Debug => "Debug",
         }
     }
@@ -728,6 +735,7 @@ impl WorldToolsTab {
             Self::Factions => "⚔",
             Self::Materials => "🧱",
             Self::WorldGen => "🌍",
+            Self::Sprites => "🎨",
             Self::Debug => "🐛",
         }
     }
@@ -756,6 +764,8 @@ pub struct WorldTools {
     debug_flags: u32,
     /// Pending actions.
     actions: Vec<WorldToolsAction>,
+    /// Sprite builder state.
+    sprite_builder: SpriteBuilder,
 }
 
 /// Actions that can be performed from the world tools panel.
@@ -799,6 +809,7 @@ impl WorldTools {
             modified: false,
             debug_flags: 0,
             actions: Vec::new(),
+            sprite_builder: SpriteBuilder::new(),
         }
     }
 
@@ -880,6 +891,33 @@ impl WorldTools {
         self.config.seed
     }
 
+    /// Select a tab by name (case-insensitive).
+    /// Supported names: biomes, noise, weather, factions, materials, worldgen, sprites, debug
+    pub fn select_tab_by_name(&mut self, name: &str) {
+        let tab = match name.to_lowercase().as_str() {
+            "biomes" | "biome" => Some(WorldToolsTab::Biomes),
+            "noise" => Some(WorldToolsTab::Noise),
+            "weather" => Some(WorldToolsTab::Weather),
+            "factions" | "faction" => Some(WorldToolsTab::Factions),
+            "materials" | "material" => Some(WorldToolsTab::Materials),
+            "worldgen" | "world_gen" | "world" => Some(WorldToolsTab::WorldGen),
+            "sprites" | "sprite" => Some(WorldToolsTab::Sprites),
+            "debug" => Some(WorldToolsTab::Debug),
+            _ => None,
+        };
+
+        if let Some(tab) = tab {
+            self.active_tab = tab;
+        } else {
+            tracing::warn!("Unknown World Tools tab: {}", name);
+        }
+    }
+
+    /// Get the currently active tab.
+    pub fn active_tab(&self) -> WorldToolsTab {
+        self.active_tab
+    }
+
     /// Render the world tools panel.
     pub fn render(&mut self, ctx: &Context) {
         if !self.visible {
@@ -898,15 +936,26 @@ impl WorldTools {
                 );
             });
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         // Main panel
         egui::Window::new("🌍 World Tools")
             .id(Id::new("world_tools_panel"))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .collapsible(false)
             .resizable(true)
-            .default_width(700.0)
-            .default_height(500.0)
+            .with_constrained_defaults(&constraints, 700.0, 500.0)
             .show(ctx, |ui| {
+                // Constrain the entire window content to max available size
+                ui.set_max_width(constraints.max_width - 40.0); // Account for window padding
+                ui.set_max_height(constraints.max_height - 40.0);
+
+                // Pass actual available width from UI to sprite builder for responsive layout
+                // This is the window's content width, not the screen width
+                let window_content_width = ui.available_width();
+                self.sprite_builder.set_available_width(window_content_width);
+
                 // Header with tabs
                 ui.horizontal(|ui| {
                     for tab in WorldToolsTab::all() {
@@ -936,6 +985,7 @@ impl WorldTools {
                         WorldToolsTab::Factions => self.render_factions_tab(ui),
                         WorldToolsTab::Materials => self.render_materials_tab(ui),
                         WorldToolsTab::WorldGen => self.render_worldgen_tab(ui),
+                        WorldToolsTab::Sprites => self.sprite_builder.render(ui),
                         WorldToolsTab::Debug => self.render_debug_tab(ui),
                     }
                 });

@@ -174,6 +174,12 @@ struct GenesisApp {
     automation: AutomationSystem,
     /// Whether quit was requested via automation
     quit_requested: bool,
+    /// Pending button click from automation
+    pending_button_click: Option<String>,
+    /// Pending element click from automation
+    pending_element_click: Option<String>,
+    /// Pending text input from automation (field, value)
+    pending_text_input: Option<(String, String)>,
 
     // === Debug Info ===
     /// Current FPS
@@ -305,6 +311,9 @@ impl GenesisApp {
 
             automation: AutomationSystem::new(),
             quit_requested: false,
+            pending_button_click: None,
+            pending_element_click: None,
+            pending_text_input: None,
 
             current_fps: 0.0,
             current_frame_time: 0.0,
@@ -536,6 +545,10 @@ impl GenesisApp {
         if let Some(renderer) = &mut self.renderer {
             renderer.update_camera_position(&self.camera);
 
+            // Update player sprite animation
+            let player_vel = self.gameplay.player.velocity();
+            renderer.update_player_sprite(dt, (player_pos.x, player_pos.y), (player_vel.x, player_vel.y));
+
             // Prepare and step multi-chunk simulation if enabled
             if renderer.is_multi_chunk_enabled() {
                 let start = Instant::now();
@@ -668,6 +681,82 @@ impl GenesisApp {
 
         if total_spawned > 0 {
             info!("Spawned {} initial NPCs around player", total_spawned);
+        }
+    }
+
+    /// Loads the player sprite sheet from assets.
+    fn load_player_sprite(&mut self, renderer: &mut crate::renderer::Renderer) {
+        use genesis_kernel::player_sprite::PlayerSpriteConfig;
+        use std::path::Path;
+
+        // Use Modern Exteriors Scout sprite from game_assets
+        let sprite_path = Path::new("/Users/tonygermaneri/gh/game_assets/modernexteriors-win/Modern_Exteriors_48x48/Character_Generator_Addons_48x48/Characters_48x48/Modern_Exteriors_Characters_Scout_48x48_1.png");
+
+        // Fallback to skeleton if scout not available
+        let fallback_path = Path::new("assets/sprites/player/player_skeleton.png");
+
+        let (path_to_use, config) = if sprite_path.exists() {
+            // Scout sprite sheet layout (from AI analysis):
+            // 2781x1968, 48x48 frames
+            // Row 0: Idle Down (4 frames)
+            // Row 1: Walk Down (8 frames)
+            // Row 2: Idle Left (4 frames)
+            // Row 3: Walk Left (8 frames)
+            // Row 4: Idle Right (4 frames)
+            // Row 5: Walk Right (8 frames)
+            // Row 6: Idle Up (4 frames)
+            // Row 7: Walk Up (8 frames)
+            // horizontal_directions: false - each direction has its own rows
+            let scout_config = PlayerSpriteConfig {
+                frame_width: 48,
+                frame_height: 48,
+                idle_frames: 4,
+                walk_frames: 8,
+                idle_row: 0,       // Idle animations on even rows (0, 2, 4, 6)
+                walk_row: 1,       // Walk animations on odd rows (1, 3, 5, 7)
+                row_y_offset: 0,   // No offset, starts at top
+                anim_fps: 8.0,
+                scale: 2.0,        // Scale up for visibility
+                horizontal_directions: false,  // Each direction is on its own pair of rows
+            };
+            (sprite_path, scout_config)
+        } else if fallback_path.exists() {
+            // Skeleton fallback config
+            let skeleton_config = PlayerSpriteConfig {
+                frame_width: 48,
+                frame_height: 63,
+                idle_frames: 6,
+                walk_frames: 6,
+                idle_row: 1,
+                walk_row: 1,
+                row_y_offset: 129,
+                anim_fps: 8.0,
+                scale: 2.0,
+                horizontal_directions: true,
+            };
+            (fallback_path, skeleton_config)
+        } else {
+            debug!("No player sprite found");
+            return;
+        };
+
+        match image::open(path_to_use) {
+            Ok(img) => {
+                let rgba = img.to_rgba8();
+                let (width, height) = rgba.dimensions();
+
+                renderer.set_player_sprite_config(config);
+                renderer.load_player_sprite(rgba.as_raw(), width, height);
+
+                info!(
+                    "Player sprite loaded: {}x{} from {}",
+                    width, height,
+                    path_to_use.display()
+                );
+            }
+            Err(e) => {
+                warn!("Failed to load player sprite from {}: {}", path_to_use.display(), e);
+            }
         }
     }
 
@@ -846,6 +935,25 @@ impl GenesisApp {
                     if self.app_mode == AppMode::Paused {
                         self.world_tools.show();
                     }
+                }
+                AutomationRequest::SelectWorldToolsTab(tab_name) => {
+                    info!("[AUTOMATION] Selecting World Tools tab: {}", tab_name);
+                    self.world_tools.select_tab_by_name(&tab_name);
+                }
+                AutomationRequest::ClickButton(label) => {
+                    info!("[AUTOMATION] Click button: {}", label);
+                    // Store the button click request for egui to process
+                    self.pending_button_click = Some(label);
+                }
+                AutomationRequest::ClickElement(id) => {
+                    info!("[AUTOMATION] Click element: {}", id);
+                    // Store the element click request for egui to process
+                    self.pending_element_click = Some(id);
+                }
+                AutomationRequest::SetTextInput { field, value } => {
+                    info!("[AUTOMATION] Set text input {}: {}", field, value);
+                    // Store the text input request for egui to process
+                    self.pending_text_input = Some((field, value));
                 }
                 AutomationRequest::SetSeed(seed) => {
                     info!("[AUTOMATION] Setting seed to {}", seed);
@@ -2000,6 +2108,9 @@ impl ApplicationHandler for GenesisApp {
                                 info!("Textured terrain rendering enabled (singles)");
                             }
                         }
+
+                        // Load player sprite
+                        self.load_player_sprite(&mut renderer);
 
                         self.renderer = Some(renderer);
                     },

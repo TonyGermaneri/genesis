@@ -7,6 +7,7 @@
 //! - Category tabs/filters
 //! - Recipe search
 
+use crate::ui::{ConstrainedWindow, ScreenConstraints};
 use egui::{
     Align, Color32, Context, Layout, ProgressBar, Response, RichText, Rounding, Sense, Stroke,
     TextEdit, Ui, Vec2, Window,
@@ -423,10 +424,13 @@ impl CraftingPanel {
             return actions;
         }
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         Window::new("Crafting Station")
             .resizable(true)
             .collapsible(false)
-            .default_width(650.0)
+            .with_constrained_defaults(&constraints, 650.0, 500.0)
             .show(ctx, |ui| {
                 // Top toolbar
                 ui.horizontal(|ui| {
@@ -1003,10 +1007,13 @@ impl CraftingUI {
             return actions;
         }
 
+        // Calculate max window size based on screen with margin
+        let constraints = ScreenConstraints::from_context(ctx);
+
         Window::new("Crafting")
             .resizable(true)
             .collapsible(false)
-            .default_width(600.0)
+            .with_constrained_defaults(&constraints, 600.0, 500.0)
             .show(ctx, |ui| {
                 // Category tabs
                 ui.horizontal(|ui| {
