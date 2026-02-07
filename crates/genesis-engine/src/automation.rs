@@ -156,6 +156,58 @@ pub enum AutomationAction {
         timeout_ms: u64,
     },
 
+    /// Fill the visible world with a specific material (for testing)
+    FillWorld {
+        /// Material ID to fill with (e.g., 27 for lava, 1 for water)
+        material_id: u16,
+        /// Temperature to set (0-255, 255 = max heat for lava)
+        temperature: Option<u8>,
+    },
+
+    /// Set simulation time scale
+    SetTimeScale {
+        /// Time scale multiplier (1.0 = normal, 10.0 = 10x speed)
+        scale: f32,
+    },
+
+    /// Enable/disable specific simulation features
+    SetSimulationFlags {
+        /// Enable weather simulation (rain)
+        weather: Option<bool>,
+        /// Enable volcanic simulation
+        volcanic: Option<bool>,
+        /// Enable hydraulic erosion
+        hydraulic_erosion: Option<bool>,
+        /// Enable thermal erosion
+        thermal_erosion: Option<bool>,
+    },
+
+    /// Open the material palette
+    OpenMaterialPalette,
+
+    /// Close the material palette
+    CloseMaterialPalette,
+
+    /// Select a material in the palette by ID
+    SelectMaterial {
+        /// Material ID to select (e.g., 27 for lava, 1 for water)
+        material_id: u16,
+    },
+
+    /// Set material palette brush size
+    SetBrushSize {
+        /// Brush radius in cells
+        size: i32,
+    },
+
+    /// Paint at a world position
+    PaintAt {
+        /// World X coordinate
+        x: i32,
+        /// World Y coordinate
+        y: i32,
+    },
+
     /// Quit the application
     Quit,
 }
@@ -172,6 +224,7 @@ pub struct AutomationMacro {
 }
 
 /// Result of executing an action.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ActionResult {
     /// Action completed successfully
@@ -188,6 +241,7 @@ pub enum ActionResult {
 }
 
 /// State of an in-progress action.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ActiveAction {
     /// The action being executed
@@ -261,6 +315,30 @@ pub enum AutomationRequest {
         name: String,
         value: String,
     },
+    /// Fill world with a material (for testing)
+    FillWorld {
+        material_id: u16,
+        temperature: Option<u8>,
+    },
+    /// Set simulation time scale
+    SetTimeScale(f32),
+    /// Set simulation flags
+    SetSimulationFlags {
+        weather: Option<bool>,
+        volcanic: Option<bool>,
+        hydraulic_erosion: Option<bool>,
+        thermal_erosion: Option<bool>,
+    },
+    /// Open material palette
+    OpenMaterialPalette,
+    /// Close material palette
+    CloseMaterialPalette,
+    /// Select a material in the palette
+    SelectMaterial(u16),
+    /// Set brush size
+    SetBrushSize(i32),
+    /// Paint at world position
+    PaintAt { x: i32, y: i32 },
     /// Quit the application
     Quit,
 }
@@ -271,6 +349,7 @@ impl Default for AutomationSystem {
     }
 }
 
+#[allow(dead_code)]
 impl AutomationSystem {
     /// Creates a new automation system.
     pub fn new() -> Self {
@@ -529,6 +608,46 @@ impl AutomationSystem {
             AutomationAction::WaitForCondition { .. } => {
                 // TODO: Implement condition checking
                 warn!("WaitForCondition not yet implemented");
+            }
+            AutomationAction::FillWorld { material_id, temperature } => {
+                info!("[AUTOMATION] Filling world with material {}", material_id);
+                self.pending_requests.push(AutomationRequest::FillWorld {
+                    material_id: *material_id,
+                    temperature: *temperature,
+                });
+            }
+            AutomationAction::SetTimeScale { scale } => {
+                info!("[AUTOMATION] Setting time scale to {}x", scale);
+                self.pending_requests.push(AutomationRequest::SetTimeScale(*scale));
+            }
+            AutomationAction::SetSimulationFlags { weather, volcanic, hydraulic_erosion, thermal_erosion } => {
+                info!("[AUTOMATION] Setting simulation flags");
+                self.pending_requests.push(AutomationRequest::SetSimulationFlags {
+                    weather: *weather,
+                    volcanic: *volcanic,
+                    hydraulic_erosion: *hydraulic_erosion,
+                    thermal_erosion: *thermal_erosion,
+                });
+            }
+            AutomationAction::OpenMaterialPalette => {
+                info!("[AUTOMATION] Opening material palette");
+                self.pending_requests.push(AutomationRequest::OpenMaterialPalette);
+            }
+            AutomationAction::CloseMaterialPalette => {
+                info!("[AUTOMATION] Closing material palette");
+                self.pending_requests.push(AutomationRequest::CloseMaterialPalette);
+            }
+            AutomationAction::SelectMaterial { material_id } => {
+                info!("[AUTOMATION] Selecting material {}", material_id);
+                self.pending_requests.push(AutomationRequest::SelectMaterial(*material_id));
+            }
+            AutomationAction::SetBrushSize { size } => {
+                info!("[AUTOMATION] Setting brush size to {}", size);
+                self.pending_requests.push(AutomationRequest::SetBrushSize(*size));
+            }
+            AutomationAction::PaintAt { x, y } => {
+                info!("[AUTOMATION] Painting at ({}, {})", x, y);
+                self.pending_requests.push(AutomationRequest::PaintAt { x: *x, y: *y });
             }
             AutomationAction::Quit => {
                 self.pending_requests.push(AutomationRequest::Quit);

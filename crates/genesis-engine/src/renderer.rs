@@ -1,19 +1,18 @@
 //! GPU renderer using wgpu.
 //!
-//! Integrates the cell simulation compute pipeline with visual rendering.
-//! Supports egui UI overlay for debug HUD and game menus.
-//! Supports both single-chunk and multi-chunk rendering modes.
+//! Provides basic wgpu rendering with egui UI overlay, terrain tiles,
+//! and player sprite.
 
 #![allow(unsafe_code)]
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};
-use genesis_gameplay::GameState;
 use genesis_kernel::{
-    Camera, CellBuffer, CellComputePipeline, CellRenderPipeline, ChunkManager,
-    ChunkRenderManager, StreamingConfig, StreamingTerrain, TexturedChunkRenderer,
-    autotile_atlas::AutotileAtlas, autotile_render::AutotileChunkRenderer,
-    player_sprite::{PlayerSpriteConfig, PlayerSpriteRenderer, PlayerSpriteState},
+    Camera,
+    player_sprite::{
+        PlayerAnimationSet, PlayerSpriteConfig, PlayerSpriteRenderer, PlayerSpriteState,
+    },
+    terrain_tiles::TerrainTileRenderer,
 };
 use genesis_tools::EguiIntegration;
 use tracing::info;
@@ -34,34 +33,26 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     /// Current surface size
     size: PhysicalSize<u32>,
-    /// Cell compute pipeline
-    compute_pipeline: CellComputePipeline,
-    /// Cell render pipeline
-    render_pipeline: CellRenderPipeline,
-    /// Cell buffer (double-buffered) - for single-chunk mode
-    cell_buffer: CellBuffer,
-    /// Chunk manager for multi-chunk mode (optional)
-    chunk_manager: Option<ChunkManager>,
-    /// Streaming terrain system (player-centered chunk loading)
-    streaming_terrain: Option<StreamingTerrain>,
-    /// Chunk render manager for multi-chunk rendering
-    chunk_render_manager: Option<ChunkRenderManager>,
-    /// Textured chunk renderer (uses terrain atlas textures - singles)
-    textured_renderer: Option<TexturedChunkRenderer>,
-    /// Autotile chunk renderer (uses autotile atlas)
-    autotile_renderer: Option<AutotileChunkRenderer>,
     /// Player sprite renderer
     player_sprite_renderer: PlayerSpriteRenderer,
     /// Player sprite animation state
     player_sprite_state: PlayerSpriteState,
-    /// Render bind group for current buffer
-    render_bind_group: wgpu::BindGroup,
+    /// Player animation set (loaded from TOML)
+    player_animations: PlayerAnimationSet,
+    /// Terrain tile renderer (biome-based world)
+    terrain_renderer: TerrainTileRenderer,
     /// Egui integration for UI overlay
     egui: EguiIntegration,
-    /// Whether simulation is running
-    simulation_running: bool,
     /// Frame counter
     frame_count: u64,
+    /// Skip player sprite rendering (for testing)
+    skip_player_sprite: bool,
+    /// Whether streaming terrain is "enabled" (placeholder for compatibility)
+    streaming_enabled: bool,
+    /// Whether to show debug grid
+    show_debug_grid: bool,
+    /// Chunk size for debug grid (in world units/pixels)
+    chunk_size: u32,
 }
 
 impl Renderer {
@@ -95,7 +86,7 @@ impl Renderer {
 
         info!("Using GPU adapter: {:?}", adapter.get_info().name);
 
-        // Request device with compute features
+        // Request device
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -130,24 +121,6 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
-        // Create compute pipeline
-        info!("Initializing compute pipeline...");
-        let compute_pipeline = CellComputePipeline::new(&device);
-
-        // Create render pipeline
-        info!("Initializing render pipeline...");
-        let render_pipeline = CellRenderPipeline::new(&device, surface_format);
-
-        // Create cell buffer with static terrain (no gravity simulation)
-        let chunk_size = DEFAULT_CHUNK_SIZE;
-        let initial_cells = create_static_terrain(chunk_size as usize);
-        let cell_buffer =
-            CellBuffer::with_cells(&device, &compute_pipeline, chunk_size, &initial_cells);
-
-        // Create render bind group
-        let render_bind_group =
-            render_pipeline.create_bind_group(&device, cell_buffer.current_buffer());
-
         // Initialize egui integration
         info!("Initializing egui integration...");
         let egui = EguiIntegration::new(&device, surface_format, window, 1);
@@ -156,6 +129,11 @@ impl Renderer {
         info!("Initializing player sprite renderer...");
         let player_sprite_renderer = PlayerSpriteRenderer::new(&device, surface_format);
         let player_sprite_state = PlayerSpriteState::default();
+        let player_animations = PlayerAnimationSet::new();
+
+        // Initialize terrain tile renderer
+        info!("Initializing terrain tile renderer...");
+        let terrain_renderer = TerrainTileRenderer::new(&device, surface_format);
 
         info!("Renderer initialized successfully");
 
@@ -165,265 +143,74 @@ impl Renderer {
             queue,
             config,
             size,
-            compute_pipeline,
-            render_pipeline,
-            cell_buffer,
-            chunk_manager: None, // Single-chunk mode by default
-            streaming_terrain: None, // Streaming terrain disabled by default
-            chunk_render_manager: None, // Created when streaming terrain is enabled
-            textured_renderer: None, // Created when terrain textures are loaded (singles)
-            autotile_renderer: None, // Created when autotile atlas is loaded
             player_sprite_renderer,
             player_sprite_state,
-            render_bind_group,
+            player_animations,
+            terrain_renderer,
             egui,
-            simulation_running: false, // Disable simulation (no cell gravity)
             frame_count: 0,
+            skip_player_sprite: false,
+            streaming_enabled: false,
+            show_debug_grid: true,  // Enable by default
+            chunk_size: DEFAULT_CHUNK_SIZE,
         })
     }
 
-    /// Enables streaming terrain mode with player-centered chunk loading.
-    ///
-    /// When enabled, chunks are loaded/unloaded based on player position,
-    /// and only nearby chunks are simulated on the GPU.
-    pub fn enable_streaming_terrain(&mut self, seed: u64) {
-        if self.streaming_terrain.is_none() {
-            info!("Enabling streaming terrain mode with seed {}", seed);
-            self.streaming_terrain = Some(StreamingTerrain::with_seed(seed));
-            // Create chunk render manager for multi-chunk rendering
-            self.chunk_render_manager = Some(ChunkRenderManager::new(
-                &self.device,
-                self.config.format,
-                DEFAULT_CHUNK_SIZE,
-            ));
-        }
-    }
-
-    /// Enables streaming terrain with custom configuration.
-    pub fn enable_streaming_terrain_with_config(&mut self, seed: u64, config: StreamingConfig) {
-        if self.streaming_terrain.is_none() {
-            info!("Enabling streaming terrain mode with custom config");
-            let chunk_size = config.chunk_size;
-            self.streaming_terrain = Some(StreamingTerrain::new(seed, config));
-            // Create chunk render manager for multi-chunk rendering
-            self.chunk_render_manager = Some(ChunkRenderManager::new(
-                &self.device,
-                self.config.format,
-                chunk_size,
-            ));
-        }
-    }
-
-    /// Disables streaming terrain mode.
-    pub fn disable_streaming_terrain(&mut self) {
-        if self.streaming_terrain.is_some() {
-            info!("Disabling streaming terrain mode");
-            self.streaming_terrain = None;
-            self.chunk_render_manager = None;
-        }
-    }
-
-    /// Regenerates the terrain with a new seed.
-    ///
-    /// This clears all loaded chunks and recreates the streaming terrain
-    /// with the new seed, forcing full regeneration.
-    pub fn regenerate_terrain(&mut self, new_seed: u64) {
-        info!("Regenerating terrain with new seed: {}", new_seed);
-
-        // Get the current config if streaming is enabled
-        let config = self.streaming_terrain
-            .as_ref()
-            .map(|t| t.config().clone())
-            .unwrap_or_default();
-
-        let chunk_size = config.chunk_size;
-
-        // Clear autotile renderer if present
-        if let Some(autotile) = &mut self.autotile_renderer {
-            autotile.clear();
-        }
-
-        // Clear chunk render manager by recreating it
-        if self.chunk_render_manager.is_some() {
-            self.chunk_render_manager = Some(ChunkRenderManager::new(
-                &self.device,
-                self.config.format,
-                chunk_size,
-            ));
-        }
-
-        // Recreate streaming terrain with new seed
-        if self.streaming_terrain.is_some() {
-            self.streaming_terrain = Some(StreamingTerrain::new(new_seed, config));
-            info!("Streaming terrain recreated with seed {}", new_seed);
-        }
-    }
-
-    /// Set debug visualization flags for the terrain shader.
-    pub fn set_debug_flags(&mut self, flags: u32) {
-        if let Some(autotile) = &mut self.autotile_renderer {
-            autotile.set_debug_flags(flags);
-            info!("Debug flags set to 0x{:08X}", flags);
-        }
+    /// Enables streaming terrain mode (placeholder - terrain removed).
+    pub fn enable_streaming_terrain(&mut self, _seed: u64) {
+        info!("Streaming terrain requested (terrain system removed)");
+        self.streaming_enabled = true;
     }
 
     /// Returns whether streaming terrain is enabled.
     #[must_use]
     pub const fn is_streaming_terrain_enabled(&self) -> bool {
-        self.streaming_terrain.is_some()
+        self.streaming_enabled
     }
 
-    /// Updates streaming terrain based on player position.
-    ///
-    /// Call this each frame with the player's world position.
-    pub fn update_player_position_streaming(&mut self, player_x: f32, player_y: f32) {
-        // First update terrain position (this may load/unload chunks)
-        if let Some(terrain) = &mut self.streaming_terrain {
-            terrain.update_player_position(player_x, player_y, &self.device);
-        }
-
-        // Then sync to render manager (separate borrow)
-        self.sync_streaming_chunks_to_render();
+    /// Updates streaming terrain based on player position (placeholder).
+    pub fn update_player_position_streaming(&mut self, _player_x: f32, _player_y: f32) {
+        // Terrain streaming removed
     }
 
-    /// Syncs streaming terrain chunks to the render manager.
-    fn sync_streaming_chunks_to_render(&mut self) {
-        use genesis_kernel::VisibleChunk;
-
-        let Some(terrain) = &self.streaming_terrain else { return };
-
-        // Check if we have any renderers to update
-        let has_chunk_mgr = self.chunk_render_manager.is_some();
-        let has_textured = self.textured_renderer.is_some();
-        let has_autotile = self.autotile_renderer.is_some();
-
-        if !has_chunk_mgr && !has_textured && !has_autotile {
-            return;
-        }
-
-        // Upload loaded chunks to GPU render managers
-        for chunk in terrain.loaded_chunks() {
-            // Create a VisibleChunk for the render manager
-            let visible_chunk = VisibleChunk {
-                position: (chunk.id.x, chunk.id.y),
-                cells: chunk.cells.clone(),
-                dirty: true, // Always mark dirty to ensure upload
-            };
-
-            // Upload to autotile renderer if available (preferred)
-            if let Some(autotile_mgr) = &mut self.autotile_renderer {
-                autotile_mgr.update_chunk(
-                    &self.device,
-                    &self.queue,
-                    chunk.id.x,
-                    chunk.id.y,
-                    bytemuck::cast_slice(&visible_chunk.cells),
-                );
-            }
-
-            // Upload to textured renderer if available
-            if let Some(textured_mgr) = &mut self.textured_renderer {
-                textured_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
-            }
-
-            // Also upload to standard chunk render manager
-            if let Some(render_mgr) = &mut self.chunk_render_manager {
-                render_mgr.upload_chunk(&self.device, &self.queue, &visible_chunk);
-            }
-        }
+    /// Steps the streaming terrain simulation (placeholder).
+    pub fn step_streaming_terrain(&mut self, _delta_time: f32) {
+        // Terrain simulation removed
     }
 
-    /// Steps the streaming terrain simulation.
-    pub fn step_streaming_terrain(&mut self) {
-        if let Some(terrain) = &mut self.streaming_terrain {
-            terrain.step_simulation(&self.device, &self.queue, &self.compute_pipeline);
-        }
+    /// Regenerates the terrain (placeholder).
+    pub fn regenerate_terrain(&mut self, _new_seed: u64) {
+        info!("Terrain regeneration requested (terrain system removed)");
     }
 
-    /// Returns a reference to the streaming terrain.
+    /// Set debug visualization flags (placeholder).
+    pub fn set_debug_flags(&mut self, _flags: u32) {
+        // Debug flags removed with terrain
+    }
+
+    /// Returns streaming terrain statistics (placeholder).
     #[must_use]
-    pub fn streaming_terrain(&self) -> Option<&StreamingTerrain> {
-        self.streaming_terrain.as_ref()
+    pub fn streaming_stats(&self) -> Option<StreamingStats> {
+        None
     }
 
-    /// Returns streaming terrain statistics.
-    #[must_use]
-    pub fn streaming_stats(&self) -> Option<genesis_kernel::StreamingStats> {
-        self.streaming_terrain.as_ref().map(|t| t.stats().clone())
-    }
-
-    /// Enables textured terrain rendering with the given atlas.
-    ///
-    /// When enabled, terrain will be rendered using textures from the atlas
-    /// instead of procedural colors.
-    pub fn enable_textured_terrain(
+    /// Enable autotile terrain (placeholder).
+    pub fn enable_autotile_terrain<T>(
         &mut self,
-        atlas: std::sync::Arc<parking_lot::RwLock<genesis_kernel::TerrainTextureAtlas>>,
+        _atlas: std::sync::Arc<parking_lot::RwLock<T>>,
     ) {
-        info!("Enabling textured terrain rendering (singles)");
-
-        // Create textured renderer if not exists
-        if self.textured_renderer.is_none() {
-            self.textured_renderer = Some(TexturedChunkRenderer::new(
-                &self.device,
-                self.config.format,
-                DEFAULT_CHUNK_SIZE,
-            ));
-        }
-
-        // Bind the atlas to the renderer
-        if let Some(renderer) = &mut self.textured_renderer {
-            renderer.set_terrain_atlas(&self.queue, atlas);
-        }
+        info!("Autotile terrain requested (terrain system removed)");
     }
 
-    /// Enables autotile-based terrain rendering with the given atlas.
-    ///
-    /// When enabled, terrain will be rendered using the autotile atlas
-    /// with proper biome-to-terrain mapping.
-    pub fn enable_autotile_terrain(
+    /// Enable textured terrain (placeholder).
+    pub fn enable_textured_terrain<T>(
         &mut self,
-        atlas: std::sync::Arc<parking_lot::RwLock<AutotileAtlas>>,
+        _atlas: std::sync::Arc<parking_lot::RwLock<T>>,
     ) {
-        info!("Enabling autotile terrain rendering");
-
-        // Create autotile renderer if not exists
-        if self.autotile_renderer.is_none() {
-            self.autotile_renderer = Some(AutotileChunkRenderer::new(
-                &self.device,
-                DEFAULT_CHUNK_SIZE,
-            ));
-        }
-
-        // Bind the atlas to the renderer
-        if let Some(renderer) = &mut self.autotile_renderer {
-            renderer.bind_atlas(atlas, &self.queue);
-        }
-    }
-
-    /// Disables textured terrain rendering.
-    pub fn disable_textured_terrain(&mut self) {
-        info!("Disabling textured terrain rendering");
-        self.textured_renderer = None;
-        self.autotile_renderer = None;
-    }
-
-    /// Returns whether textured terrain rendering is enabled.
-    #[must_use]
-    pub fn is_textured_terrain_enabled(&self) -> bool {
-        self.textured_renderer.as_ref().map_or(false, |r| r.has_terrain_atlas())
-            || self.autotile_renderer.as_ref().map_or(false, |r| r.is_atlas_bound())
-    }
-
-    /// Returns whether autotile terrain rendering is enabled.
-    #[must_use]
-    pub fn is_autotile_terrain_enabled(&self) -> bool {
-        self.autotile_renderer.as_ref().map_or(false, |r| r.is_atlas_bound())
+        info!("Textured terrain requested (terrain system removed)");
     }
 
     /// Loads the player sprite sheet from image data.
-    ///
-    /// The image should be in RGBA format.
     pub fn load_player_sprite(&mut self, image_data: &[u8], width: u32, height: u32) {
         self.player_sprite_renderer.load_sprite_sheet(
             &self.device,
@@ -440,55 +227,54 @@ impl Renderer {
         self.player_sprite_renderer.set_config(config);
     }
 
-    /// Updates the player sprite state from position and velocity.
-    ///
-    /// Call this each frame with the player's current state.
-    pub fn set_player(&mut self, position: (f32, f32), velocity: (f32, f32)) {
-        let config = *self.player_sprite_renderer.config();
-        // Use a fixed dt of 1/60 for animation - actual dt should be passed in
-        self.player_sprite_state.update(1.0 / 60.0, velocity, position, &config);
-    }
-
     /// Updates the player sprite state with explicit delta time.
     pub fn update_player_sprite(&mut self, dt: f32, position: (f32, f32), velocity: (f32, f32)) {
-        let config = *self.player_sprite_renderer.config();
-        self.player_sprite_state.update(dt, velocity, position, &config);
+        self.player_sprite_state
+            .update(dt, velocity, position, &self.player_animations);
     }
 
-    /// Enables multi-chunk rendering mode.
-    ///
-    /// When enabled, the renderer will use the ChunkManager for multi-chunk
-    /// streaming and rendering instead of the single CellBuffer.
-    pub fn enable_multi_chunk(&mut self) {
-        if self.chunk_manager.is_none() {
-            info!("Enabling multi-chunk rendering mode");
-            self.chunk_manager = Some(ChunkManager::new(DEFAULT_CHUNK_SIZE));
+    /// Triggers a one-shot animation action (e.g., Use, Punch, Jump).
+    pub fn set_player_action(&mut self, action: genesis_kernel::player_sprite::PlayerAnimAction) {
+        self.player_sprite_state
+            .set_action_override(action, &self.player_animations);
+    }
+
+    /// Sets the player animation set (parsed from TOML).
+    pub fn set_player_animations(&mut self, animations: PlayerAnimationSet) {
+        self.player_animations = animations;
+    }
+
+    /// Sets whether to skip player sprite rendering (for testing).
+    pub fn set_skip_player_sprite(&mut self, skip: bool) {
+        self.skip_player_sprite = skip;
+        if skip {
+            info!("Player sprite rendering disabled");
         }
     }
 
-    /// Disables multi-chunk rendering mode.
-    pub fn disable_multi_chunk(&mut self) {
-        if self.chunk_manager.is_some() {
-            info!("Disabling multi-chunk rendering mode");
-            self.chunk_manager = None;
+    /// Returns a mutable reference to the terrain tile renderer.
+    pub fn terrain_renderer_mut(&mut self) -> &mut TerrainTileRenderer {
+        &mut self.terrain_renderer
+    }
+
+    /// Returns a reference to the terrain tile renderer.
+    pub fn terrain_renderer(&self) -> &TerrainTileRenderer {
+        &self.terrain_renderer
+    }
+
+    /// Update terrain visible tiles for the current camera position.
+    /// This method handles borrowing internally to avoid borrow-checker issues.
+    pub fn update_terrain_visible_tiles(&mut self, camera_pos: (f32, f32), zoom: f32) {
+        if self.terrain_renderer.is_enabled() {
+            let size = (self.size.width, self.size.height);
+            self.terrain_renderer.update_visible_tiles(&self.queue, camera_pos, zoom, size);
         }
     }
 
-    /// Returns whether multi-chunk rendering is enabled.
+    /// Returns whether multi-chunk rendering is enabled (always false now).
     #[must_use]
     pub const fn is_multi_chunk_enabled(&self) -> bool {
-        self.chunk_manager.is_some()
-    }
-
-    /// Returns the chunk manager if multi-chunk mode is enabled.
-    #[must_use]
-    pub fn chunk_manager(&self) -> Option<&ChunkManager> {
-        self.chunk_manager.as_ref()
-    }
-
-    /// Returns a mutable reference to the chunk manager.
-    pub fn chunk_manager_mut(&mut self) -> Option<&mut ChunkManager> {
-        self.chunk_manager.as_mut()
+        false
     }
 
     /// Resizes the renderer to match the new window size.
@@ -498,205 +284,209 @@ impl Renderer {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-
-            // Update render params for new size
-            self.render_pipeline
-                .set_screen_size(&self.queue, new_size.width, new_size.height);
         }
     }
 
     /// Updates the scale factor for egui rendering.
-    /// Call this when the window's scale factor changes.
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.egui.set_pixels_per_point(scale_factor);
     }
 
-    /// Renders a frame, running simulation if enabled.
-    pub fn render(&mut self) -> Result<()> {
-        // Run simulation step if enabled
-        if self.simulation_running {
-            self.step_simulation();
-        }
-
-        let output = self
-            .surface
-            .get_current_texture()
-            .context("Failed to get surface texture")?;
-
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        // Render cells
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Cell Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.02,
-                            g: 0.02,
-                            b: 0.05,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            self.render_pipeline
-                .render(&mut render_pass, &self.render_bind_group);
-        }
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        self.frame_count += 1;
-
-        Ok(())
+    /// Updates the chunk manager camera position (placeholder).
+    pub fn update_camera_position(&mut self, _camera: &Camera) {
+        // Chunk manager removed
     }
 
-    /// Renders a frame with game state, camera, and optional debug overlay.
-    ///
-    /// This is the main render entry point that integrates:
-    /// - Cell simulation
-    /// - Camera-relative view
-    /// - Player visualization
-    /// - Debug overlay (when enabled)
-    pub fn render_with_state(
-        &mut self,
-        camera: &Camera,
-        _gameplay: &GameState,
-        show_debug: bool,
-        fps: f32,
-        frame_time: f32,
-        _hotbar_slot: u8,
-    ) -> Result<()> {
-        // Run simulation step if enabled
-        if self.simulation_running {
-            self.step_simulation();
+    /// Prepares chunks for simulation (placeholder).
+    pub fn prepare_multi_chunk_simulation(&mut self) {
+        // Multi-chunk removed
+    }
+
+    /// Steps simulation for all active chunks (placeholder).
+    pub fn step_multi_chunk_simulation(&mut self) {
+        // Multi-chunk removed
+    }
+
+    /// Handle a window event for egui.
+    pub fn handle_event(&mut self, window: &Window, event: &WindowEvent) -> bool {
+        self.egui.handle_event(window, event)
+    }
+
+    /// Returns the number of visible/active chunks (always 0 now).
+    #[must_use]
+    pub fn visible_chunk_count(&self) -> usize {
+        0
+    }
+
+    /// Returns the total number of cells being simulated (always 0 now).
+    #[must_use]
+    pub fn total_cell_count(&self) -> u64 {
+        0
+    }
+
+    /// Returns a reference to the GPU device.
+    #[must_use]
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    /// Returns a reference to the GPU queue.
+    #[must_use]
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    /// Returns the current surface size.
+    #[must_use]
+    pub const fn size(&self) -> PhysicalSize<u32> {
+        self.size
+    }
+
+    /// Returns the surface format.
+    #[must_use]
+    pub fn surface_format(&self) -> wgpu::TextureFormat {
+        self.config.format
+    }
+
+    /// Returns the current frame count.
+    #[must_use]
+    pub const fn frame_count(&self) -> u64 {
+        self.frame_count
+    }
+
+    /// Toggles the debug grid visibility.
+    pub fn toggle_debug_grid(&mut self) {
+        self.show_debug_grid = !self.show_debug_grid;
+        info!("Debug grid: {}", if self.show_debug_grid { "ON" } else { "OFF" });
+    }
+
+    /// Sets the debug grid visibility.
+    pub fn set_debug_grid(&mut self, enabled: bool) {
+        self.show_debug_grid = enabled;
+    }
+
+    /// Returns whether the debug grid is visible.
+    #[must_use]
+    pub const fn is_debug_grid_visible(&self) -> bool {
+        self.show_debug_grid
+    }
+
+    /// Draws the debug chunk grid using egui.
+    fn draw_debug_grid(&self, camera: &Camera, scale_factor: f32) {
+        let ctx = self.egui.context();
+        let painter = ctx.layer_painter(egui::LayerId::background());
+
+        // Screen dimensions in logical pixels
+        let screen_width = self.size.width as f32 / scale_factor;
+        let screen_height = self.size.height as f32 / scale_factor;
+
+        // Camera position and zoom
+        let (cam_x, cam_y) = camera.position;
+        let zoom = camera.zoom;
+        let chunk_size = self.chunk_size as f32;
+
+        // World bounds visible on screen
+        let half_width = screen_width / (2.0 * zoom);
+        let half_height = screen_height / (2.0 * zoom);
+        let world_left = cam_x - half_width;
+        let world_right = cam_x + half_width;
+        let world_top = cam_y - half_height;
+        let world_bottom = cam_y + half_height;
+
+        // Find chunk boundaries to draw
+        let chunk_x_start = (world_left / chunk_size).floor() as i32;
+        let chunk_x_end = (world_right / chunk_size).ceil() as i32;
+        let chunk_y_start = (world_top / chunk_size).floor() as i32;
+        let chunk_y_end = (world_bottom / chunk_size).ceil() as i32;
+
+        // Grid line style
+        let grid_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 100, 100, 128));
+        let chunk_stroke = egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(255, 200, 0, 200));
+
+        // Helper to convert world coords to screen coords
+        let world_to_screen = |wx: f32, wy: f32| -> egui::Pos2 {
+            let sx = (wx - cam_x) * zoom + screen_width / 2.0;
+            let sy = (wy - cam_y) * zoom + screen_height / 2.0;
+            egui::pos2(sx, sy)
+        };
+
+        // Draw vertical chunk lines
+        for chunk_x in chunk_x_start..=chunk_x_end {
+            let world_x = chunk_x as f32 * chunk_size;
+            let top = world_to_screen(world_x, world_top);
+            let bottom = world_to_screen(world_x, world_bottom);
+            painter.line_segment([top, bottom], chunk_stroke);
+
+            // Draw chunk coordinate labels for each cell in this column
+            for chunk_y in chunk_y_start..=chunk_y_end {
+                let label_pos = world_to_screen(world_x + chunk_size / 2.0, chunk_y as f32 * chunk_size + 20.0);
+                let label = format!("({}, {})", chunk_x, chunk_y);
+                painter.text(
+                    label_pos,
+                    egui::Align2::CENTER_TOP,
+                    label,
+                    egui::FontId::proportional(12.0),
+                    egui::Color32::from_rgba_unmultiplied(255, 200, 0, 180),
+                );
+            }
         }
 
-        // Update render pipeline with camera position
-        self.render_pipeline.set_camera(
-            &self.queue,
-            camera.position.0 as i32,
-            camera.position.1 as i32,
-        );
-        self.render_pipeline.set_zoom(&self.queue, camera.zoom);
-
-        let output = self
-            .surface
-            .get_current_texture()
-            .context("Failed to get surface texture")?;
-
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        // Render cells with camera offset
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Cell Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.15,
-                            b: 0.2,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            self.render_pipeline
-                .render(&mut render_pass, &self.render_bind_group);
+        // Draw horizontal chunk lines
+        for chunk_y in chunk_y_start..=chunk_y_end {
+            let world_y = chunk_y as f32 * chunk_size;
+            let left = world_to_screen(world_left, world_y);
+            let right = world_to_screen(world_right, world_y);
+            painter.line_segment([left, right], chunk_stroke);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        // Draw finer grid lines within chunks (every 64 pixels)
+        let sub_grid_size = 64.0;
+        let sub_x_start = (world_left / sub_grid_size).floor() as i32;
+        let sub_x_end = (world_right / sub_grid_size).ceil() as i32;
+        let sub_y_start = (world_top / sub_grid_size).floor() as i32;
+        let sub_y_end = (world_bottom / sub_grid_size).ceil() as i32;
 
-        // Log debug info (simplified - real HUD would use egui)
-        if show_debug && self.frame_count % 60 == 0 {
-            info!(
-                "FPS: {:.1}, Frame: {:.2}ms, Camera: ({:.0}, {:.0}), Zoom: {:.1}x",
-                fps, frame_time, camera.position.0, camera.position.1, camera.zoom
-            );
+        for sx in sub_x_start..=sub_x_end {
+            let world_x = sx as f32 * sub_grid_size;
+            // Skip chunk boundaries (already drawn thicker)
+            if (world_x % chunk_size).abs() < 0.1 {
+                continue;
+            }
+            let top = world_to_screen(world_x, world_top);
+            let bottom = world_to_screen(world_x, world_bottom);
+            painter.line_segment([top, bottom], grid_stroke);
         }
 
-        output.present();
+        for sy in sub_y_start..=sub_y_end {
+            let world_y = sy as f32 * sub_grid_size;
+            // Skip chunk boundaries (already drawn thicker)
+            if (world_y % chunk_size).abs() < 0.1 {
+                continue;
+            }
+            let left = world_to_screen(world_left, world_y);
+            let right = world_to_screen(world_right, world_y);
+            painter.line_segment([left, right], grid_stroke);
+        }
 
-        self.frame_count += 1;
-
-        Ok(())
+        // Draw origin crosshair
+        let origin = world_to_screen(0.0, 0.0);
+        let origin_stroke = egui::Stroke::new(2.0, egui::Color32::RED);
+        painter.line_segment([egui::pos2(origin.x - 20.0, origin.y), egui::pos2(origin.x + 20.0, origin.y)], origin_stroke);
+        painter.line_segment([egui::pos2(origin.x, origin.y - 20.0), egui::pos2(origin.x, origin.y + 20.0)], origin_stroke);
     }
 
     /// Renders a frame with game state and egui UI overlay.
-    ///
-    /// This method combines world rendering with egui UI. The UI is rendered
-    /// on top of the game world. Use the `ui_fn` callback to build your UI.
-    ///
-    /// # Arguments
-    /// * `window` - The winit window (for egui input handling)
-    /// * `camera` - Camera for world-to-screen transform
-    /// * `ui_fn` - Callback that builds the egui UI
-    pub fn render_with_ui<F>(&mut self, window: &Window, camera: &Camera, ui_fn: F) -> Result<()>
+    pub fn render_with_ui<F>(&mut self, window: &Window, camera: &Camera, time_of_day: f32, sun_intensity: f32, ui_fn: F) -> Result<()>
     where
         F: FnOnce(&egui::Context),
     {
-        // Run simulation step if enabled
-        if self.simulation_running {
-            self.step_simulation();
-        }
-
-        // Update render pipeline with camera position
-        self.render_pipeline.set_camera(
-            &self.queue,
-            camera.position.0 as i32,
-            camera.position.1 as i32,
-        );
-        self.render_pipeline.set_zoom(&self.queue, camera.zoom);
-
-        // Also update chunk render manager camera if using streaming terrain
-        if let Some(render_mgr) = &mut self.chunk_render_manager {
-            render_mgr.update_camera(&self.queue, camera);
-        }
-
-        // Update textured renderer camera if enabled
-        if let Some(textured_mgr) = &mut self.textured_renderer {
-            textured_mgr.update_camera(&self.queue, camera);
-        }
-
-        // Update autotile renderer camera if enabled
-        if let Some(autotile_mgr) = &mut self.autotile_renderer {
-            autotile_mgr.update_params(&self.queue, camera, 0.5); // TODO: pass actual time of day
-        }
-
         // Begin egui frame
         self.egui.begin_frame(window);
+
+        // Draw debug grid if enabled (using egui painter for simplicity)
+        if self.show_debug_grid {
+            self.draw_debug_grid(camera, window.scale_factor() as f32);
+        }
 
         // Build UI via callback
         ui_fn(self.egui.context());
@@ -733,17 +523,10 @@ impl Renderer {
             egui_output,
         );
 
-        // Render world (cells/terrain)
+        // Clear the screen with a sky blue color
         {
-            // Collect visible chunks for autotile renderer
-            let visible_chunks: Vec<(i32, i32)> = if let Some(terrain) = &self.streaming_terrain {
-                terrain.loaded_chunks().map(|c| (c.id.x, c.id.y)).collect()
-            } else {
-                vec![]
-            };
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Cell Render Pass"),
+            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Clear Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -761,38 +544,39 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-
-            // Priority: autotile renderer > textured renderer > chunk render manager > single-chunk mode
-            if let Some(autotile_mgr) = &self.autotile_renderer {
-                let is_bound = autotile_mgr.is_atlas_bound();
-
-                if is_bound && !visible_chunks.is_empty() {
-                    autotile_mgr.render(&mut render_pass, &visible_chunks);
-                } else if let Some(render_mgr) = &self.chunk_render_manager {
-                    render_mgr.render(&mut render_pass);
-                } else {
-                    self.render_pipeline
-                        .render(&mut render_pass, &self.render_bind_group);
-                }
-            } else if let Some(textured_mgr) = &self.textured_renderer {
-                if textured_mgr.has_terrain_atlas() {
-                    textured_mgr.render(&mut render_pass);
-                } else if let Some(render_mgr) = &self.chunk_render_manager {
-                    render_mgr.render(&mut render_pass);
-                } else {
-                    self.render_pipeline
-                        .render(&mut render_pass, &self.render_bind_group);
-                }
-            } else if let Some(render_mgr) = &self.chunk_render_manager {
-                render_mgr.render(&mut render_pass);
-            } else {
-                self.render_pipeline
-                    .render(&mut render_pass, &self.render_bind_group);
-            }
         }
 
-        // Render player sprite (between terrain and UI)
-        if self.player_sprite_renderer.is_loaded() {
+        // Render terrain tiles (background layer, before player)
+        if self.terrain_renderer.is_enabled() && self.terrain_renderer.instance_count() > 0 {
+            self.terrain_renderer.update_camera(
+                &self.queue,
+                camera.position,
+                (self.size.width, self.size.height),
+                camera.zoom,
+                time_of_day,
+                sun_intensity,
+            );
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Terrain Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // Preserve clear color
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            self.terrain_renderer.render(&mut render_pass);
+        }
+
+        // Render player sprite (between terrain and UI) - skip if disabled
+        if self.player_sprite_renderer.is_loaded() && !self.skip_player_sprite {
             // Update camera and player state for the sprite renderer
             self.player_sprite_renderer.update_camera(
                 &self.queue,
@@ -803,6 +587,7 @@ impl Renderer {
             self.player_sprite_renderer.update_player(
                 &self.queue,
                 &self.player_sprite_state,
+                &self.player_animations,
             );
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -811,7 +596,7 @@ impl Renderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load, // Preserve terrain rendering
+                        load: wgpu::LoadOp::Load, // Preserve clear color
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -856,156 +641,14 @@ impl Renderer {
         Ok(())
     }
 
-    /// Handle a window event for egui.
-    ///
-    /// Call this before processing events in the game loop.
-    /// Returns `true` if egui consumed the event (game should ignore it).
-    pub fn handle_event(&mut self, window: &Window, event: &WindowEvent) -> bool {
-        self.egui.handle_event(window, event)
-    }
-
-    /// Runs one simulation step on the GPU.
-    fn step_simulation(&mut self) {
-        // CellBuffer::step() handles params update, dispatch, and buffer swap internally
-        self.cell_buffer
-            .step(&self.device, &self.queue, &self.compute_pipeline);
-
-        // Update render bind group to point to new current buffer
-        self.render_bind_group = self
-            .render_pipeline
-            .create_bind_group(&self.device, self.cell_buffer.current_buffer());
-    }
-
-    /// Toggles simulation on/off.
-    pub fn toggle_simulation(&mut self) {
-        self.simulation_running = !self.simulation_running;
-        info!(
-            "Simulation {}",
-            if self.simulation_running {
-                "running"
-            } else {
-                "paused"
-            }
-        );
-    }
-
-    /// Returns whether simulation is running.
-    #[must_use]
-    pub const fn is_simulation_running(&self) -> bool {
-        self.simulation_running
-    }
-
-    /// Returns the current frame count.
-    #[must_use]
-    pub const fn frame_count(&self) -> u64 {
-        self.frame_count
-    }
-
-    /// Returns a reference to the GPU device.
-    #[must_use]
-    pub fn device(&self) -> &wgpu::Device {
-        &self.device
-    }
-
-    /// Returns a reference to the GPU queue.
-    #[must_use]
-    pub fn queue(&self) -> &wgpu::Queue {
-        &self.queue
-    }
-
-    /// Returns a reference to the cell buffer.
-    #[must_use]
-    pub fn cell_buffer(&self) -> &CellBuffer {
-        &self.cell_buffer
-    }
-
-    /// Returns a mutable reference to the cell buffer.
-    pub fn cell_buffer_mut(&mut self) -> &mut CellBuffer {
-        &mut self.cell_buffer
-    }
-
-    /// Returns the current surface size.
-    #[must_use]
-    pub const fn size(&self) -> PhysicalSize<u32> {
-        self.size
-    }
-
-    /// Returns the surface format.
-    #[must_use]
-    pub fn surface_format(&self) -> wgpu::TextureFormat {
-        self.config.format
-    }
-
-    /// Returns the compute pipeline.
-    #[must_use]
-    pub fn compute_pipeline(&self) -> &CellComputePipeline {
-        &self.compute_pipeline
-    }
-
-    /// Returns the number of visible/active chunks.
-    ///
-    /// In single-chunk mode, this always returns 1.
-    /// In multi-chunk mode, this returns the number of active chunks from the ChunkManager.
-    #[must_use]
-    pub fn visible_chunk_count(&self) -> usize {
-        match &self.chunk_manager {
-            Some(cm) => cm.active_chunk_count(),
-            None => 1, // Single chunk mode
-        }
-    }
-
-    /// Returns the total number of cells being simulated.
-    #[must_use]
-    pub fn total_cell_count(&self) -> u64 {
-        let cells_per_chunk = DEFAULT_CHUNK_SIZE as u64 * DEFAULT_CHUNK_SIZE as u64;
-        match &self.chunk_manager {
-            Some(cm) => cm.active_chunk_count() as u64 * cells_per_chunk,
-            None => cells_per_chunk, // Single chunk
-        }
-    }
-
-    /// Updates the chunk manager camera position for multi-chunk mode.
-    ///
-    /// Call this when the camera moves to ensure correct chunks are loaded.
-    pub fn update_camera_position(&mut self, camera: &Camera) {
-        if let Some(cm) = &mut self.chunk_manager {
-            cm.update_camera(camera.position.0 as i32, camera.position.1 as i32);
-        }
-    }
-
-    /// Prepares chunks for simulation in multi-chunk mode.
-    ///
-    /// This loads/unloads chunks based on camera position.
-    pub fn prepare_multi_chunk_simulation(&mut self) {
-        if let Some(cm) = &mut self.chunk_manager {
-            cm.prepare_simulation(&self.device, &self.compute_pipeline);
-        }
-    }
-
-    /// Steps simulation for all active chunks in multi-chunk mode.
-    pub fn step_multi_chunk_simulation(&mut self) {
-        if let Some(cm) = &mut self.chunk_manager {
-            cm.step_simulation(&self.device, &self.queue, &self.compute_pipeline);
-        }
-    }
-
     /// Captures a screenshot and saves it to the specified path.
-    ///
-    /// This captures the current framebuffer content as a PNG image.
-    /// The capture is done by rendering to a separate texture and copying it back to CPU.
-    ///
-    /// # Arguments
-    /// * `path` - The file path to save the screenshot to (should end in .png)
-    /// * `camera` - The current camera for rendering
-    /// * `window` - The window for egui context
-    ///
-    /// # Returns
-    /// The path to the saved screenshot file, or an error.
     pub fn capture_screenshot<P: AsRef<std::path::Path>>(
         &mut self,
         path: P,
         camera: &Camera,
         _window: &Window,
+        time_of_day: f32,
+        sun_intensity: f32,
     ) -> Result<std::path::PathBuf> {
         use std::io::Write;
 
@@ -1014,8 +657,7 @@ impl Renderer {
         let width = self.size.width;
         let height = self.size.height;
 
-        // Create a texture to render to (instead of the surface)
-        // Use the same format as the surface for compatibility with render pipelines
+        // Create a texture to render to
         let capture_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Screenshot Capture Texture"),
             size: wgpu::Extent3d {
@@ -1026,7 +668,7 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: self.config.format, // Use surface format for compatibility
+            format: self.config.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
@@ -1048,39 +690,14 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        // Update camera for render
-        self.render_pipeline.set_camera(
-            &self.queue,
-            camera.position.0 as i32,
-            camera.position.1 as i32,
-        );
-        self.render_pipeline.set_zoom(&self.queue, camera.zoom);
-
-        // Update renderers with camera
-        if let Some(render_mgr) = &mut self.chunk_render_manager {
-            render_mgr.update_camera(&self.queue, camera);
-        }
-        if let Some(textured_mgr) = &mut self.textured_renderer {
-            textured_mgr.update_camera(&self.queue, camera);
-        }
-        if let Some(autotile_mgr) = &mut self.autotile_renderer {
-            autotile_mgr.update_params(&self.queue, camera, 0.5);
-        }
-
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Screenshot Encoder"),
         });
 
-        // Render world to capture texture
+        // Clear with sky color
         {
-            let visible_chunks: Vec<(i32, i32)> = if let Some(terrain) = &self.streaming_terrain {
-                terrain.loaded_chunks().map(|c| (c.id.x, c.id.y)).collect()
-            } else {
-                vec![]
-            };
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Screenshot Render Pass"),
+            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Screenshot Clear Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &capture_view,
                     resolve_target: None,
@@ -1098,29 +715,67 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+        }
 
-            // Render using appropriate renderer
-            if let Some(autotile_mgr) = &self.autotile_renderer {
-                if autotile_mgr.is_atlas_bound() && !visible_chunks.is_empty() {
-                    autotile_mgr.render(&mut render_pass, &visible_chunks);
-                } else if let Some(render_mgr) = &self.chunk_render_manager {
-                    render_mgr.render(&mut render_pass);
-                } else {
-                    self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
-                }
-            } else if let Some(textured_mgr) = &self.textured_renderer {
-                if textured_mgr.has_terrain_atlas() {
-                    textured_mgr.render(&mut render_pass);
-                } else if let Some(render_mgr) = &self.chunk_render_manager {
-                    render_mgr.render(&mut render_pass);
-                } else {
-                    self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
-                }
-            } else if let Some(render_mgr) = &self.chunk_render_manager {
-                render_mgr.render(&mut render_pass);
-            } else {
-                self.render_pipeline.render(&mut render_pass, &self.render_bind_group);
-            }
+        // Render terrain tiles for screenshot
+        if self.terrain_renderer.is_enabled() && self.terrain_renderer.instance_count() > 0 {
+            self.terrain_renderer.update_camera(
+                &self.queue,
+                camera.position,
+                (self.size.width, self.size.height),
+                camera.zoom,
+                time_of_day,
+                sun_intensity,
+            );
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Screenshot Terrain Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &capture_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            self.terrain_renderer.render(&mut render_pass);
+        }
+
+        // Render player sprite if loaded
+        if self.player_sprite_renderer.is_loaded() && !self.skip_player_sprite {
+            self.player_sprite_renderer.update_camera(
+                &self.queue,
+                camera.position,
+                (self.size.width, self.size.height),
+                camera.zoom,
+            );
+            self.player_sprite_renderer.update_player(
+                &self.queue,
+                &self.player_sprite_state,
+                &self.player_animations,
+            );
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Screenshot Player Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &capture_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            self.player_sprite_renderer.render(&mut render_pass);
         }
 
         // Copy texture to buffer
@@ -1152,7 +807,7 @@ impl Renderer {
         let buffer_slice = output_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).unwrap();
+            let _ = tx.send(result);
         });
 
         self.device.poll(wgpu::Maintain::Wait);
@@ -1164,7 +819,6 @@ impl Renderer {
         let data = buffer_slice.get_mapped_range();
 
         // Remove padding and collect actual image data
-        // Also convert BGRA to RGBA if needed (most surfaces use BGRA)
         let is_bgra = matches!(
             self.config.format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
@@ -1216,167 +870,8 @@ impl Renderer {
     }
 }
 
-/// Creates static terrain for top-down RPG view (no gravity/falling).
-/// This terrain is designed for exploration, not cell physics simulation.
-#[allow(clippy::cast_possible_wrap)]
-fn create_static_terrain(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
-    use genesis_kernel::{Cell, CellFlags};
-
-    let total_cells = chunk_size * chunk_size;
-    let mut cells = vec![Cell::default(); total_cells];
-
-    // Create a top-down RPG terrain with:
-    // - Grass as base
-    // - Paths of dirt
-    // - Some water bodies
-    // - Stone formations
-    // - Trees (represented by darker grass)
-
-    for y in 0..chunk_size {
-        for x in 0..chunk_size {
-            let idx = y * chunk_size + x;
-
-            // Base grass everywhere
-            cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID); // Grass
-
-            // Create some variation with noise-like patterns
-            let noise1 = ((x as f32 * 0.1).sin() * (y as f32 * 0.1).cos() * 10.0) as i32;
-            let noise2 = ((x as f32 * 0.05 + 2.0).sin() * (y as f32 * 0.07).sin() * 15.0) as i32;
-            let combined = noise1 + noise2;
-
-            // Dirt paths (crossing the map)
-            let center = chunk_size / 2;
-            let dx = (x as i32 - center as i32).abs();
-            let dy = (y as i32 - center as i32).abs();
-
-            // Horizontal path
-            if dy < 8 && (x > 20 && x < chunk_size - 20) {
-                cells[idx] = Cell::new(4).with_flag(CellFlags::SOLID); // Dirt
-            }
-            // Vertical path
-            if dx < 8 && (y > 20 && y < chunk_size - 20) {
-                cells[idx] = Cell::new(4).with_flag(CellFlags::SOLID); // Dirt
-            }
-
-            // Water lake in corner
-            let lake_x = chunk_size * 3 / 4;
-            let lake_y = chunk_size * 3 / 4;
-            let lake_dx = (x as i32 - lake_x as i32) as f32;
-            let lake_dy = (y as i32 - lake_y as i32) as f32;
-            let lake_dist = (lake_dx * lake_dx + lake_dy * lake_dy).sqrt();
-            if lake_dist < 30.0 {
-                cells[idx] = Cell::new(1).with_flag(CellFlags::LIQUID); // Water
-            }
-            // Sandy beach around water
-            if (30.0..35.0).contains(&lake_dist) {
-                cells[idx] = Cell::new(2).with_flag(CellFlags::SOLID); // Sand
-            }
-
-            // Stone formations (scattered)
-            if combined > 12 && lake_dist > 40.0 {
-                cells[idx] = Cell::new(5).with_flag(CellFlags::SOLID); // Stone
-            }
-
-            // Some darker grass patches (forest areas)
-            let forest1_x = chunk_size / 4;
-            let forest1_y = chunk_size / 4;
-            let forest_dx = (x as i32 - forest1_x as i32) as f32;
-            let forest_dy = (y as i32 - forest1_y as i32) as f32;
-            let forest_dist = (forest_dx * forest_dx + forest_dy * forest_dy).sqrt();
-            if forest_dist < 40.0 && combined > 0 && cells[idx].material == 3 {
-                // Make it look like denser vegetation (darker grass - use material 3 with higher temp)
-                cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID);
-            }
-        }
-    }
-
-    cells
-}
-
-/// Creates terrain for initial visualization - a 2D side-view world.
-/// (Legacy function for platformer-style games)
-#[allow(clippy::cast_possible_wrap)]
-#[allow(dead_code)]
-fn create_test_pattern(chunk_size: usize) -> Vec<genesis_kernel::Cell> {
-    use genesis_kernel::{Cell, CellFlags};
-
-    let total_cells = chunk_size * chunk_size;
-    let mut cells = vec![Cell::default(); total_cells];
-
-    // Create a 2D terrain with:
-    // - Sky (air) at top
-    // - Rolling hills with grass
-    // - Dirt layer below grass
-    // - Stone at the bottom
-    // - A cave system
-    // - A pond of water
-
-    let ground_base = chunk_size / 2; // Ground level at middle
-
-    for x in 0..chunk_size {
-        // Create rolling hills using sine waves
-        let hill1 = ((x as f32 * 0.05).sin() * 15.0) as i32;
-        let hill2 = ((x as f32 * 0.02 + 1.0).sin() * 25.0) as i32;
-        let ground_y = (ground_base as i32 + hill1 + hill2) as usize;
-
-        for y in 0..chunk_size {
-            let idx = y * chunk_size + x;
-
-            // Below ground
-            if y > ground_y {
-                let depth = y - ground_y;
-
-                // Grass layer (top 2 cells)
-                if depth <= 2 {
-                    cells[idx] = Cell::new(3).with_flag(CellFlags::SOLID); // Grass
-                }
-                // Dirt layer (next 15 cells)
-                else if depth <= 17 {
-                    cells[idx] = Cell::new(4).with_flag(CellFlags::SOLID); // Dirt
-                }
-                // Stone below
-                else {
-                    cells[idx] = Cell::new(5).with_flag(CellFlags::SOLID); // Stone
-                }
-
-                // Create a cave in the stone layer
-                let cave_center_x = chunk_size / 3;
-                let cave_center_y = ground_y + 30;
-                let dx = (x as i32 - cave_center_x as i32).abs() as f32;
-                let dy = (y as i32 - cave_center_y as i32).abs() as f32;
-                let cave_dist = (dx * dx + dy * dy * 0.5).sqrt();
-                if cave_dist < 20.0 && depth > 17 {
-                    cells[idx] = Cell::default(); // Air (cave)
-                }
-            }
-        }
-
-        // Create a water pond in a depression
-        let pond_start = chunk_size * 2 / 3;
-        let pond_end = pond_start + 40;
-        if x >= pond_start && x < pond_end {
-            let pond_depth = 8 - ((x as i32 - (pond_start + 20) as i32).abs() / 3) as usize;
-            let pond_ground = (ground_base as i32 + hill1 + hill2) as usize;
-            for y in pond_ground.saturating_sub(pond_depth)..=pond_ground {
-                if y < chunk_size {
-                    let idx = y * chunk_size + x;
-                    cells[idx] = Cell::new(1).with_flag(CellFlags::LIQUID); // Water
-                }
-            }
-        }
-
-        // Add some sand near the water
-        if x >= pond_start.saturating_sub(5) && x < pond_end + 5 {
-            let sand_ground = (ground_base as i32 + hill1 + hill2) as usize;
-            for y in sand_ground..sand_ground.saturating_add(3).min(chunk_size) {
-                let idx = y * chunk_size + x;
-                if cells[idx].material != 1 {
-                    // Don't overwrite water
-                    cells[idx] = Cell::new(2).with_flag(CellFlags::SOLID); // Sand
-                }
-            }
-        }
-    }
-
-    cells
+/// Placeholder streaming stats (terrain removed).
+pub struct StreamingStats {
+    /// Number of simulating chunks
+    pub simulating_count: usize,
 }

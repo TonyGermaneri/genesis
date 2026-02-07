@@ -7,7 +7,42 @@
 //!
 //! Uses circle collision for NPC bodies with separate interaction radius.
 
-use crate::collision::Vec2;
+/// A 2D vector for collision operations.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Vec2 {
+    /// X component
+    pub x: f32,
+    /// Y component
+    pub y: f32,
+}
+
+impl Vec2 {
+    /// Creates a new Vec2.
+    #[must_use]
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
+    /// Returns the length of the vector.
+    #[must_use]
+    pub fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+
+    /// Returns the squared length of the vector (avoids sqrt).
+    #[must_use]
+    pub fn length_squared(&self) -> f32 {
+        self.x * self.x + self.y * self.y
+    }
+
+    /// Returns the distance to another point.
+    #[must_use]
+    pub fn distance(&self, other: &Self) -> f32 {
+        let dx = other.x - self.x;
+        let dy = other.y - self.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+}
 
 /// Position and collision data for an NPC.
 #[derive(Debug, Clone, Copy)]

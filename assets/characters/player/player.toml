@@ -1,0 +1,122 @@
+# Player Character Definition
+# This is the main player character
+
+id = "player"
+name = "Player"
+description = "The player character"
+folder = "player"
+faction_id = 0
+is_player = true
+tags = ["player", "protagonist"]
+created_at = "2026-02-06T00:00:00Z"
+modified_at = "2026-02-06T00:00:00Z"
+
+[appearance]
+animation_template = "assets/sprites/characters/player.toml"
+
+[appearance.layers.Body]
+enabled = true
+sprite_id = "Body_48x48_01"
+
+[appearance.layers.Eyes]
+enabled = true
+sprite_id = "Eyes_48x48_01"
+
+[appearance.layers.Hairstyle]
+enabled = true
+sprite_id = "Hairstyle_01_48x48_01"
+
+[appearance.layers.Outfit]
+enabled = true
+sprite_id = "Outfit_01_48x48_01"
+
+[appearance.layers.Accessory]
+enabled = false
+
+[appearance.layers.Book]
+enabled = false
+
+[appearance.layers.Smartphone]
+enabled = false
+
+[stats]
+[stats.max_health]
+min = 100.0
+max = 100.0
+base = 100.0
+
+[stats.max_stamina]
+min = 100.0
+max = 100.0
+base = 100.0
+
+[stats.max_hunger]
+min = 100.0
+max = 100.0
+base = 100.0
+
+[stats.attack]
+min = 10.0
+max = 10.0
+base = 10.0
+
+[stats.defense]
+min = 5.0
+max = 5.0
+base = 5.0
+
+[stats.speed]
+min = 1.0
+max = 1.0
+base = 1.0
+
+[stats.crit_chance]
+min = 5.0
+max = 5.0
+base = 5.0
+
+[stats.mining]
+min = 1.0
+max = 1.0
+base = 1.0
+
+[stats.crafting]
+min = 1.0
+max = 1.0
+base = 1.0
+
+[stats.combat]
+min = 1.0
+max = 1.0
+base = 1.0
+
+[stats.farming]
+min = 1.0
+max = 1.0
+base = 1.0
+
+[stats.ai_difficulty]
+min = 0.0
+max = 0.0
+base = 0.0
+
+[stats.xp_reward]
+min = 0.0
+max = 0.0
+base = 0.0
+
+[stats.money]
+min = 100.0
+max = 100.0
+base = 100.0
+
+[inventory]
+items = []
+
+[inventory.equipped]
+
+[dialog]
+can_talk = false
+voice_type = "default"
+
+[dialog.categories]

@@ -195,7 +195,7 @@ impl Default for GraphicsSettings {
             ambient_occlusion: true,
             motion_blur: false,
             gamma: 1.0,
-            camera_zoom: 10.0,
+            camera_zoom: 1.0,
         }
     }
 }
@@ -212,7 +212,7 @@ impl GraphicsSettings {
         };
         self.texture_quality = self.texture_quality.min(100);
         self.gamma = self.gamma.clamp(0.5, 2.5);
-        self.camera_zoom = self.camera_zoom.clamp(0.25, 20.0);
+        self.camera_zoom = self.camera_zoom.clamp(0.1, 20.0);
     }
 }
 
@@ -1078,7 +1078,7 @@ impl OptionsMenu {
         ui.horizontal(|ui| {
             ui.label("Camera Zoom:");
             if ui
-                .add(egui::Slider::new(&mut graphics.camera_zoom, 0.25..=20.0).logarithmic(true))
+                .add(egui::Slider::new(&mut graphics.camera_zoom, 0.1..=20.0).logarithmic(true))
                 .changed()
             {
                 self.has_changes = true;

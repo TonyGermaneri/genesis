@@ -1,33 +1,62 @@
 //! Player sprite rendering system.
 //!
-//! Renders the player character with animated sprites for different
-//! directions and movement states (idle, walking).
+//! Renders the player character with animated sprites using per-frame
+//! coordinates from TOML animation definitions. Supports multiple
+//! animation actions (idle, walk, run, use, punch, jump) and four
+//! directions (down, up, left, right).
 
 use bytemuck::{Pod, Zeroable};
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
-/// Player animation state
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PlayerAnimState {
+// ============================================================================
+// Animation Action & Direction
+// ============================================================================
+
+/// Player animation action (what the character is doing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PlayerAnimAction {
     /// Standing still
     #[default]
     Idle,
-    /// Walking
-    Walking,
+    /// Walking (normal speed)
+    Walk,
+    /// Running (fast speed)
+    Run,
+    /// Using an item / interacting
+    Use,
+    /// Punching / melee attack
+    Punch,
+    /// Jumping
+    Jump,
 }
 
-/// Player facing direction
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+impl PlayerAnimAction {
+    /// Get the TOML action name prefix for this action.
+    pub fn toml_prefix(&self) -> &'static str {
+        match self {
+            Self::Idle => "Idle",
+            Self::Walk => "Walk",
+            Self::Run => "Run",
+            Self::Use => "Use",
+            Self::Punch => "Punch",
+            Self::Jump => "Jump",
+        }
+    }
+}
+
+/// Player facing direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum PlayerDirection {
     /// Facing down (south)
     #[default]
-    Down = 0,
-    /// Facing left (west)
-    Left = 1,
-    /// Facing right (east)
-    Right = 2,
+    Down,
     /// Facing up (north)
-    Up = 3,
+    Up,
+    /// Facing left (west)
+    Left,
+    /// Facing right (east)
+    Right,
 }
 
 impl PlayerDirection {
@@ -52,71 +81,175 @@ impl PlayerDirection {
         }
     }
 
-    /// Returns the row index in the sprite sheet for this direction.
-    /// Based on the Modern Exteriors sprite sheet layout.
-    #[must_use]
-    pub fn sprite_row(&self) -> u32 {
+    /// Get the TOML direction suffix for this direction.
+    pub fn toml_suffix(&self) -> &'static str {
         match self {
-            // Idle animations: rows 0-3 (down, left, right, up)
-            // Walk animations: rows 4-7 (down, left, right, up)
-            Self::Down => 0,
-            Self::Left => 1,
-            Self::Right => 2,
-            Self::Up => 3,
+            Self::Down => "Down",
+            Self::Up => "Up",
+            Self::Left => "Left",
+            Self::Right => "Right",
         }
     }
 }
 
-/// Configuration for the player sprite sheet.
+// ============================================================================
+// Animation Data (loaded from TOML)
+// ============================================================================
+
+/// A single frame in a sprite animation, with pixel coordinates in the sheet.
+#[derive(Debug, Clone, Copy)]
+pub struct SpriteFrame {
+    /// X pixel coordinate in the sprite sheet
+    pub x: u32,
+    /// Y pixel coordinate in the sprite sheet
+    pub y: u32,
+    /// Frame width in pixels
+    pub width: u32,
+    /// Frame height in pixels
+    pub height: u32,
+}
+
+/// A complete animation sequence (e.g., "WalkDown").
+#[derive(Debug, Clone)]
+pub struct SpriteAnimation {
+    /// Frames in this animation
+    pub frames: Vec<SpriteFrame>,
+    /// Frames per second
+    pub fps: f32,
+    /// Whether the animation loops
+    pub looping: bool,
+}
+
+/// Animation key combining action + direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AnimKey {
+    /// The action being performed
+    pub action: PlayerAnimAction,
+    /// The facing direction
+    pub direction: PlayerDirection,
+}
+
+impl AnimKey {
+    /// Create a new animation key.
+    pub fn new(action: PlayerAnimAction, direction: PlayerDirection) -> Self {
+        Self { action, direction }
+    }
+
+    /// Build the TOML action string (e.g. "WalkDown", "IdleLeft").
+    pub fn toml_action_name(&self) -> String {
+        format!("{}{}", self.action.toml_prefix(), self.direction.toml_suffix())
+    }
+
+    /// Parse a TOML action string into an AnimKey, if recognized.
+    pub fn from_toml_action(action: &str) -> Option<Self> {
+        let actions = [
+            ("Idle", PlayerAnimAction::Idle),
+            ("Walk", PlayerAnimAction::Walk),
+            ("Run", PlayerAnimAction::Run),
+            ("Use", PlayerAnimAction::Use),
+            ("Punch", PlayerAnimAction::Punch),
+            ("Jump", PlayerAnimAction::Jump),
+        ];
+        let directions = [
+            ("Down", PlayerDirection::Down),
+            ("Up", PlayerDirection::Up),
+            ("Left", PlayerDirection::Left),
+            ("Right", PlayerDirection::Right),
+        ];
+        for (prefix, anim_action) in &actions {
+            for (suffix, dir) in &directions {
+                let name = format!("{}{}", prefix, suffix);
+                if action == name {
+                    return Some(AnimKey::new(*anim_action, *dir));
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Collection of all loaded animations, keyed by action+direction.
+#[derive(Debug, Clone, Default)]
+pub struct PlayerAnimationSet {
+    /// Map from (action, direction) to animation data
+    pub animations: HashMap<AnimKey, SpriteAnimation>,
+}
+
+impl PlayerAnimationSet {
+    /// Create an empty animation set.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert an animation.
+    pub fn insert(&mut self, key: AnimKey, anim: SpriteAnimation) {
+        self.animations.insert(key, anim);
+    }
+
+    /// Get an animation by key, with fallback chain:
+    /// requested action → Idle same direction → IdleDown
+    pub fn get(&self, key: &AnimKey) -> Option<&SpriteAnimation> {
+        self.animations.get(key)
+            .or_else(|| self.animations.get(&AnimKey::new(PlayerAnimAction::Idle, key.direction)))
+            .or_else(|| self.animations.get(&AnimKey::new(PlayerAnimAction::Idle, PlayerDirection::Down)))
+    }
+
+    /// Check if an animation exists.
+    pub fn contains(&self, key: &AnimKey) -> bool {
+        self.animations.contains_key(key)
+    }
+}
+
+// ============================================================================
+// Sprite Config (simplified)
+// ============================================================================
+
+/// Configuration for the player sprite rendering.
 #[derive(Debug, Clone, Copy)]
 pub struct PlayerSpriteConfig {
-    /// Width of each sprite frame in pixels
-    pub frame_width: u32,
-    /// Height of each sprite frame in pixels
-    pub frame_height: u32,
-    /// Number of frames per idle animation (per direction)
-    pub idle_frames: u32,
-    /// Number of frames per walk animation (per direction)
-    pub walk_frames: u32,
-    /// Row index for idle animations (pixel Y start / frame_height)
-    pub idle_row: u32,
-    /// Row index for walk animations (pixel Y start / frame_height)
-    pub walk_row: u32,
-    /// Pixel Y offset where sprite content starts
-    pub row_y_offset: u32,
-    /// Animation speed (frames per second)
-    pub anim_fps: f32,
     /// Render scale multiplier
     pub scale: f32,
-    /// Whether directions are horizontal (all in one row) or vertical (separate rows)
-    pub horizontal_directions: bool,
+    /// Default frame width (used for display sizing when no animation loaded)
+    pub frame_width: u32,
+    /// Default frame height (used for display sizing when no animation loaded)
+    pub frame_height: u32,
 }
 
 impl Default for PlayerSpriteConfig {
     fn default() -> Self {
-        // Configuration for Modern Exteriors Skeleton sprite sheet (simpler layout)
-        // Row 1 (y=129): Walk animation with 4 directions x 6 frames = 24 frames horizontal
-        // Each direction occupies 6 consecutive frames: Down(0-5), Left(6-11), Right(12-17), Up(18-23)
         Self {
+            scale: 2.0,
             frame_width: 48,
-            frame_height: 63,  // Detected from row height
-            idle_frames: 6,    // Use walk frames for idle too
-            walk_frames: 6,
-            idle_row: 1,       // Use same row for both
-            walk_row: 1,       // Row 1 (y=129 / 63 ≈ row index considering offset)
-            row_y_offset: 129, // Pixel Y where walk row starts
-            anim_fps: 8.0,
-            scale: 2.0,        // Scale up for visibility
-            horizontal_directions: true, // All 4 directions in one row
+            frame_height: 74,
         }
     }
 }
 
+// Keep the old fields available for API compatibility but unused internally
+#[doc(hidden)]
+impl PlayerSpriteConfig {
+    /// Create a config with just scale and frame dimensions.
+    pub fn with_scale(scale: f32, frame_width: u32, frame_height: u32) -> Self {
+        Self {
+            scale,
+            frame_width,
+            frame_height,
+        }
+    }
+}
+
+// ============================================================================
+// Player Sprite State
+// ============================================================================
+
+/// Backward-compatible alias
+pub type PlayerAnimState = PlayerAnimAction;
+
 /// Player sprite state for animation.
 #[derive(Debug, Clone)]
 pub struct PlayerSpriteState {
-    /// Current animation state
-    pub anim_state: PlayerAnimState,
+    /// Current animation action
+    pub action: PlayerAnimAction,
     /// Current facing direction
     pub direction: PlayerDirection,
     /// Current animation frame (0-based)
@@ -125,87 +258,148 @@ pub struct PlayerSpriteState {
     pub frame_time: f32,
     /// World position (x, y)
     pub position: (f32, f32),
+    /// Action override from input (e.g., Use, Punch, Jump).
+    /// When set, this takes priority over velocity-based action.
+    /// Cleared when the animation completes one cycle.
+    action_override: Option<PlayerAnimAction>,
+    /// Remaining time for the action override animation
+    action_override_timer: f32,
 }
 
 impl Default for PlayerSpriteState {
     fn default() -> Self {
         Self {
-            anim_state: PlayerAnimState::Idle,
+            action: PlayerAnimAction::Idle,
             direction: PlayerDirection::Down,
             frame: 0,
             frame_time: 0.0,
             position: (0.0, 0.0),
+            action_override: None,
+            action_override_timer: 0.0,
         }
     }
 }
 
 impl PlayerSpriteState {
-    /// Updates the animation state based on velocity.
-    pub fn update(&mut self, dt: f32, velocity: (f32, f32), position: (f32, f32), config: &PlayerSpriteConfig) {
+    /// Trigger a one-shot action animation (e.g., Use, Punch, Jump).
+    /// The animation plays once and then returns to velocity-based action.
+    pub fn set_action_override(&mut self, action: PlayerAnimAction, animations: &PlayerAnimationSet) {
+        let key = AnimKey::new(action, self.direction);
+        let duration = if let Some(anim) = animations.get(&key) {
+            anim.frames.len() as f32 / anim.fps
+        } else {
+            0.75 // fallback duration
+        };
+        self.action_override = Some(action);
+        self.action_override_timer = duration;
+        self.frame = 0;
+        self.frame_time = 0.0;
+        self.action = action;
+    }
+
+    /// Updates the animation state based on velocity and available animations.
+    pub fn update(
+        &mut self,
+        dt: f32,
+        velocity: (f32, f32),
+        position: (f32, f32),
+        animations: &PlayerAnimationSet,
+    ) {
         self.position = position;
 
-        // Determine animation state from velocity
+        // Determine direction from velocity (always update facing)
         let speed = (velocity.0 * velocity.0 + velocity.1 * velocity.1).sqrt();
-        let is_moving = speed > 5.0;
 
-        if is_moving {
-            self.anim_state = PlayerAnimState::Walking;
-            self.direction = PlayerDirection::from_velocity(velocity.0, velocity.1);
+        let new_direction = if speed > 5.0 {
+            PlayerDirection::from_velocity(velocity.0, velocity.1)
         } else {
-            self.anim_state = PlayerAnimState::Idle;
-            // Keep current direction when idle
+            self.direction // keep facing same direction when idle
+        };
+
+        // Handle action override (one-shot animations from input)
+        if let Some(override_action) = self.action_override {
+            self.action_override_timer -= dt;
+            if self.action_override_timer <= 0.0 {
+                // Override expired, return to normal
+                self.action_override = None;
+                self.frame = 0;
+                self.frame_time = 0.0;
+            } else {
+                // Still playing override — update direction if it changed
+                if new_direction != self.direction {
+                    self.direction = new_direction;
+                    // Don't reset frame, keep playing the action
+                }
+                self.action = override_action;
+
+                // Advance frame timer
+                let key = AnimKey::new(self.action, self.direction);
+                let (fps, frame_count) = if let Some(anim) = animations.get(&key) {
+                    (anim.fps, anim.frames.len() as u32)
+                } else {
+                    (8.0, 6)
+                };
+                if frame_count > 0 {
+                    self.frame_time += dt;
+                    let frame_duration = 1.0 / fps;
+                    if self.frame_time >= frame_duration {
+                        self.frame_time -= frame_duration;
+                        self.frame = (self.frame + 1) % frame_count;
+                    }
+                }
+                return;
+            }
         }
 
-        // Update animation frame
-        self.frame_time += dt;
-        let frame_duration = 1.0 / config.anim_fps;
-        if self.frame_time >= frame_duration {
-            self.frame_time -= frame_duration;
-            let max_frames = match self.anim_state {
-                PlayerAnimState::Idle => config.idle_frames,
-                PlayerAnimState::Walking => config.walk_frames,
-            };
-            self.frame = (self.frame + 1) % max_frames;
+        // Normal velocity-based action selection
+        let new_action = if speed > 200.0 {
+            // Running threshold
+            if animations.contains(&AnimKey::new(PlayerAnimAction::Run, new_direction)) {
+                PlayerAnimAction::Run
+            } else {
+                PlayerAnimAction::Walk
+            }
+        } else if speed > 5.0 {
+            PlayerAnimAction::Walk
+        } else {
+            PlayerAnimAction::Idle
+        };
+
+        // Reset frame if action or direction changed
+        if new_action != self.action || new_direction != self.direction {
+            self.frame = 0;
+            self.frame_time = 0.0;
+        }
+
+        self.action = new_action;
+        self.direction = new_direction;
+
+        // Get fps from the current animation (or default to 8)
+        let key = AnimKey::new(self.action, self.direction);
+        let (fps, frame_count) = if let Some(anim) = animations.get(&key) {
+            (anim.fps, anim.frames.len() as u32)
+        } else {
+            (8.0, 6) // fallback
+        };
+
+        // Advance frame timer
+        if frame_count > 0 {
+            self.frame_time += dt;
+            let frame_duration = 1.0 / fps;
+            if self.frame_time >= frame_duration {
+                self.frame_time -= frame_duration;
+                self.frame = (self.frame + 1) % frame_count;
+            }
         }
     }
 
-    /// Returns the current sprite sheet row for the animation.
-    #[must_use]
-    pub fn current_row(&self, config: &PlayerSpriteConfig) -> u32 {
-        if config.horizontal_directions {
-            // For horizontal direction layouts, all directions are in the same row
-            // The row is determined by animation type only
-            match self.anim_state {
-                PlayerAnimState::Idle => config.idle_row,
-                PlayerAnimState::Walking => config.walk_row,
-            }
-        } else {
-            // Vertical layout: each direction has its own pair of rows (idle/walk)
-            // Scout layout: Down(0,1), Left(2,3), Right(4,5), Up(6,7)
-            let dir_base = self.direction.sprite_row() * 2; // Each direction uses 2 rows
-            match self.anim_state {
-                PlayerAnimState::Idle => dir_base,      // Even rows: 0, 2, 4, 6
-                PlayerAnimState::Walking => dir_base + 1, // Odd rows: 1, 3, 5, 7
-            }
-        }
-    }
-
-    /// Returns the current sprite sheet column (frame index).
-    /// For horizontal direction layouts, this includes the direction offset.
-    #[must_use]
-    pub fn current_column(&self, config: &PlayerSpriteConfig) -> u32 {
-        if config.horizontal_directions {
-            // Directions packed horizontally: Down(0-5), Left(6-11), Right(12-17), Up(18-23)
-            let frames_per_dir = match self.anim_state {
-                PlayerAnimState::Idle => config.idle_frames,
-                PlayerAnimState::Walking => config.walk_frames,
-            };
-            let dir_offset = self.direction.sprite_row() * frames_per_dir;
-            dir_offset + self.frame
-        } else {
-            // Directions in separate rows
-            self.frame
-        }
+    /// Returns the current sprite frame from the animation set, or None.
+    pub fn current_frame(&self, animations: &PlayerAnimationSet) -> Option<SpriteFrame> {
+        let key = AnimKey::new(self.action, self.direction);
+        animations.get(&key).and_then(|anim| {
+            let idx = (self.frame as usize).min(anim.frames.len().saturating_sub(1));
+            anim.frames.get(idx).copied()
+        })
     }
 }
 
@@ -570,37 +764,48 @@ impl PlayerSpriteRenderer {
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&uniform));
     }
 
-    /// Updates the player sprite instance data.
+    /// Updates the player sprite instance data using per-frame UV from animation set.
     pub fn update_player(
         &self,
         queue: &wgpu::Queue,
         state: &PlayerSpriteState,
+        animations: &PlayerAnimationSet,
     ) {
-        let col = state.current_column(&self.config);
-        let row = state.current_row(&self.config);
-
-        // Calculate UV coordinates
-        let frame_u = self.config.frame_width as f32 / self.sheet_size.0 as f32;
-        let frame_v = self.config.frame_height as f32 / self.sheet_size.1 as f32;
-
-        // Calculate UV Y position based on layout type
-        let uv_y = if self.config.horizontal_directions {
-            // Use row_y_offset for pixel-accurate Y positioning (skeleton layout)
-            self.config.row_y_offset as f32 / self.sheet_size.1 as f32
-        } else {
-            // Vertical layout: row * frame_height, plus any offset
-            (self.config.row_y_offset as f32 + row as f32 * self.config.frame_height as f32)
-                / self.sheet_size.1 as f32
-        };
+        // Get the current frame from the animation set
+        let (uv_x, uv_y, uv_w, uv_h, frame_w, frame_h) =
+            if let Some(frame) = state.current_frame(animations) {
+                let sheet_w = self.sheet_size.0 as f32;
+                let sheet_h = self.sheet_size.1 as f32;
+                (
+                    frame.x as f32 / sheet_w,
+                    frame.y as f32 / sheet_h,
+                    frame.width as f32 / sheet_w,
+                    frame.height as f32 / sheet_h,
+                    frame.width as f32,
+                    frame.height as f32,
+                )
+            } else {
+                // Fallback: show first frame area
+                let fw = self.config.frame_width as f32;
+                let fh = self.config.frame_height as f32;
+                (
+                    0.0,
+                    0.0,
+                    fw / self.sheet_size.0 as f32,
+                    fh / self.sheet_size.1 as f32,
+                    fw,
+                    fh,
+                )
+            };
 
         let instance = PlayerSpriteInstance {
             position: [state.position.0, state.position.1],
             size: [
-                self.config.frame_width as f32 * self.config.scale,
-                self.config.frame_height as f32 * self.config.scale,
+                frame_w * self.config.scale,
+                frame_h * self.config.scale,
             ],
-            uv_offset: [col as f32 * frame_u, uv_y],
-            uv_size: [frame_u, frame_v],
+            uv_offset: [uv_x, uv_y],
+            uv_size: [uv_w, uv_h],
         };
 
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::bytes_of(&instance));
@@ -716,33 +921,76 @@ mod tests {
     }
 
     #[test]
+    fn test_anim_key_from_toml() {
+        let key = AnimKey::from_toml_action("WalkDown").unwrap();
+        assert_eq!(key.action, PlayerAnimAction::Walk);
+        assert_eq!(key.direction, PlayerDirection::Down);
+
+        let key = AnimKey::from_toml_action("IdleUp").unwrap();
+        assert_eq!(key.action, PlayerAnimAction::Idle);
+        assert_eq!(key.direction, PlayerDirection::Up);
+
+        let key = AnimKey::from_toml_action("PunchLeft").unwrap();
+        assert_eq!(key.action, PlayerAnimAction::Punch);
+        assert_eq!(key.direction, PlayerDirection::Left);
+
+        assert!(AnimKey::from_toml_action("UnknownAction").is_none());
+    }
+
+    #[test]
     fn test_player_sprite_state_update() {
-        let config = PlayerSpriteConfig::default();
+        let mut anims = PlayerAnimationSet::new();
+        // Insert a walk-right animation with 3 frames
+        anims.insert(
+            AnimKey::new(PlayerAnimAction::Walk, PlayerDirection::Right),
+            SpriteAnimation {
+                frames: vec![
+                    SpriteFrame { x: 0, y: 0, width: 48, height: 74 },
+                    SpriteFrame { x: 48, y: 0, width: 48, height: 74 },
+                    SpriteFrame { x: 96, y: 0, width: 48, height: 74 },
+                ],
+                fps: 8.0,
+                looping: true,
+            },
+        );
+        anims.insert(
+            AnimKey::new(PlayerAnimAction::Idle, PlayerDirection::Down),
+            SpriteAnimation {
+                frames: vec![SpriteFrame { x: 0, y: 100, width: 48, height: 74 }],
+                fps: 8.0,
+                looping: true,
+            },
+        );
+
         let mut state = PlayerSpriteState::default();
 
-        // Moving right should update direction and state
-        state.update(0.1, (100.0, 0.0), (50.0, 50.0), &config);
-        assert_eq!(state.anim_state, PlayerAnimState::Walking);
+        // Moving right should update direction and action
+        state.update(0.1, (100.0, 0.0), (50.0, 50.0), &anims);
+        assert_eq!(state.action, PlayerAnimAction::Walk);
         assert_eq!(state.direction, PlayerDirection::Right);
 
         // Stopped should be idle
-        state.update(0.1, (0.0, 0.0), (50.0, 50.0), &config);
-        assert_eq!(state.anim_state, PlayerAnimState::Idle);
+        state.update(0.1, (0.0, 0.0), (50.0, 50.0), &anims);
+        assert_eq!(state.action, PlayerAnimAction::Idle);
         // Direction should remain the same when idle
         assert_eq!(state.direction, PlayerDirection::Right);
     }
 
     #[test]
-    fn test_sprite_row_calculation() {
-        let config = PlayerSpriteConfig::default();
-        let mut state = PlayerSpriteState::default();
+    fn test_animation_set_fallback() {
+        let mut anims = PlayerAnimationSet::new();
+        anims.insert(
+            AnimKey::new(PlayerAnimAction::Idle, PlayerDirection::Down),
+            SpriteAnimation {
+                frames: vec![SpriteFrame { x: 0, y: 0, width: 48, height: 74 }],
+                fps: 8.0,
+                looping: true,
+            },
+        );
 
-        state.direction = PlayerDirection::Down;
-        state.anim_state = PlayerAnimState::Idle;
-        assert_eq!(state.current_row(&config), 0);
-
-        state.direction = PlayerDirection::Left;
-        state.anim_state = PlayerAnimState::Walking;
-        assert_eq!(state.current_row(&config), 5); // walk_row_start (4) + Left (1)
+        // Requesting an action that doesn't exist should fall back to Idle
+        let key = AnimKey::new(PlayerAnimAction::Punch, PlayerDirection::Down);
+        let anim = anims.get(&key);
+        assert!(anim.is_some()); // Falls back to IdleDown
     }
 }

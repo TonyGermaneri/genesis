@@ -27,9 +27,7 @@ quantity = 3
 item_id = 1    # Wood (handle)
 quantity = 1
 
-[[recipes.tools]]
-# Requires hammer (item 50)
-item_id = 50
+tools = [50]  # Requires hammer
 
 
 [[recipes]]
@@ -56,8 +54,7 @@ quantity = 2
 item_id = 1    # Wood (handle)
 quantity = 2
 
-[[recipes.tools]]
-item_id = 50  # Hammer
+tools = [50]  # Hammer
 
 
 [[recipes]]
@@ -84,8 +81,7 @@ quantity = 5
 item_id = 101  # Leather straps
 quantity = 2
 
-[[recipes.tools]]
-item_id = 50  # Hammer
+tools = [50]  # Hammer
 
 
 [[recipes]]

@@ -68,6 +68,8 @@ impl SpriteFrame {
 // ============================================================================
 
 /// Standard animation actions supported by the sprite system.
+/// Variants are self-describing (e.g., IdleDown, WalkUp, AttackLeft).
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AnimationAction {
     IdleDown,
@@ -627,6 +629,8 @@ pub struct SpriteBuilder {
     mouse_pos_on_sheet: Option<(u32, u32)>,
     /// Active drag operation on sprite sheet.
     drag_state: Option<DragState>,
+    /// Currently hovered drag handle (for visual feedback).
+    hovered_handle: Option<DragHandle>,
     /// Undo history stack (previous states).
     undo_stack: Vec<Vec<CharacterSpriteDef>>,
     /// Redo history stack (undone states).
@@ -646,6 +650,7 @@ impl std::fmt::Debug for SpriteBuilder {
             .field("available_width", &self.available_width)
             .field("mouse_pos_on_sheet", &self.mouse_pos_on_sheet)
             .field("drag_state", &self.drag_state)
+            .field("hovered_handle", &self.hovered_handle)
             .field("undo_stack_size", &self.undo_stack.len())
             .field("redo_stack_size", &self.redo_stack.len())
             .finish()
@@ -672,6 +677,7 @@ impl Clone for SpriteBuilder {
             available_width: self.available_width,
             mouse_pos_on_sheet: self.mouse_pos_on_sheet,
             drag_state: self.drag_state.clone(),
+            hovered_handle: self.hovered_handle,
             undo_stack: self.undo_stack.clone(),
             redo_stack: self.redo_stack.clone(),
             max_history_size: self.max_history_size,
@@ -798,6 +804,7 @@ impl SpriteBuilder {
             available_width: 1000.0, // Default reasonable width
             mouse_pos_on_sheet: None,
             drag_state: None,
+            hovered_handle: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             max_history_size: 50,
@@ -1321,6 +1328,60 @@ impl SpriteBuilder {
 
                 // Draw all frames in current animation
                 let handle_size = 8.0;
+
+                // Detect hovered handle for visual feedback
+                let mut current_hovered_handle: Option<DragHandle> = None;
+                if let Some(hover_pos) = response.hover_pos() {
+                    if let Some((_, frame)) = animation_frames.get(selected_frame_idx) {
+                        let frame_rect = egui::Rect::from_min_size(
+                            rect.min + egui::vec2(frame.x as f32 * zoom, frame.y as f32 * zoom),
+                            egui::vec2(frame.width as f32 * zoom, frame.height as f32 * zoom),
+                        );
+                        let handle_margin = handle_size;
+
+                        // Corner handles
+                        let corners = [
+                            (frame_rect.min, DragHandle::TopLeft),
+                            (egui::pos2(frame_rect.max.x, frame_rect.min.y), DragHandle::TopRight),
+                            (egui::pos2(frame_rect.min.x, frame_rect.max.y), DragHandle::BottomLeft),
+                            (frame_rect.max, DragHandle::BottomRight),
+                        ];
+                        for (corner, handle) in &corners {
+                            let handle_rect = egui::Rect::from_center_size(*corner, egui::vec2(handle_margin, handle_margin));
+                            if handle_rect.contains(hover_pos) {
+                                current_hovered_handle = Some(*handle);
+                                break;
+                            }
+                        }
+
+                        // Edge handles if no corner is hovered
+                        if current_hovered_handle.is_none() {
+                            let edges = [
+                                (egui::pos2((frame_rect.min.x + frame_rect.max.x) / 2.0, frame_rect.min.y), DragHandle::Top),
+                                (egui::pos2((frame_rect.min.x + frame_rect.max.x) / 2.0, frame_rect.max.y), DragHandle::Bottom),
+                                (egui::pos2(frame_rect.min.x, (frame_rect.min.y + frame_rect.max.y) / 2.0), DragHandle::Left),
+                                (egui::pos2(frame_rect.max.x, (frame_rect.min.y + frame_rect.max.y) / 2.0), DragHandle::Right),
+                            ];
+                            for (edge, handle) in &edges {
+                                let handle_rect = egui::Rect::from_center_size(*edge, egui::vec2(handle_margin, handle_margin));
+                                if handle_rect.contains(hover_pos) {
+                                    current_hovered_handle = Some(*handle);
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Check if hovering over frame body (for move)
+                        if current_hovered_handle.is_none() && frame_rect.contains(hover_pos) {
+                            current_hovered_handle = Some(DragHandle::Move);
+                        }
+                    }
+                }
+                self.hovered_handle = current_hovered_handle;
+
+                // Get active handle (from drag state or hover)
+                let active_handle = self.drag_state.as_ref().map(|ds| ds.handle).or(self.hovered_handle);
+
                 for (i, frame) in &animation_frames {
                     let is_selected = *i == selected_frame_idx;
                     let frame_rect = egui::Rect::from_min_size(
@@ -1367,11 +1428,18 @@ impl SpriteBuilder {
                             (frame_rect.max, DragHandle::BottomRight),
                         ];
 
-                        for (corner, _handle) in &corners {
+                        for (corner, handle) in &corners {
+                            let is_active = active_handle == Some(*handle);
+                            let color = if is_active {
+                                Color32::from_rgb(255, 100, 100) // Bright red when hovered/active
+                            } else {
+                                Color32::YELLOW
+                            };
+                            let size = if is_active { handle_size + 2.0 } else { handle_size };
                             ui.painter().rect_filled(
-                                egui::Rect::from_center_size(*corner, egui::vec2(handle_size, handle_size)),
+                                egui::Rect::from_center_size(*corner, egui::vec2(size, size)),
                                 2.0,
-                                Color32::YELLOW,
+                                color,
                             );
                         }
 
@@ -1383,13 +1451,30 @@ impl SpriteBuilder {
                             (egui::pos2(frame_rect.max.x, (frame_rect.min.y + frame_rect.max.y) / 2.0), DragHandle::Right),
                         ];
 
-                        for (edge, _handle) in &edges {
-                            ui.painter().circle_filled(*edge, handle_size / 2.0, Color32::from_rgb(255, 200, 0));
+                        for (edge, handle) in &edges {
+                            let is_active = active_handle == Some(*handle);
+                            let color = if is_active {
+                                Color32::from_rgb(255, 100, 100) // Bright red when hovered/active
+                            } else {
+                                Color32::from_rgb(255, 200, 0)
+                            };
+                            let radius = if is_active { (handle_size / 2.0) + 1.0 } else { handle_size / 2.0 };
+                            ui.painter().circle_filled(*edge, radius, color);
+                        }
+
+                        // Draw move indicator when hovering body (not on handles)
+                        if active_handle == Some(DragHandle::Move) {
+                            // Highlight the frame body when in move mode
+                            ui.painter().rect_stroke(
+                                frame_rect,
+                                0.0,
+                                egui::Stroke::new(3.5, Color32::from_rgb(255, 100, 100)),
+                            );
                         }
                     }
                 }
 
-                // Handle mouse interactions
+                // Handle mouse interactions - only select frames when clicking on them
                 if response.clicked() {
                     if let Some(pos) = response.interact_pointer_pos() {
                         let relative_pos = pos - rect.min;
@@ -1409,15 +1494,13 @@ impl SpriteBuilder {
                         if let Some(idx) = clicked_frame {
                             // Select the clicked frame
                             new_selected_frame = Some(idx);
-                        } else {
-                            // Move current frame to clicked position
-                            new_frame_values = Some((click_x, click_y, 0, 0)); // 0,0 means keep size
-                            frame_modified = true;
                         }
+                        // Note: We no longer move frames on empty canvas clicks
+                        // Frames can only be moved by dragging the selection box
                     }
                 }
 
-                // Handle dragging for resize/move
+                // Handle dragging for resize/move - only when clicking on frame/handles
                 if response.dragged() {
                     if let Some(pos) = response.interact_pointer_pos() {
                         let relative_pos = pos - rect.min;
@@ -1431,9 +1514,6 @@ impl SpriteBuilder {
 
                             // Determine which handle is being dragged based on initial drag position
                             if self.drag_state.is_none() {
-                                // Start new drag - save undo state first
-                                self.push_undo_state();
-
                                 // Determine what we're dragging
                                 let handle_margin = (8.0 / zoom) as u32;
 
@@ -1442,32 +1522,49 @@ impl SpriteBuilder {
                                 let near_top = drag_y <= frame.y + handle_margin && drag_y + handle_margin >= frame.y;
                                 let near_bottom = drag_y + handle_margin >= frame_bottom && drag_y <= frame_bottom + handle_margin;
 
-                                let handle = if near_left && near_top {
-                                    DragHandle::TopLeft
-                                } else if near_right && near_top {
-                                    DragHandle::TopRight
-                                } else if near_left && near_bottom {
-                                    DragHandle::BottomLeft
-                                } else if near_right && near_bottom {
-                                    DragHandle::BottomRight
-                                } else if near_top {
-                                    DragHandle::Top
-                                } else if near_bottom {
-                                    DragHandle::Bottom
-                                } else if near_left {
-                                    DragHandle::Left
-                                } else if near_right {
-                                    DragHandle::Right
-                                } else {
-                                    DragHandle::Move
-                                };
+                                // Check if click is inside the frame area
+                                let inside_frame = drag_x >= frame.x && drag_x < frame_right &&
+                                                   drag_y >= frame.y && drag_y < frame_bottom;
 
-                                self.drag_state = Some(DragState {
-                                    handle,
-                                    start_pos: (drag_x, drag_y),
-                                    original_frame: frame.clone(),
-                                    frame_index: (selected_anim_idx, selected_frame_idx),
-                                });
+                                // Check if click is on a handle (corners or edges)
+                                let on_handle = (near_left || near_right) && (near_top || near_bottom) // corners
+                                             || (near_top && drag_x >= frame.x && drag_x < frame_right) // top edge
+                                             || (near_bottom && drag_x >= frame.x && drag_x < frame_right) // bottom edge
+                                             || (near_left && drag_y >= frame.y && drag_y < frame_bottom) // left edge
+                                             || (near_right && drag_y >= frame.y && drag_y < frame_bottom); // right edge
+
+                                // Only start drag if clicking on frame or handle
+                                if inside_frame || on_handle {
+                                    // Start new drag - save undo state first
+                                    self.push_undo_state();
+
+                                    let handle = if near_left && near_top {
+                                        DragHandle::TopLeft
+                                    } else if near_right && near_top {
+                                        DragHandle::TopRight
+                                    } else if near_left && near_bottom {
+                                        DragHandle::BottomLeft
+                                    } else if near_right && near_bottom {
+                                        DragHandle::BottomRight
+                                    } else if near_top {
+                                        DragHandle::Top
+                                    } else if near_bottom {
+                                        DragHandle::Bottom
+                                    } else if near_left {
+                                        DragHandle::Left
+                                    } else if near_right {
+                                        DragHandle::Right
+                                    } else {
+                                        DragHandle::Move
+                                    };
+
+                                    self.drag_state = Some(DragState {
+                                        handle,
+                                        start_pos: (drag_x, drag_y),
+                                        original_frame: frame.clone(),
+                                        frame_index: (selected_anim_idx, selected_frame_idx),
+                                    });
+                                }
                             }
 
                             // Apply drag
@@ -1841,6 +1938,8 @@ impl SpriteBuilder {
     fn render_animation_list(&mut self, ui: &mut Ui) {
         ui.label(RichText::new("Animations").strong());
 
+        let mut to_select: Option<usize> = None;
+
         if let Some(character) = self.characters.get(self.selected_character) {
             // Fixed height for animation list
             egui::ScrollArea::vertical()
@@ -1848,7 +1947,6 @@ impl SpriteBuilder {
                 .max_height(600.0)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    let mut to_select = None;
                     for (i, anim) in character.animations.iter().enumerate() {
                         let selected = self.selected_animation == i;
                         let status = if anim.enabled && !anim.frames.is_empty() {
@@ -1866,14 +1964,71 @@ impl SpriteBuilder {
                             to_select = Some(i);
                         }
                     }
-                    if let Some(i) = to_select {
-                        self.selected_animation = i;
-                        self.selected_frame = 0;
-                        // Reset animation preview
-                        self.preview_state.current_frame = 0;
-                        self.preview_state.last_frame_time = Instant::now();
-                    }
                 });
+        }
+
+        // Handle animation selection outside the ScrollArea to allow mutable borrow
+        if let Some(i) = to_select {
+            // Check if the newly selected animation is empty and copy from previous populated animation
+            let should_copy_frames = {
+                if let Some(character) = self.characters.get(self.selected_character) {
+                    if let Some(new_anim) = character.animations.get(i) {
+                        new_anim.frames.is_empty()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+
+            if should_copy_frames {
+                // Find the last populated animation before this one, or any populated animation
+                let frames_to_copy: Option<Vec<SpriteFrame>> = {
+                    if let Some(character) = self.characters.get(self.selected_character) {
+                        // First look backwards from the selected animation
+                        let mut found_frames = None;
+                        for check_idx in (0..i).rev() {
+                            if let Some(anim) = character.animations.get(check_idx) {
+                                if !anim.frames.is_empty() {
+                                    found_frames = Some(anim.frames.clone());
+                                    break;
+                                }
+                            }
+                        }
+                        // If not found, look forward
+                        if found_frames.is_none() {
+                            for check_idx in (i + 1)..character.animations.len() {
+                                if let Some(anim) = character.animations.get(check_idx) {
+                                    if !anim.frames.is_empty() {
+                                        found_frames = Some(anim.frames.clone());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        found_frames
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(frames) = frames_to_copy {
+                    self.push_undo_state();
+                    if let Some(character) = self.characters.get_mut(self.selected_character) {
+                        if let Some(new_anim) = character.animations.get_mut(i) {
+                            new_anim.frames = frames;
+                            self.modified = true;
+                        }
+                    }
+                }
+            }
+
+            self.selected_animation = i;
+            self.selected_frame = 0;
+            // Reset animation preview
+            self.preview_state.current_frame = 0;
+            self.preview_state.last_frame_time = Instant::now();
         }
     }
 

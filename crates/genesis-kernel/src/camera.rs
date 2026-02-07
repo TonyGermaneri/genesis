@@ -6,7 +6,7 @@
 use bytemuck::{Pod, Zeroable};
 
 /// Minimum zoom level (zoomed out).
-pub const MIN_ZOOM: f32 = 0.25;
+pub const MIN_ZOOM: f32 = 0.1;
 
 /// Maximum zoom level (zoomed in).
 pub const MAX_ZOOM: f32 = 20.0;

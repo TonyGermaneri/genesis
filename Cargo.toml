@@ -4,9 +4,10 @@ members = [
     "crates/genesis-engine",
     "crates/genesis-kernel",
     "crates/genesis-gameplay",
-    "crates/genesis-world",
     "crates/genesis-common",
     "crates/genesis-tools",
+    "crates/cubiomes-sys",
+    "crates/genesis-worldgen",
 ]
 
 [workspace.package]

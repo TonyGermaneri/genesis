@@ -354,6 +354,10 @@ pub enum Action {
     Run,
     /// Interact with world (E by default)
     Interact,
+    /// Use item (E by default)
+    UseItem,
+    /// Punch / melee attack (F by default)
+    Punch,
     /// Open inventory (I by default)
     Inventory,
     /// Pause/menu (Escape by default)
@@ -539,6 +543,10 @@ impl InputManager {
             .insert(Action::Run, KeyBinding::new(KeyCode::LShift));
         self.bindings
             .insert(Action::Interact, KeyBinding::new(KeyCode::E));
+        self.bindings
+            .insert(Action::UseItem, KeyBinding::new(KeyCode::E));
+        self.bindings
+            .insert(Action::Punch, KeyBinding::new(KeyCode::F));
         self.bindings
             .insert(Action::Inventory, KeyBinding::new(KeyCode::I));
         self.bindings

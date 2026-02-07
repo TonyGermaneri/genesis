@@ -268,7 +268,7 @@ impl CraftCooldown {
 
 /// Drag state for the crafting grid.
 #[derive(Debug, Clone, Default)]
-pub struct DragState {
+pub struct CraftingDragState {
     /// Currently dragged item.
     pub dragging: Option<CraftingItem>,
     /// Source slot index (if from grid).
@@ -279,7 +279,7 @@ pub struct DragState {
     pub is_dragging: bool,
 }
 
-impl DragState {
+impl CraftingDragState {
     /// Start dragging an item.
     pub fn start_drag(&mut self, item: CraftingItem, source_slot: Option<usize>, pos: Pos2) {
         self.dragging = Some(item);
@@ -433,7 +433,7 @@ pub struct CraftingGrid {
     /// Configuration.
     pub config: CraftingGridConfig,
     /// Drag state.
-    pub drag_state: DragState,
+    pub drag_state: CraftingDragState,
     /// Craft button cooldown.
     pub cooldown: CraftCooldown,
     /// Whether the grid is open.
@@ -456,7 +456,7 @@ impl CraftingGrid {
             output: CraftingSlot::new(),
             output_preview: None,
             config: CraftingGridConfig::default(),
-            drag_state: DragState::default(),
+            drag_state: CraftingDragState::default(),
             cooldown: CraftCooldown::new(0.5),
             open: false,
             pending_actions: Vec::new(),
@@ -1005,7 +1005,7 @@ mod tests {
 
     #[test]
     fn test_drag_state() {
-        let mut drag = DragState::default();
+        let mut drag = CraftingDragState::default();
         assert!(!drag.is_dragging);
 
         let item = CraftingItem::new("test", "Test");
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[test]
     fn test_drag_state_cancel() {
-        let mut drag = DragState::default();
+        let mut drag = CraftingDragState::default();
         let item = CraftingItem::new("test", "Test");
         drag.start_drag(item, Some(0), Pos2::ZERO);
         drag.cancel();

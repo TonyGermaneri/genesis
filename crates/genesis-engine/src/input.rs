@@ -229,6 +229,18 @@ impl InputHandler {
         self.just_released_keys.contains(&key)
     }
 
+    /// Check if a game action is currently held (respects key bindings).
+    #[must_use]
+    pub fn is_action_pressed(&self, action: genesis_gameplay::input::Action) -> bool {
+        self.manager.is_action_pressed(action)
+    }
+
+    /// Check if a game action was just pressed this frame (respects key bindings).
+    #[must_use]
+    pub fn is_action_just_pressed(&self, action: genesis_gameplay::input::Action) -> bool {
+        self.manager.is_action_just_pressed(action)
+    }
+
     /// Get the current mouse position in screen coordinates.
     #[must_use]
     pub fn mouse_position(&self) -> (f32, f32) {
@@ -251,6 +263,18 @@ impl InputHandler {
     #[must_use]
     pub fn pause_pressed(&self) -> bool {
         self.pause_pressed
+    }
+
+    /// Check if a mouse button is currently pressed.
+    #[must_use]
+    pub fn is_mouse_pressed(&self, button: MouseButton) -> bool {
+        self.manager.is_mouse_pressed(button)
+    }
+
+    /// Check if a mouse button was just pressed this frame.
+    #[must_use]
+    pub fn is_mouse_just_pressed(&self, button: MouseButton) -> bool {
+        self.manager.is_mouse_just_pressed(button)
     }
 
     /// Reset per-frame state. Call at the end of each frame.

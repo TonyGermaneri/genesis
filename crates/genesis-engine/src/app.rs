@@ -43,7 +43,8 @@ use crate::renderer::Renderer;
 use crate::save_manager::{SaveFileBuilder, SaveManager};
 use crate::timing::{ChunkMetrics, FpsCounter, FrameTiming, NpcMetrics};
 use crate::weapon_loader::WeaponLoader;
-use crate::world::TerrainGenerationService;
+
+use genesis_worldgen::{BiomeTextureMap, WorldGenConfig, WorldGenerator};
 
 /// Application mode (menu/playing/paused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -89,13 +90,19 @@ struct GenesisApp {
     /// NPC-specific metrics
     npc_metrics: NpcMetrics,
 
-    // === World Generation ===
-    /// Terrain generation service with biome management
-    terrain_service: TerrainGenerationService,
-
     // === Asset Management ===
     /// Asset manager for terrain textures, etc.
     asset_manager: AssetManager,
+
+    // === World Generation ===
+    /// World generator (cubiomes-based biome generation)
+    world_generator: WorldGenerator,
+    /// Biome-to-visual mapping (colors or texture paths)
+    biome_texture_map: BiomeTextureMap,
+    /// Last chunk coordinate that triggered terrain generation
+    last_terrain_chunk: (i32, i32),
+    /// Whether terrain needs full regeneration
+    terrain_dirty: bool,
 
     // === NPC Spawning ===
     /// NPC chunk spawner for loading/unloading NPCs with chunks
@@ -164,10 +171,10 @@ struct GenesisApp {
     pause_menu: PauseMenu,
     /// Options menu UI
     options_menu: OptionsMenu,
-    /// World tools panel UI
-    world_tools: WorldTools,
     /// Whether showing controls help overlay
     show_controls_help: bool,
+    /// World tools panel (character generator, sprite builder, etc.)
+    world_tools: WorldTools,
 
     // === Automation ===
     /// Automation system for E2E testing
@@ -193,9 +200,11 @@ impl GenesisApp {
     fn new(config: EngineConfig) -> Self {
         let timing = FrameTiming::new(config.target_fps).with_vsync(config.vsync);
 
-        // Create terrain generation service from config
-        let terrain_service = TerrainGenerationService::from_engine_config(&config);
-        let seed = terrain_service.seed();
+        // Use world seed from config (or random if not set)
+        let seed = config.world_seed.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(12345)
+        });
         info!("World seed: {}", seed);
 
         // Create gameplay state with the world seed
@@ -251,6 +260,18 @@ impl GenesisApp {
         let mut camera = Camera::new(config.window_width, config.window_height);
         camera.set_zoom(config.camera_zoom); // Use config zoom level
 
+        // Initialize world generation (cubiomes)
+        let worldgen_config = WorldGenConfig {
+            mc_version: genesis_worldgen::MC_1_21,
+            seed: seed,
+            flags: 0,
+            scale: 4,
+            y_level: 16, // block y=64 at scale 4 (sea level for surface biomes)
+        };
+        let world_generator = WorldGenerator::new(worldgen_config);
+        let biome_texture_map = BiomeTextureMap::from_cubiomes_defaults();
+        info!("World generation initialized with cubiomes (seed={}, mc=1.21)", seed);
+
         // Calculate initial player chunk
         let player_pos = gameplay.player_position();
         let chunk_size = 256; // Default chunk size
@@ -274,8 +295,11 @@ impl GenesisApp {
             perf_metrics: PerfMetrics::new(120),
             chunk_metrics: ChunkMetrics::new(),
             npc_metrics: NpcMetrics::new(),
-            terrain_service,
             asset_manager: AssetManager::new(),
+            world_generator,
+            biome_texture_map,
+            last_terrain_chunk: (i32::MAX, i32::MAX), // Force initial generation
+            terrain_dirty: true,
             npc_spawner,
             last_player_chunk: initial_chunk,
             audio,
@@ -404,6 +428,13 @@ impl GenesisApp {
             );
         }
 
+        // Handle debug grid toggle (G key)
+        if self.input.is_key_just_pressed(KeyCode::G) {
+            if let Some(renderer) = &mut self.renderer {
+                renderer.toggle_debug_grid();
+            }
+        }
+
         // Handle screenshot capture (F12 key)
         if self.input.is_key_just_pressed(KeyCode::F12) {
             self.capture_screenshot();
@@ -419,16 +450,16 @@ impl GenesisApp {
                 },
                 AppMode::Paused => {
                     // Check which dialog is open and close it appropriately
-                    if self.world_tools.is_visible() {
-                        // Close world tools, go back to pause menu
-                        info!("Closing world tools via ESC");
-                        self.world_tools.hide();
-                        self.pause_menu.show();
-                    } else if self.options_menu.is_visible() {
+                    if self.options_menu.is_visible() {
                         // Cancel options menu (revert changes), go back to pause menu
                         info!("Cancelling options via ESC");
                         self.options_menu.cancel();
                         self.options_menu.hide();
+                        self.pause_menu.show();
+                    } else if self.world_tools.is_visible() {
+                        // Close world tools, go back to pause menu
+                        info!("Closing world tools via ESC");
+                        self.world_tools.hide();
                         self.pause_menu.show();
                     } else if self.pause_menu.is_visible() {
                         // Close pause menu and resume game
@@ -549,6 +580,15 @@ impl GenesisApp {
             let player_vel = self.gameplay.player.velocity();
             renderer.update_player_sprite(dt, (player_pos.x, player_pos.y), (player_vel.x, player_vel.y));
 
+            // Handle action key inputs for sprite animations
+            if self.input.is_action_just_pressed(genesis_gameplay::input::Action::UseItem) {
+                renderer.set_player_action(genesis_kernel::player_sprite::PlayerAnimAction::Use);
+            } else if self.input.is_action_just_pressed(genesis_gameplay::input::Action::Punch) {
+                renderer.set_player_action(genesis_kernel::player_sprite::PlayerAnimAction::Punch);
+            } else if self.input.is_action_just_pressed(genesis_gameplay::input::Action::Jump) {
+                renderer.set_player_action(genesis_kernel::player_sprite::PlayerAnimAction::Jump);
+            }
+
             // Prepare and step multi-chunk simulation if enabled
             if renderer.is_multi_chunk_enabled() {
                 let start = Instant::now();
@@ -571,7 +611,7 @@ impl GenesisApp {
                 self.chunk_metrics.record_load_time(start.elapsed());
 
                 let start = Instant::now();
-                renderer.step_streaming_terrain();
+                renderer.step_streaming_terrain(dt);
                 self.chunk_metrics.record_sim_time(start.elapsed());
 
                 // Update chunk metrics from streaming terrain
@@ -580,6 +620,68 @@ impl GenesisApp {
                         .set_chunk_count(stats.simulating_count as u32);
                 }
             }
+
+            // === Cubiomes terrain generation ===
+            // Generate biome chunks around the camera and feed to terrain renderer.
+            // Coordinate mapping: game X → cubiomes X, game Y → cubiomes Z (top-down view).
+            {
+                let terrain = renderer.terrain_renderer_mut();
+                if terrain.is_enabled() {
+                    let tile_size = terrain.config().tile_size;
+                    let render_radius = terrain.config().render_radius;
+                    let chunk_cells = 16i32; // biome cells per chunk
+
+                    // Current camera chunk in game coordinates
+                    // (game Y maps to cubiomes Z for top-down horizontal slice)
+                    let cam_chunk_x = (player_pos.x / (chunk_cells as f32 * tile_size)).floor() as i32;
+                    let cam_chunk_y = (player_pos.y / (chunk_cells as f32 * tile_size)).floor() as i32;
+
+                    // Generate new chunks if camera moved or terrain is dirty
+                    let camera_moved = cam_chunk_x != self.last_terrain_chunk.0 || cam_chunk_y != self.last_terrain_chunk.1;
+                    if camera_moved || self.terrain_dirty {
+                        self.last_terrain_chunk = (cam_chunk_x, cam_chunk_y);
+                        self.terrain_dirty = false;
+
+                        let mut generated = 0u32;
+
+                        // Generate any missing chunks within render radius
+                        for cy in (cam_chunk_y - render_radius)..=(cam_chunk_y + render_radius) {
+                            for cx in (cam_chunk_x - render_radius)..=(cam_chunk_x + render_radius) {
+                                if !terrain.is_chunk_cached(cx, cy) {
+                                    // generate_chunk(cx, cy) internally maps game Y → cubiomes Z
+                                    let chunk = self.world_generator.generate_chunk(cx, cy);
+                                    let biome_map = &self.biome_texture_map;
+                                    // Use cubiomes mapApproxHeight for real terrain surface heights
+                                    let heights = self.world_generator.generate_chunk_heights(cx, cy);
+                                    terrain.cache_chunk(
+                                        cx, cy,
+                                        &chunk.biomes,
+                                        &heights,
+                                        chunk.width,
+                                        chunk.height,
+                                        &|biome_id| biome_map.get_color(biome_id),
+                                    );
+                                    generated += 1;
+                                }
+                            }
+                        }
+
+                        if generated > 0 {
+                            tracing::debug!(
+                                "Terrain: generated {} new chunks around ({}, {}), {} cached, radius={}",
+                                generated, cam_chunk_x, cam_chunk_y,
+                                terrain.cached_chunk_count(), render_radius
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Update terrain visible tiles (uses internal borrows)
+            renderer.update_terrain_visible_tiles(
+                (self.camera.position.0, self.camera.position.1),
+                self.camera.zoom,
+            );
         }
 
         // Update frame timing
@@ -686,78 +788,155 @@ impl GenesisApp {
 
     /// Loads the player sprite sheet from assets.
     fn load_player_sprite(&mut self, renderer: &mut crate::renderer::Renderer) {
-        use genesis_kernel::player_sprite::PlayerSpriteConfig;
+        use genesis_kernel::player_sprite::{PlayerAnimationSet, PlayerSpriteConfig};
         use std::path::Path;
 
-        // Use Modern Exteriors Scout sprite from game_assets
-        let sprite_path = Path::new("/Users/tonygermaneri/gh/game_assets/modernexteriors-win/Modern_Exteriors_48x48/Character_Generator_Addons_48x48/Characters_48x48/Modern_Exteriors_Characters_Scout_48x48_1.png");
+        // Use player scout sprite from local assets
+        let sprite_path = Path::new("assets/sprites/player/player_scout.png");
+        let anim_toml_path = Path::new("assets/sprites/characters/player.toml");
 
-        // Fallback to skeleton if scout not available
-        let fallback_path = Path::new("assets/sprites/player/player_skeleton.png");
-
-        let (path_to_use, config) = if sprite_path.exists() {
-            // Scout sprite sheet layout (from AI analysis):
-            // 2781x1968, 48x48 frames
-            // Row 0: Idle Down (4 frames)
-            // Row 1: Walk Down (8 frames)
-            // Row 2: Idle Left (4 frames)
-            // Row 3: Walk Left (8 frames)
-            // Row 4: Idle Right (4 frames)
-            // Row 5: Walk Right (8 frames)
-            // Row 6: Idle Up (4 frames)
-            // Row 7: Walk Up (8 frames)
-            // horizontal_directions: false - each direction has its own rows
-            let scout_config = PlayerSpriteConfig {
-                frame_width: 48,
-                frame_height: 48,
-                idle_frames: 4,
-                walk_frames: 8,
-                idle_row: 0,       // Idle animations on even rows (0, 2, 4, 6)
-                walk_row: 1,       // Walk animations on odd rows (1, 3, 5, 7)
-                row_y_offset: 0,   // No offset, starts at top
-                anim_fps: 8.0,
-                scale: 2.0,        // Scale up for visibility
-                horizontal_directions: false,  // Each direction is on its own pair of rows
-            };
-            (sprite_path, scout_config)
-        } else if fallback_path.exists() {
-            // Skeleton fallback config
-            let skeleton_config = PlayerSpriteConfig {
-                frame_width: 48,
-                frame_height: 63,
-                idle_frames: 6,
-                walk_frames: 6,
-                idle_row: 1,
-                walk_row: 1,
-                row_y_offset: 129,
-                anim_fps: 8.0,
-                scale: 2.0,
-                horizontal_directions: true,
-            };
-            (fallback_path, skeleton_config)
-        } else {
-            debug!("No player sprite found");
+        if !sprite_path.exists() {
+            debug!("No player sprite found at {}", sprite_path.display());
             return;
+        }
+
+        // Parse animation TOML
+        let animations = if anim_toml_path.exists() {
+            match std::fs::read_to_string(anim_toml_path) {
+                Ok(toml_str) => match Self::parse_animation_toml(&toml_str) {
+                    Ok(anims) => {
+                        info!(
+                            "Loaded {} animations from {}",
+                            anims.animations.len(),
+                            anim_toml_path.display()
+                        );
+                        anims
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse animation TOML: {}", e);
+                        PlayerAnimationSet::new()
+                    }
+                },
+                Err(e) => {
+                    warn!("Failed to read animation TOML: {}", e);
+                    PlayerAnimationSet::new()
+                }
+            }
+        } else {
+            warn!(
+                "Animation TOML not found at {}, using empty animations",
+                anim_toml_path.display()
+            );
+            PlayerAnimationSet::new()
         };
 
-        match image::open(path_to_use) {
+        // Load sprite image
+        match image::open(sprite_path) {
             Ok(img) => {
                 let rgba = img.to_rgba8();
                 let (width, height) = rgba.dimensions();
 
+                let config = PlayerSpriteConfig::with_scale(2.0, 48, 74);
                 renderer.set_player_sprite_config(config);
+                renderer.set_player_animations(animations);
                 renderer.load_player_sprite(rgba.as_raw(), width, height);
 
                 info!(
                     "Player sprite loaded: {}x{} from {}",
-                    width, height,
-                    path_to_use.display()
+                    width,
+                    height,
+                    sprite_path.display()
                 );
             }
             Err(e) => {
-                warn!("Failed to load player sprite from {}: {}", path_to_use.display(), e);
+                warn!(
+                    "Failed to load player sprite from {}: {}",
+                    sprite_path.display(),
+                    e
+                );
             }
         }
+    }
+
+    /// Parses animation definitions from TOML content.
+    fn parse_animation_toml(
+        toml_str: &str,
+    ) -> Result<genesis_kernel::player_sprite::PlayerAnimationSet, String> {
+        use genesis_kernel::player_sprite::{
+            AnimKey, PlayerAnimationSet, SpriteAnimation, SpriteFrame,
+        };
+
+        // Deserialize using toml crate
+        let value: toml::Value =
+            toml::from_str(toml_str).map_err(|e| format!("TOML parse error: {}", e))?;
+
+        let mut anim_set = PlayerAnimationSet::new();
+
+        let animations = value
+            .get("animations")
+            .and_then(|v| v.as_array())
+            .ok_or("Missing 'animations' array in TOML")?;
+
+        for anim_entry in animations {
+            let action_name = anim_entry
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            // Try to parse as a known action+direction key
+            let key = match AnimKey::from_toml_action(action_name) {
+                Some(k) => k,
+                None => continue, // Skip animations we don't handle yet
+            };
+
+            let fps = anim_entry
+                .get("fps")
+                .and_then(|v| v.as_float())
+                .unwrap_or(8.0) as f32;
+
+            let looping = anim_entry
+                .get("looping")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            let frames_arr = match anim_entry.get("frames").and_then(|v| v.as_array()) {
+                Some(f) => f,
+                None => continue,
+            };
+
+            let mut frames = Vec::new();
+            for frame_entry in frames_arr {
+                let x = frame_entry
+                    .get("x")
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(0) as u32;
+                let y = frame_entry
+                    .get("y")
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(0) as u32;
+                let width = frame_entry
+                    .get("width")
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(48) as u32;
+                let height = frame_entry
+                    .get("height")
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(74) as u32;
+
+                frames.push(SpriteFrame {
+                    x,
+                    y,
+                    width,
+                    height,
+                });
+            }
+
+            if !frames.is_empty() {
+                anim_set.insert(key, SpriteAnimation { frames, fps, looping });
+            }
+        }
+
+        Ok(anim_set)
     }
 
     /// Updates audio system for the frame.
@@ -777,24 +956,8 @@ impl GenesisApp {
 
     /// Updates music track based on current biome.
     fn update_biome_music(&mut self) {
-        // Get current biome from player position
-        let player_pos = self.gameplay.player_position();
-        let biome = self
-            .terrain_service
-            .get_biome_at(player_pos.0, player_pos.1);
-
-        // Map biome to music track (if different from current)
-        #[allow(clippy::match_same_arms)]
-        let track_name = match biome.as_str() {
-            "plains" | "grassland" => "exploration_plains",
-            "forest" | "woodland" => "exploration_forest",
-            "desert" | "wasteland" => "exploration_desert",
-            "snow" | "tundra" | "arctic" => "exploration_snow",
-            "swamp" | "marsh" => "exploration_swamp",
-            "mountain" | "highland" => "exploration_mountain",
-            "cave" | "underground" => "exploration_cave",
-            _ => "exploration_plains", // Default
-        };
+        // Use a default biome since terrain service was removed
+        let track_name = "exploration_plains";
 
         // Only change if different from current (to avoid resetting)
         if self.audio.state().music.current_track.as_deref() != Some(track_name) {
@@ -893,7 +1056,7 @@ impl GenesisApp {
 
         // Capture screenshot using renderer
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
-            match renderer.capture_screenshot(&path, &self.camera, window) {
+            match renderer.capture_screenshot(&path, &self.camera, window, self.environment.time.time_of_day(), self.environment.time.sun_intensity()) {
                 Ok(saved_path) => {
                     info!("Screenshot saved: {:?}", saved_path);
                     return Some(saved_path);
@@ -927,14 +1090,13 @@ impl GenesisApp {
                     info!("[AUTOMATION] Resuming game");
                     self.pause_menu.hide();
                     self.options_menu.hide();
-                    self.world_tools.hide();
                     self.app_mode = AppMode::Playing;
                 }
                 AutomationRequest::OpenWorldTools => {
                     info!("[AUTOMATION] Opening world tools");
-                    if self.app_mode == AppMode::Paused {
-                        self.world_tools.show();
-                    }
+                    self.world_tools.show();
+                    self.pause_menu.hide();
+                    self.app_mode = AppMode::Paused;
                 }
                 AutomationRequest::SelectWorldToolsTab(tab_name) => {
                     info!("[AUTOMATION] Selecting World Tools tab: {}", tab_name);
@@ -956,12 +1118,12 @@ impl GenesisApp {
                     self.pending_text_input = Some((field, value));
                 }
                 AutomationRequest::SetSeed(seed) => {
-                    info!("[AUTOMATION] Setting seed to {}", seed);
-                    self.world_tools.set_seed(seed);
+                    info!("[AUTOMATION] Setting seed to {} (world tools removed)", seed);
+                    // World tools removed - seed setting no longer functional
                 }
                 AutomationRequest::RegenerateWorld => {
-                    info!("[AUTOMATION] Regenerating world");
-                    self.regenerate_terrain();
+                    info!("[AUTOMATION] Regenerating world (world tools removed)");
+                    // World regeneration removed with terrain system
                 }
                 AutomationRequest::CaptureScreenshot { filename, prompt } => {
                     info!("[AUTOMATION] Capturing screenshot");
@@ -978,6 +1140,34 @@ impl GenesisApp {
                     info!("[AUTOMATION] Setting world param: {}.{} = {}", category, name, value);
                     // TODO: Implement world parameter setting via world_tools
                     warn!("SetWorldParam not yet fully implemented");
+                }
+                AutomationRequest::FillWorld { material_id, temperature } => {
+                    info!("[AUTOMATION] FillWorld requested (terrain system removed): material={}, temp={:?}", material_id, temperature);
+                    // Terrain system removed
+                }
+                AutomationRequest::SetTimeScale(scale) => {
+                    info!("[AUTOMATION] Setting time scale to {}x (world tools removed)", scale);
+                    // Time scale setting removed with terrain system
+                }
+                AutomationRequest::SetSimulationFlags { weather, volcanic, hydraulic_erosion, thermal_erosion } => {
+                    info!("[AUTOMATION] Setting simulation flags (world tools removed)");
+                    let _ = (weather, volcanic, hydraulic_erosion, thermal_erosion);
+                    // Simulation flags removed with terrain system
+                }
+                AutomationRequest::OpenMaterialPalette => {
+                    info!("[AUTOMATION] Opening material palette (removed)");
+                }
+                AutomationRequest::CloseMaterialPalette => {
+                    info!("[AUTOMATION] Closing material palette (removed)");
+                }
+                AutomationRequest::SelectMaterial(material_id) => {
+                    info!("[AUTOMATION] Selecting material {} (removed)", material_id);
+                }
+                AutomationRequest::SetBrushSize(size) => {
+                    info!("[AUTOMATION] Setting brush size to {} (removed)", size);
+                }
+                AutomationRequest::PaintAt { x, y } => {
+                    info!("[AUTOMATION] Painting at ({}, {}) (removed)", x, y);
                 }
                 AutomationRequest::Quit => {
                     info!("[AUTOMATION] Quit requested");
@@ -1016,36 +1206,62 @@ impl GenesisApp {
         }
     }
 
+    /// Sync the world gen panel with current world generator state.
+    fn sync_worldgen_panel(&mut self) {
+        let config = self.world_generator.config();
+        self.world_tools.world_gen_panel_mut().sync_config(
+            config.mc_version,
+            config.seed,
+            config.flags,
+            config.scale,
+            config.y_level,
+        );
+
+        // Build biome UI entries from the current biome texture map
+        let entries: Vec<genesis_tools::ui::BiomeUiEntry> = self.biome_texture_map.sorted_entries()
+            .iter()
+            .map(|e| genesis_tools::ui::BiomeUiEntry {
+                id: e.id,
+                name: e.name.clone(),
+                color: self.biome_texture_map.get_color(e.id),
+                texture_path: match &e.visual {
+                    genesis_worldgen::BiomeVisual::Texture(p) => Some(p.clone()),
+                    _ => None,
+                },
+            })
+            .collect();
+        self.world_tools.world_gen_panel_mut().set_biome_entries(entries);
+    }
+
     /// Starts a new game from the main menu.
     fn start_new_game(&mut self) {
         info!("Starting new game");
         self.main_menu.hide();
         self.app_mode = AppMode::Playing;
 
-        // Reset gameplay state with new seed
-        let seed = self.terrain_service.seed();
+        // Reset gameplay state with world seed from config
+        let seed = self.config.world_seed.unwrap_or(12345);
         self.gameplay = genesis_gameplay::GameState::with_player_position(seed, (128.0, 100.0));
         self.gameplay.player.set_grounded(true);
 
         // Reset camera
         let player_pos = self.gameplay.player_position();
         self.camera.center_on(player_pos.0, player_pos.1);
-    }
 
-    /// Regenerates the terrain with the current world tools configuration.
-    fn regenerate_terrain(&mut self) {
-        let new_seed = self.world_tools.config().seed;
-        info!("Regenerating world with seed: {}", new_seed);
+        // Reconfigure world generator with current seed
+        let worldgen_config = WorldGenConfig {
+            seed,
+            ..self.world_generator.config().clone()
+        };
+        self.world_generator.reconfigure(worldgen_config);
+        self.terrain_dirty = true;
+        self.last_terrain_chunk = (i32::MAX, i32::MAX);
 
-        // Update the terrain service seed
-        self.terrain_service.set_seed(new_seed);
-
-        // Regenerate terrain in the renderer
+        // Enable terrain rendering
         if let Some(renderer) = &mut self.renderer {
-            renderer.regenerate_terrain(new_seed);
+            renderer.terrain_renderer_mut().clear_cache();
+            renderer.terrain_renderer_mut().enable();
         }
-
-        info!("World regeneration complete");
     }
 
     /// Updates crafting system for the frame.
@@ -1087,8 +1303,8 @@ impl GenesisApp {
         }
 
         // Handle attack input
-        let attack_pressed = self.input.is_key_just_pressed(genesis_gameplay::input::KeyCode::Space);
-        let attack_held_input = self.input.is_key_pressed(genesis_gameplay::input::KeyCode::Space);
+        let attack_pressed = self.input.is_action_just_pressed(genesis_gameplay::input::Action::Punch);
+        let attack_held_input = self.input.is_action_pressed(genesis_gameplay::input::Action::Punch);
 
         // Track attack hold time for charge attacks
         if attack_held_input {
@@ -1263,7 +1479,7 @@ impl GenesisApp {
         SaveFileBuilder::new(slot_name)
             .display_name(format!("Slot {}", slot_name))
             .player_position(player_pos.x, player_pos.y)
-            .world_seed(self.terrain_service.seed())
+            .world_seed(self.config.world_seed.unwrap_or(12345))
             .game_time(self.gameplay.game_time() as f64)
             .playtime(self.gameplay.game_time() as f64)
             .player_level(self.combat_persistence.data().combat_level)
@@ -1388,7 +1604,15 @@ impl GenesisApp {
         let show_map = self.show_map;
         let hotbar_slot = self.hotbar_slot;
         let app_mode = self.app_mode;
-        let biome_metrics = self.terrain_service.metrics();
+        // Extract terrain renderer stats before borrowing renderer for rendering
+        let (terrain_enabled, terrain_cached_chunks, terrain_instance_count) =
+            if let Some(renderer) = &self.renderer {
+                let tr = renderer.terrain_renderer();
+                (tr.is_enabled(), tr.cached_chunk_count(), tr.instance_count())
+            } else {
+                (false, 0, 0)
+            };
+
         let debug_data = DebugOverlayData {
             perf: self.perf_metrics.summary(),
             time: self.environment.time.clone(),
@@ -1398,11 +1622,14 @@ impl GenesisApp {
             chunk_load_ms: self.chunk_metrics.avg_load_time_ms(),
             chunk_sim_ms: self.chunk_metrics.avg_sim_time_ms(),
             chunk_exceeds_budget: self.chunk_metrics.exceeds_budget(),
-            world_seed: self.terrain_service.seed(),
-            biome_gen_avg_ms: biome_metrics.avg_generation_time_ms(),
-            biome_gen_peak_ms: biome_metrics.peak_generation_time_ms(),
-            biome_chunks_generated: biome_metrics.total_chunks_generated(),
-            biome_exceeds_budget: biome_metrics.exceeds_budget(),
+            world_seed: self.config.world_seed.unwrap_or(0),
+            biome_gen_avg_ms: 0.0,
+            biome_gen_peak_ms: 0.0,
+            biome_chunks_generated: 0,
+            biome_exceeds_budget: false,
+            terrain_enabled,
+            terrain_cached_chunks,
+            terrain_instance_count,
             npc_count: self.gameplay.npc_count(),
             npc_update_avg_ms: self.npc_metrics.avg_ai_time_ms(),
             npc_update_peak_ms: self.npc_metrics.peak_ai_time_ms(),
@@ -1428,13 +1655,7 @@ impl GenesisApp {
 
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             // Use render_with_ui to draw world + egui overlay
-            let result = renderer.render_with_ui(window, &self.camera, |ctx| {
-                // Render world tools on top if visible (works from any mode)
-                if world_tools.is_visible() {
-                    world_tools.render(ctx);
-                    return; // Don't render underlying menu when world tools is open
-                }
-
+            let result = renderer.render_with_ui(window, &self.camera, self.environment.time.time_of_day(), self.environment.time.sun_intensity(), |ctx| {
                 // Render options menu on top if visible (works from any mode)
                 if options_menu.is_visible() {
                     egui::CentralPanel::default()
@@ -1443,6 +1664,16 @@ impl GenesisApp {
                             options_menu.render(ui);
                         });
                     return; // Don't render underlying menu when options is open
+                }
+
+                // Render world tools on top if visible (works from paused mode)
+                if world_tools.is_visible() {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none().fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 220)))
+                        .show(ctx, |ui| {
+                            world_tools.render(ui);
+                        });
+                    return; // Don't render underlying menu when world tools is open
                 }
 
                 // Render controls help overlay if visible
@@ -1571,6 +1802,8 @@ impl GenesisApp {
                 }
                 PauseMenuAction::OpenWorldTools => {
                     info!("Opening world tools...");
+                    // Sync world gen panel with current state
+                    self.sync_worldgen_panel();
                     self.world_tools.show();
                     self.pause_menu.hide();
                 }
@@ -1622,39 +1855,63 @@ impl GenesisApp {
                     self.world_tools.hide();
                     self.pause_menu.show();
                 }
-                WorldToolsAction::ApplyChanges | WorldToolsAction::RegenerateWorld => {
-                    let new_seed = self.world_tools.config().seed;
-                    info!("Regenerating world with seed: {}", new_seed);
+            }
+        }
 
-                    // Update the terrain service seed
-                    self.terrain_service.set_seed(new_seed);
-
-                    // Regenerate terrain in the renderer
+        // Process world generation actions
+        for action in self.world_tools.drain_world_gen_actions() {
+            match action {
+                genesis_tools::ui::WorldGenAction::Regenerate { mc_version, seed, flags, scale, y_level } => {
+                    info!("Regenerating world: mc={}, seed={}, flags={}, scale={}, y={}",
+                        mc_version, seed, flags, scale, y_level);
+                    let config = WorldGenConfig {
+                        mc_version,
+                        seed,
+                        flags,
+                        scale,
+                        y_level,
+                    };
+                    self.world_generator.reconfigure(config);
+                    self.terrain_dirty = true;
+                    self.last_terrain_chunk = (i32::MAX, i32::MAX);
                     if let Some(renderer) = &mut self.renderer {
-                        renderer.regenerate_terrain(new_seed);
+                        renderer.terrain_renderer_mut().clear_cache();
+                        renderer.terrain_renderer_mut().enable();
                     }
-
-                    info!("World regeneration complete");
                 }
-                WorldToolsAction::ResetDefaults => {
-                    info!("Resetting world generation to defaults...");
-                }
-                WorldToolsAction::RandomizeSeed => {
-                    info!("World seed randomized: {}", self.world_tools.config().seed);
-                }
-                WorldToolsAction::ExportConfig => {
-                    info!("Exporting world configuration...");
-                    // TODO: Save config to file
-                }
-                WorldToolsAction::ImportConfig => {
-                    info!("Importing world configuration...");
-                    // TODO: Load config from file
-                }
-                WorldToolsAction::SetDebugFlags(flags) => {
-                    info!("Setting debug flags: 0x{:08X}", flags);
+                genesis_tools::ui::WorldGenAction::SetBiomeColor { biome_id, color } => {
+                    self.biome_texture_map.set_color(biome_id, color);
+                    self.terrain_dirty = true;
+                    self.last_terrain_chunk = (i32::MAX, i32::MAX);
                     if let Some(renderer) = &mut self.renderer {
-                        renderer.set_debug_flags(flags);
+                        renderer.terrain_renderer_mut().clear_cache();
                     }
+                }
+                genesis_tools::ui::WorldGenAction::SetBiomeTexture { biome_id, path } => {
+                    self.biome_texture_map.set_texture(biome_id, path);
+                    // Texture rendering not yet implemented, but record the mapping
+                }
+                genesis_tools::ui::WorldGenAction::ResetBiomeColors => {
+                    self.biome_texture_map = BiomeTextureMap::from_cubiomes_defaults();
+                    self.terrain_dirty = true;
+                    self.last_terrain_chunk = (i32::MAX, i32::MAX);
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.terrain_renderer_mut().clear_cache();
+                    }
+                    // Re-sync biome entries to UI
+                    let entries: Vec<genesis_tools::ui::BiomeUiEntry> = self.biome_texture_map.sorted_entries()
+                        .iter()
+                        .map(|e| genesis_tools::ui::BiomeUiEntry {
+                            id: e.id,
+                            name: e.name.clone(),
+                            color: self.biome_texture_map.get_color(e.id),
+                            texture_path: match &e.visual {
+                                genesis_worldgen::BiomeVisual::Texture(p) => Some(p.clone()),
+                                _ => None,
+                            },
+                        })
+                        .collect();
+                    self.world_tools.world_gen_panel_mut().set_biome_entries(entries);
                 }
             }
         }
@@ -1677,6 +1934,10 @@ struct DebugOverlayData {
     biome_gen_peak_ms: f64,
     biome_chunks_generated: u64,
     biome_exceeds_budget: bool,
+    // Terrain renderer status
+    terrain_enabled: bool,
+    terrain_cached_chunks: usize,
+    terrain_instance_count: u32,
     // NPC metrics
     npc_count: usize,
     npc_update_avg_ms: f64,
@@ -1759,6 +2020,15 @@ fn render_debug_overlay(ctx: &egui::Context, data: &DebugOverlayData) {
             // Biome generation metrics
             ui.separator();
             ui.label(format!("World Seed: {}", data.world_seed));
+
+            // Terrain renderer status
+            ui.label(format!(
+                "Terrain: {} | {} cached chunks | {} instances",
+                if data.terrain_enabled { "ON" } else { "OFF" },
+                data.terrain_cached_chunks,
+                data.terrain_instance_count,
+            ));
+
             if data.biome_chunks_generated > 0 {
                 let biome_gen_avg_ms = data.biome_gen_avg_ms;
                 let biome_gen_peak_ms = data.biome_gen_peak_ms;
@@ -2072,44 +2342,10 @@ impl ApplicationHandler for GenesisApp {
                         renderer.resize(actual_size);
                         // Ensure egui scale factor matches window
                         renderer.set_scale_factor(scale_factor);
-                        // Enable streaming terrain with world seed
-                        renderer.enable_streaming_terrain(self.terrain_service.seed());
+                        // Enable streaming terrain with world seed from config
+                        renderer.enable_streaming_terrain(self.config.world_seed.unwrap_or(12345));
 
-                        // Load terrain assets (autotiles preferred)
-                        if let Err(e) = self.asset_manager.load_autotile_atlas() {
-                            warn!("Failed to load autotile atlas: {}", e);
-                            // Fallback to singles
-                            if let Err(e2) = self.asset_manager.load_terrain_assets() {
-                                warn!("Failed to load terrain assets: {}", e2);
-                            }
-                        }
-
-                        // Upload to GPU
-                        self.asset_manager.upload_terrain_to_gpu(renderer.device(), renderer.queue());
-                        let stats = self.asset_manager.stats();
-                        info!(
-                            "Terrain assets ready: {} tiles, atlas {}x{}, GPU: {}, autotiles: {}",
-                            stats.terrain_tiles_loaded,
-                            stats.atlas_width,
-                            stats.atlas_height,
-                            stats.gpu_uploaded,
-                            stats.using_autotiles
-                        );
-
-                        // Enable terrain rendering if atlas was loaded
-                        if stats.gpu_uploaded {
-                            if stats.using_autotiles {
-                                if let Some(atlas) = self.asset_manager.autotile_atlas() {
-                                    renderer.enable_autotile_terrain(atlas);
-                                    info!("Autotile terrain rendering enabled");
-                                }
-                            } else if let Some(atlas) = self.asset_manager.terrain_atlas() {
-                                renderer.enable_textured_terrain(atlas);
-                                info!("Textured terrain rendering enabled (singles)");
-                            }
-                        }
-
-                        // Load player sprite
+                        // Always load the player sprite
                         self.load_player_sprite(&mut renderer);
 
                         self.renderer = Some(renderer);
@@ -2119,10 +2355,13 @@ impl ApplicationHandler for GenesisApp {
                     },
                 }
 
-                // Update camera viewport to match actual window size
-                self.camera.set_viewport(actual_size.width, actual_size.height);
-                self.config.window_width = actual_size.width;
-                self.config.window_height = actual_size.height;
+                // Update camera viewport to match logical window size (for mouse coordinate conversion)
+                // Mouse coordinates are in logical pixels, not physical
+                let logical_width = (actual_size.width as f64 / scale_factor as f64) as u32;
+                let logical_height = (actual_size.height as f64 / scale_factor as f64) as u32;
+                self.camera.set_viewport(logical_width, logical_height);
+                self.config.window_width = logical_width;
+                self.config.window_height = logical_height;
 
                 self.window = Some(window);
 
@@ -2184,12 +2423,15 @@ impl ApplicationHandler for GenesisApp {
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     renderer.resize(new_size);
                     // Update egui scale factor to match window
-                    renderer.set_scale_factor(window.scale_factor() as f32);
+                    let scale_factor = window.scale_factor();
+                    renderer.set_scale_factor(scale_factor as f32);
+                    // Update config and camera viewport with logical size (for mouse coordinate conversion)
+                    let logical_width = (new_size.width as f64 / scale_factor) as u32;
+                    let logical_height = (new_size.height as f64 / scale_factor) as u32;
+                    self.config.window_width = logical_width;
+                    self.config.window_height = logical_height;
+                    self.camera.set_viewport(logical_width, logical_height);
                 }
-                // Update config and camera viewport
-                self.config.window_width = new_size.width;
-                self.config.window_height = new_size.height;
-                self.camera.set_viewport(new_size.width, new_size.height);
             },
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 if let Some(renderer) = &mut self.renderer {
@@ -2221,6 +2463,7 @@ pub fn run() -> Result<()> {
     let mut macro_commands: Option<String> = None;
     let mut auto_start = false;
     let mut use_debug_atlas = false;
+    let mut use_pure_colors = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -2243,6 +2486,9 @@ pub fn run() -> Result<()> {
             "--debug-atlas" | "-d" => {
                 use_debug_atlas = true;
             }
+            "--pure-colors" | "-p" => {
+                use_pure_colors = true;
+            }
             "--help" | "-h" => {
                 println!("Genesis Engine - Automation Options");
                 println!("");
@@ -2250,6 +2496,7 @@ pub fn run() -> Result<()> {
                 println!("  --macro, -m <commands>    Run inline macro commands");
                 println!("  --auto-start, -a          Auto-start game (skip main menu)");
                 println!("  --debug-atlas, -d         Use debug autotile atlas for testing");
+                println!("  --pure-colors, -p         Use pure colors (no textures) for testing");
                 println!("");
                 println!("Macro command format: \"action1; action2; action3\"");
                 println!("Available actions:");
@@ -2275,6 +2522,12 @@ pub fn run() -> Result<()> {
     // Load configuration
     let mut config = EngineConfig::load();
     config.validate();
+
+    // Apply CLI overrides
+    if use_pure_colors {
+        config.use_pure_colors = true;
+        info!("Pure color mode enabled via CLI");
+    }
 
     info!("Configuration loaded:");
     info!("  Window: {}x{}", config.window_width, config.window_height);

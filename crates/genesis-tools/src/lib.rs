@@ -4,12 +4,11 @@
 //!
 //! This crate provides:
 //! - Replay/determinism harness
-//! - Chunk viewer (egui)
-//! - Cell inspector probe
 //! - Performance HUD
 //! - Event log viewer
 //! - Asset management
 //! - Localization
+//! - UI components
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
@@ -17,8 +16,6 @@
 
 pub mod assets;
 pub mod audio;
-pub mod cell_inspector;
-pub mod chunk_viewer;
 pub mod combat_hud;
 pub mod console;
 pub mod crafting_ui;
@@ -29,18 +26,14 @@ pub mod event_log;
 pub mod game_hud;
 pub mod hot_reload;
 pub mod hotbar;
-pub mod inspector;
 pub mod inventory_ui;
 pub mod localization;
 pub mod memory_profiler;
-pub mod minimap;
 pub mod npc_debug;
 pub mod perf;
 pub mod perf_hud;
 pub mod quest_ui;
 pub mod replay;
-pub mod screenshot;
-pub mod test_harness;
 pub mod ui;
 
 /// Prelude for convenient imports
@@ -50,8 +43,6 @@ pub mod prelude {
         AssetType, CachedAsset,
     };
     pub use crate::audio::*;
-    pub use crate::cell_inspector::*;
-    pub use crate::chunk_viewer::*;
     pub use crate::combat_hud::*;
     pub use crate::console::*;
     pub use crate::crafting_ui::*;
@@ -62,20 +53,14 @@ pub mod prelude {
     pub use crate::game_hud::*;
     pub use crate::hot_reload::HotReloader;
     pub use crate::hotbar::*;
-    pub use crate::inspector::*;
     pub use crate::inventory_ui::*;
     pub use crate::localization::*;
     pub use crate::memory_profiler::*;
-    pub use crate::minimap::*;
     pub use crate::npc_debug::*;
     pub use crate::perf::*;
     pub use crate::perf_hud::*;
     pub use crate::quest_ui::*;
     pub use crate::replay::*;
-    pub use crate::screenshot::*;
-    pub use crate::test_harness::*;
-    pub use crate::ui::environment::*;
-    pub use crate::ui::minimap as chunk_minimap;
     pub use crate::ui::stats::*;
 }
 

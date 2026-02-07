@@ -1,0 +1,10 @@
+[package]
+name = "cubiomes-sys"
+version = "0.1.0"
+edition = "2021"
+description = "FFI bindings to the cubiomes C library for Minecraft biome generation"
+license = "MIT"
+build = "build.rs"
+
+[build-dependencies]
+cc = "1.0"

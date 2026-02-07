@@ -65,6 +65,8 @@ pub struct EngineConfig {
     pub gpu_validation: bool,
     /// Enable performance profiling
     pub enable_profiling: bool,
+    /// Use pure colors instead of autotile textures (for development/testing)
+    pub use_pure_colors: bool,
 
     // === Gameplay Settings ===
     /// Mouse sensitivity
@@ -100,7 +102,7 @@ impl Default for EngineConfig {
 
             // Graphics
             cell_scale: 4.0,
-            camera_zoom: 10.0,
+            camera_zoom: 1.0,
             enable_particles: true,
             enable_lighting: true,
             enable_ao: true,
@@ -115,6 +117,7 @@ impl Default for EngineConfig {
             show_debug_overlay: false,
             gpu_validation: cfg!(debug_assertions),
             enable_profiling: false,
+            use_pure_colors: false, // Set to true to disable autotiles
 
             // Gameplay
             mouse_sensitivity: 1.0,

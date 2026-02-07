@@ -1,0 +1,11 @@
+[package]
+name = "genesis-worldgen"
+version = "0.1.0"
+edition = "2021"
+description = "World generation using cubiomes for Project Genesis"
+
+[dependencies]
+cubiomes-sys = { path = "../cubiomes-sys" }
+serde = { workspace = true }
+tracing = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }

@@ -5,7 +5,6 @@
 //!
 //! This crate ties together all subsystems:
 //! - Kernel: GPU compute pipeline for pixel-cell simulation
-//! - World: Chunk streaming and persistence
 //! - Gameplay: Entities, inventory, crafting, economy
 
 #![warn(missing_docs)]
@@ -20,7 +19,6 @@ mod input;
 mod perf;
 mod renderer;
 mod timing;
-mod world;
 
 /// Analytics module for opt-in gameplay telemetry
 pub mod analytics;

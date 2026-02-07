@@ -10,7 +10,8 @@ description = "Development tools: replay, inspectors, perf HUD"
 genesis-common = { path = "../genesis-common" }
 genesis-gameplay = { path = "../genesis-gameplay" }
 genesis-kernel = { path = "../genesis-kernel" }
-genesis-world = { path = "../genesis-world" }
+genesis-worldgen = { path = "../genesis-worldgen" }
+cubiomes-sys = { path = "../cubiomes-sys" }
 
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -32,6 +33,8 @@ winit = { workspace = true }
 rodio = "0.19"
 toml.workspace = true
 image = { workspace = true, features = ["png"] }
+chrono = "0.4.43"
+uuid = { version = "1.20.0", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3.10"

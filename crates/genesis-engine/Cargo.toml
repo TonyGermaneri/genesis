@@ -14,8 +14,8 @@ path = "src/main.rs"
 genesis-common = { path = "../genesis-common" }
 genesis-kernel = { path = "../genesis-kernel" }
 genesis-gameplay = { path = "../genesis-gameplay" }
-genesis-world = { path = "../genesis-world" }
 genesis-tools = { path = "../genesis-tools" }
+genesis-worldgen = { path = "../genesis-worldgen" }
 
 wgpu = { workspace = true }
 winit = { workspace = true }
