@@ -6,6 +6,10 @@
 #include "util.h"
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+
+// Forward-declare cubiomes internal functions we need
+extern float getSpline(const Spline *sp, const float *vals);
 
 // Return sizeof(Generator) so Rust can allocate the right amount of memory.
 size_t cubiomes_generator_size(void) {
@@ -84,4 +88,64 @@ int cubiomes_map_approx_height(float *y, int *ids,
     const Generator *g, const SurfaceNoise *sn,
     int x, int z, int w, int h) {
     return mapApproxHeight(y, ids, g, sn, x, z, w, h);
+}
+
+// ============================================================================
+// Block-level (1:1) height sampling for MC 1.18+
+// ============================================================================
+
+// Sample terrain height at true block-level resolution (1 block = 1 sample).
+// Coordinates bx, bz are in block coordinates.
+// Internally converts to 1:4 biome-noise coordinates (bx/4.0, bz/4.0)
+// and replicates the depth calculation from sampleBiomeNoise.
+// The resulting height matches mapApproxHeight's output scale.
+// Returns 0 on success, 1 if not supported (e.g. wrong MC version or dim).
+int cubiomes_map_block_height(float *y,
+    const Generator *g,
+    int bx, int bz, int w, int h)
+{
+    if (g->dim != DIM_OVERWORLD)
+        return 1;
+    if (g->mc < MC_1_18)
+        return 1;
+
+    const BiomeNoise *bn = &g->bn;
+    int i, j;
+    for (j = 0; j < h; j++)
+    {
+        for (i = 0; i < w; i++)
+        {
+            // Convert block coords to biome-noise (1:4) coordinates
+            double x = (bx + i) / 4.0;
+            double z = (bz + j) / 4.0;
+
+            // Apply coordinate shift (same as sampleBiomeNoise)
+            double px = x + sampleDoublePerlin(&bn->climate[NP_SHIFT], x, 0, z) * 4.0;
+            double pz = z + sampleDoublePerlin(&bn->climate[NP_SHIFT], z, x, 0) * 4.0;
+
+            // Sample the three noise parameters needed for depth spline
+            float c = sampleDoublePerlin(&bn->climate[NP_CONTINENTALNESS], px, 0, pz);
+            float e = sampleDoublePerlin(&bn->climate[NP_EROSION], px, 0, pz);
+            float w_noise = sampleDoublePerlin(&bn->climate[NP_WEIRDNESS], px, 0, pz);
+
+            // Compute PV (peaks and valleys) from weirdness
+            float np_param[] = {
+                c, e,
+                -3.0f * (fabsf(fabsf(w_noise) - 0.6666667f) - 0.33333334f),
+                w_noise,
+            };
+
+            // Get terrain offset from the depth spline
+            double off = getSpline(bn->sp, np_param) + 0.015;
+
+            // Compute depth value (same formula as sampleBiomeNoise at y=0)
+            float d = 1.0f - 83.0f / 160.0f + (float)off;
+
+            // Convert to height using same scale as mapApproxHeight
+            // mapApproxHeight returns np[NP_DEPTH] / 76.0
+            // where np[NP_DEPTH] = (int64_t)(10000.0 * d)
+            y[j * w + i] = (10000.0f * d) / 76.0f;
+        }
+    }
+    return 0;
 }

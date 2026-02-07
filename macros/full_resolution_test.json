@@ -1,0 +1,42 @@
+{
+  "name": "full_resolution_test",
+  "description": "Test block-level (1:1) terrain height resolution",
+  "actions": [
+    {
+      "type": "start_new_game"
+    },
+    {
+      "type": "wait",
+      "duration_ms": 3000
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 1.0
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "screenshot",
+      "filename": "full_res_zoom1.png",
+      "prompt": "Analyze this Minecraft terrain map. Is each pixel representing a single block? Look for terrain detail resolution - can you see individual block-level terrain features, contour lines, and smooth height gradients? Compare the detail level to what you'd expect from a 1:1 block resolution Minecraft map."
+    },
+    {
+      "type": "set_zoom",
+      "zoom": 3.0
+    },
+    {
+      "type": "wait",
+      "duration_ms": 1000
+    },
+    {
+      "type": "screenshot",
+      "filename": "full_res_zoom3.png",
+      "prompt": "At 3x zoom, analyze the terrain detail. Can you see individual block-level pixels? Are the height shading and contour lines smooth and detailed? This should show full Minecraft block resolution."
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

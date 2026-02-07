@@ -43,8 +43,8 @@ impl Default for WorldGenConfig {
             mc_version: MC_1_18,
             seed: 0,
             flags: 0,
-            scale: 4,
-            y_level: 16, // block y=64 at scale 4 → sea level (surface biomes)
+            scale: 1,
+            y_level: 64, // block y=64 → sea level (surface biomes)
         }
     }
 }
@@ -238,6 +238,43 @@ impl WorldGenerator {
     pub fn generate_chunk_heights(&self, chunk_x: i32, chunk_y: i32) -> Vec<f32> {
         let chunk_size = 16;
         self.generate_heights(
+            chunk_x * chunk_size,
+            chunk_y * chunk_size,
+            chunk_size,
+            chunk_size,
+        )
+    }
+
+    /// Generate surface heights at true block-level (1:1) resolution for MC 1.18+.
+    ///
+    /// `bx` and `bz` are in block coordinates.
+    /// Returns `width * height` floats with the same height scale as `generate_heights`.
+    pub fn generate_block_heights(&self, bx: i32, bz: i32, width: i32, height: i32) -> Vec<f32> {
+        let count = (width * height) as usize;
+        let mut heights = vec![0.0f32; count];
+        unsafe {
+            let ret = cubiomes_map_block_height(
+                heights.as_mut_ptr(),
+                self.gen,
+                bx,
+                bz,
+                width,
+                height,
+            );
+            if ret != 0 {
+                tracing::warn!("cubiomes_map_block_height returned error {}, falling back to 1:4", ret);
+                // Fallback to 1:4 scale for unsupported MC versions
+                return self.generate_heights(bx / 4, bz / 4, width, height);
+            }
+        }
+        heights
+    }
+
+    /// Generate block-level heights for a chunk at game chunk coordinates.
+    /// Each chunk is 16×16 blocks at 1:1 scale.
+    pub fn generate_chunk_block_heights(&self, chunk_x: i32, chunk_y: i32) -> Vec<f32> {
+        let chunk_size = 16;
+        self.generate_block_heights(
             chunk_x * chunk_size,
             chunk_y * chunk_size,
             chunk_size,

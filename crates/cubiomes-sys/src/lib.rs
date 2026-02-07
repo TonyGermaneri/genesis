@@ -390,6 +390,19 @@ extern "C" {
         w: c_int,
         h: c_int,
     ) -> c_int;
+
+    /// Sample terrain height at true block-level (1:1) resolution for MC 1.18+.
+    /// Coordinates `bx`, `bz` are in block coordinates.
+    /// Writes `w * h` floats into `y` with the same height scale as mapApproxHeight.
+    /// Returns 0 on success, 1 if unsupported (wrong MC version or dimension).
+    pub fn cubiomes_map_block_height(
+        y: *mut f32,
+        g: *const Generator,
+        bx: c_int,
+        bz: c_int,
+        w: c_int,
+        h: c_int,
+    ) -> c_int;
 }
 
 // ============================================================================

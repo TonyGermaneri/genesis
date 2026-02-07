@@ -265,8 +265,8 @@ impl GenesisApp {
             mc_version: genesis_worldgen::MC_1_21,
             seed: seed,
             flags: 0,
-            scale: 4,
-            y_level: 16, // block y=64 at scale 4 (sea level for surface biomes)
+            scale: 1,
+            y_level: 64, // block y=64 (sea level for surface biomes)
         };
         let world_generator = WorldGenerator::new(worldgen_config);
         let biome_texture_map = BiomeTextureMap::from_cubiomes_defaults();
@@ -651,8 +651,12 @@ impl GenesisApp {
                                     // generate_chunk(cx, cy) internally maps game Y → cubiomes Z
                                     let chunk = self.world_generator.generate_chunk(cx, cy);
                                     let biome_map = &self.biome_texture_map;
-                                    // Use cubiomes mapApproxHeight for real terrain surface heights
-                                    let heights = self.world_generator.generate_chunk_heights(cx, cy);
+                                    // Use block-level heights at scale=1, otherwise 1:4 approx heights
+                                    let heights = if self.world_generator.config().scale == 1 {
+                                        self.world_generator.generate_chunk_block_heights(cx, cy)
+                                    } else {
+                                        self.world_generator.generate_chunk_heights(cx, cy)
+                                    };
                                     terrain.cache_chunk(
                                         cx, cy,
                                         &chunk.biomes,
@@ -1884,7 +1888,7 @@ impl GenesisApp {
                         terrain.set_config(genesis_kernel::terrain_tiles::TerrainRenderConfig {
                             tile_size,
                             biome_scale: scale,
-                            render_radius: if tile_size <= 2.0 { 24 } else if tile_size <= 4.0 { 16 } else { 8 },
+                            render_radius: if tile_size <= 1.0 { 80 } else if tile_size <= 2.0 { 48 } else if tile_size <= 4.0 { 16 } else { 8 },
                         });
                         terrain.enable();
                     }
