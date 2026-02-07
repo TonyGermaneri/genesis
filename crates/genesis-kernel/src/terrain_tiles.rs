@@ -136,9 +136,9 @@ pub struct TerrainRenderConfig {
 impl Default for TerrainRenderConfig {
     fn default() -> Self {
         Self {
-            tile_size: 16.0,
+            tile_size: 4.0,
             biome_scale: 4,
-            render_radius: 8,
+            render_radius: 16,
         }
     }
 }
@@ -272,7 +272,7 @@ impl TerrainTileRenderer {
             contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });
-        let max_instances = 65536;
+        let max_instances = 524288;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Terrain Instance Buffer"),
             size: (max_instances * std::mem::size_of::<TerrainTileInstance>()) as u64,

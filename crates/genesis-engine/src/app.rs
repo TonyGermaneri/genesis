@@ -1209,12 +1209,16 @@ impl GenesisApp {
     /// Sync the world gen panel with current world generator state.
     fn sync_worldgen_panel(&mut self) {
         let config = self.world_generator.config();
+        let tile_size = self.renderer.as_ref()
+            .map(|r| r.terrain_renderer().config().tile_size)
+            .unwrap_or(4.0);
         self.world_tools.world_gen_panel_mut().sync_config(
             config.mc_version,
             config.seed,
             config.flags,
             config.scale,
             config.y_level,
+            tile_size,
         );
 
         // Build biome UI entries from the current biome texture map
@@ -1861,9 +1865,9 @@ impl GenesisApp {
         // Process world generation actions
         for action in self.world_tools.drain_world_gen_actions() {
             match action {
-                genesis_tools::ui::WorldGenAction::Regenerate { mc_version, seed, flags, scale, y_level } => {
-                    info!("Regenerating world: mc={}, seed={}, flags={}, scale={}, y={}",
-                        mc_version, seed, flags, scale, y_level);
+                genesis_tools::ui::WorldGenAction::Regenerate { mc_version, seed, flags, scale, y_level, tile_size } => {
+                    info!("Regenerating world: mc={}, seed={}, flags={}, scale={}, y={}, tile_size={}",
+                        mc_version, seed, flags, scale, y_level, tile_size);
                     let config = WorldGenConfig {
                         mc_version,
                         seed,
@@ -1875,8 +1879,14 @@ impl GenesisApp {
                     self.terrain_dirty = true;
                     self.last_terrain_chunk = (i32::MAX, i32::MAX);
                     if let Some(renderer) = &mut self.renderer {
-                        renderer.terrain_renderer_mut().clear_cache();
-                        renderer.terrain_renderer_mut().enable();
+                        let terrain = renderer.terrain_renderer_mut();
+                        terrain.clear_cache();
+                        terrain.set_config(genesis_kernel::terrain_tiles::TerrainRenderConfig {
+                            tile_size,
+                            biome_scale: scale,
+                            render_radius: if tile_size <= 2.0 { 24 } else if tile_size <= 4.0 { 16 } else { 8 },
+                        });
+                        terrain.enable();
                     }
                 }
                 genesis_tools::ui::WorldGenAction::SetBiomeColor { biome_id, color } => {
@@ -2349,6 +2359,11 @@ impl ApplicationHandler for GenesisApp {
                         self.load_player_sprite(&mut renderer);
 
                         self.renderer = Some(renderer);
+
+                        // Auto-start: begin game immediately so terrain renders on launch
+                        if self.app_mode == AppMode::Menu {
+                            self.start_new_game();
+                        }
                     },
                     Err(e) => {
                         warn!("Failed to initialize renderer: {e}");

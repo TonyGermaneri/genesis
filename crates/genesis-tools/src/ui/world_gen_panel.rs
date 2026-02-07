@@ -21,6 +21,8 @@ pub enum WorldGenAction {
         scale: i32,
         /// Y level for biome sampling.
         y_level: i32,
+        /// Tile size in world units (smaller = higher resolution).
+        tile_size: f32,
     },
     /// Update a biome's display color.
     SetBiomeColor {
@@ -135,6 +137,8 @@ pub struct WorldGenPanel {
     scale: i32,
     /// Y level for sampling.
     y_level: i32,
+    /// Tile size in world units (smaller = higher visual resolution).
+    tile_size: f32,
 
     // === Biome editor ===
     /// All biome entries for editing.
@@ -181,6 +185,7 @@ impl WorldGenPanel {
             force_ocean_variants: false,
             scale: 4,
             y_level: 16,
+            tile_size: 4.0,
             biome_entries: Vec::new(),
             biome_filter: String::new(),
             biome_section: BiomeSection::default(),
@@ -195,7 +200,7 @@ impl WorldGenPanel {
     }
 
     /// Update config from engine state (call when panel is opened or world regenerated).
-    pub fn sync_config(&mut self, mc_version: i32, seed: u64, flags: u32, scale: i32, y_level: i32) {
+    pub fn sync_config(&mut self, mc_version: i32, seed: u64, flags: u32, scale: i32, y_level: i32, tile_size: f32) {
         // Find MC version index
         if let Some(idx) = self.mc_versions.iter().position(|v| v.id == mc_version) {
             self.mc_version_idx = idx;
@@ -206,6 +211,7 @@ impl WorldGenPanel {
         self.force_ocean_variants = (flags & cubiomes_sys::FORCE_OCEAN_VARIANTS) != 0;
         self.scale = scale;
         self.y_level = y_level;
+        self.tile_size = tile_size;
     }
 
     /// Drain all pending actions.
@@ -293,6 +299,17 @@ impl WorldGenPanel {
 
                 ui.add_space(2.0);
 
+                // Resolution (tile size) — smaller values = higher visual detail
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Tile Size:").color(Color32::GRAY));
+                    ui.add(egui::Slider::new(&mut self.tile_size, 0.5..=16.0)
+                        .logarithmic(true)
+                        .text("px")
+                        .max_decimals(1));
+                });
+
+                ui.add_space(2.0);
+
                 // Y level
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Y Level:").color(Color32::GRAY));
@@ -326,6 +343,7 @@ impl WorldGenPanel {
                         flags: self.current_flags(),
                         scale: self.scale,
                         y_level: self.y_level,
+                        tile_size: self.tile_size,
                     });
                 }
             });
